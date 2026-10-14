@@ -131,7 +131,7 @@ export default function OrderDetailModal({
 
   async function handleCancel() {
     if (!order) return;
-    if (!confirm(`Cancel order #${order.id}? Any decremented stock will be restored.`)) return;
+    if (!confirm(`Cancel order #${order.shopOrderNumber}? Any decremented stock will be restored.`)) return;
     try {
       await cancelOrder(order.id);
       toast(`Order #${order.shopOrderNumber} cancelled`);

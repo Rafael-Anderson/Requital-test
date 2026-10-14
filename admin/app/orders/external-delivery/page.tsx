@@ -122,11 +122,11 @@ export default function ExternalDeliveryOrdersTabPage() {
             <CardListItem
               key={row.id}
               onOpen={() => setSelectedOrderId(row.orderId)}
-              openLabel={`Open order #${row.orderId}`}
+              openLabel={`Open order #${row.shopOrderNumber}`}
               actions={<StatusBadge status={row.status} />}
             >
               <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">
-                #{row.orderId} {row.customerName}
+                #{row.shopOrderNumber} {row.customerName}
               </div>
               <div className="truncate text-xs text-text-muted">
                 {row.carrier}
@@ -198,7 +198,7 @@ export default function ExternalDeliveryOrdersTabPage() {
                 className="cursor-pointer"
                 onClick={() => setSelectedOrderId(row.orderId)}
               >
-                <TD className="font-medium">#{row.orderId}</TD>
+                <TD className="font-medium">#{row.shopOrderNumber}</TD>
                 <TD>
                   <span>{row.customerName}</span>
                   <div className="text-xs text-text-muted">{row.customerPhone}</div>

@@ -46,11 +46,7 @@ const PRODUCT_SALES_SORT_COLUMN: Record<string, string> = {
 };
 
 export type MarginDimension =
-  | 'product'
-  | 'collection'
-  | 'channel'
-  | 'outlet'
-  | 'order';
+  'product' | 'collection' | 'channel' | 'outlet' | 'order';
 
 // keyExpr/labelExpr are fixed strings chosen by the dimension enum, never
 // interpolated from user input - the DTO validates against this key set, so
@@ -333,8 +329,7 @@ export class ReportsService {
     return {
       ...marginShape(revenue, cost, currency),
       currency,
-      linesCosted:
-        Number(rows[0].lineCount) - Number(rows[0].linesWithoutCost),
+      linesCosted: Number(rows[0].lineCount) - Number(rows[0].linesWithoutCost),
       linesWithoutCost: Number(rows[0].linesWithoutCost),
     };
   }
@@ -535,7 +530,9 @@ export class ReportsService {
         `%${search}%`,
       ];
       if (searchAsId !== undefined) {
-        orParts.push('ed.orderId = ?');
+        // The merchant sees (and types) the per-shop order number, never the
+        // global order id. buildOrderWhere already pins o.shopId.
+        orParts.push('o.shopOrderNumber = ?');
         orParams.push(searchAsId);
       }
       sql += ` AND (${orParts.join(' OR ')})`;
@@ -544,7 +541,7 @@ export class ReportsService {
 
     const [rows, totalRows] = await Promise.all([
       this.db.query<RowDataPacket[]>(
-        `SELECT ed.*, o.customerName AS orderCustomerName, o.customerPhone AS orderCustomerPhone, ot.name AS outletName
+        `SELECT ed.*, o.shopOrderNumber, o.customerName AS orderCustomerName, o.customerPhone AS orderCustomerPhone, ot.name AS outletName
          FROM externaldelivery ed
          JOIN \`order\` o ON o.id = ed.orderId
          JOIN outlet ot ON ot.id = o.outletId
@@ -566,12 +563,14 @@ export class ReportsService {
       data: rows.map((r) => ({
         id: r.id as number,
         orderId: r.orderId as number,
+        shopOrderNumber: r.shopOrderNumber as number,
         outletName: r.outletName as string,
         customerName: r.orderCustomerName as string,
         customerPhone: r.orderCustomerPhone as string,
         carrier: r.carrier as string,
         vehicleType: r.vehicleType as string | null,
         price: r.price as string,
+        currency: r.currency as string,
         destination: r.destination as string,
         status: r.status as string,
         createdAt: r.createdAt as Date,

@@ -17,7 +17,8 @@ const logger = createLogger('SliderWebhookController');
 
 interface SliderWebhookPayload {
   order_number: number;
-  order_id: number;
+  // We send order_id as a string; accept either shape back.
+  order_id: number | string;
   status: string;
   estimated_delivery_time?: string | number | null;
   tracking_link?: string | null;

@@ -8,6 +8,8 @@ import { ExternalDeliveriesService } from '../external-deliveries/external-deliv
 import { SliderSettingsService } from './slider-settings.service';
 import { SliderDeliveryProvider } from './slider/slider-delivery.provider';
 import { geocodeAddress } from '../common/nominatim';
+import { normalizePhoneToE164 } from '../common/phone';
+import { roundMoney } from '../common/currency-minor-units';
 import type { TenantContext } from '../common/tenant-context';
 import type { CreateSliderDeliveryDto } from './dto/create-slider-delivery.dto';
 import { DeliveryProviderNotConfiguredException } from './slider-not-configured.exception';
@@ -64,6 +66,16 @@ export class SliderDeliveryService {
     }
     const { outlet, pickup, delivery } = await this.resolvePoints(ctx, order);
 
+    // Slider is UAE-only, so both numbers are read as UAE numbers and sent
+    // as E.164. The customer phone is stored raw at checkout ("0501234567");
+    // outlet phones were normalised on write but legacy rows may not be.
+    const pickupPhone = outlet.phone ?? outlet.whatsapp ?? '';
+    if (!pickupPhone.trim()) {
+      throw new BadRequestException(
+        'This outlet has no phone number. Add one in Outlet settings before dispatching a Slider delivery',
+      );
+    }
+
     // Re-quote to get a real distance for the bike-cap check — trusting a
     // client-supplied distance here would be a spoof vector, and the fare
     // endpoint is a cheap read, so paying for one extra call is worth it.
@@ -80,15 +92,24 @@ export class SliderDeliveryService {
     );
     assertScheduleAtOk(dto.scheduleAt);
 
+    // COD amount: the order's own total in AED (assertPaymentOnDeliveryWithinCap
+    // above refuses any other currency), rounded once to the currency's minor
+    // unit so the JSON number is the exact 2dp figure the customer pays, not a
+    // 30-scale DECIMAL's nearest double.
+    const codAmount = roundMoney(Number(order.total), 'AED');
     const paymentOnDelivery =
       order.paymentMethod === 'cash_on_delivery'
-        ? ({ type: 'cash', amount: Number(order.total) } as const)
+        ? ({ type: 'cash', amount: codAmount } as const)
         : order.paymentMethod === 'card_on_delivery'
-          ? ({ type: 'card', amount: Number(order.total) } as const)
+          ? ({ type: 'card', amount: codAmount } as const)
           : undefined;
 
     const created = await this.sliderProvider.createDelivery({
-      orderId: order.id,
+      // Slider validates order_id as a STRING (a numeric id was answered
+      // with 422 "The order id field must be a string"). It is still the
+      // REAL id: the webhook echoes it back and the controller does
+      // Number(body.order_id) to resolve the order.
+      orderId: String(order.id),
       // Display only - Slider's webhook resolves our order by `order_id`
       // (the real id, sent alongside this), never by display_order_id, so this
       // can safely carry the merchant-facing number. Verified in
@@ -107,13 +128,15 @@ export class SliderDeliveryService {
           .join(', '),
         latitude: pickup.latitude,
         longitude: pickup.longitude,
-        contactNumber: outlet.phone ?? outlet.whatsapp ?? '',
+        contactNumber: normalizePhoneToE164(pickupPhone, 'AE') ?? pickupPhone,
       },
       dropoff: {
         address: order.customerAddress,
         latitude: delivery.latitude,
         longitude: delivery.longitude,
-        contactNumber: order.customerPhone,
+        contactNumber:
+          normalizePhoneToE164(order.customerPhone, 'AE') ??
+          order.customerPhone,
       },
       paymentOnDelivery,
       credentials,
