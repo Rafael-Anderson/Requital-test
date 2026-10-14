@@ -888,6 +888,22 @@ describe('Marketplace channels (E1)', () => {
       await r().patch('/shop').set(h(a)).send({ notifyEmail: false, notifyCustomersWhatsapp: false, customerSurveyEnabled: false }).expect(200);
     });
 
+    it('an UNPAID marketplace order (cash due) still cannot be charged through a gateway', async () => {
+      const p = await product(a, 10);
+      await mapItem(a, 'cashlink-sku', p.id);
+      const o = canon([{ id: 'cashlink-sku', priceMinor: 1000 }], {}, { cashDueMinor: 1000 });
+      await newOrder(ca, o);
+      const co = await link(ca, o.externalOrderId);
+      expect((await f.orderRow(co.orderId)).paymentStatus).toBe('unpaid');
+      const res = await r().post(`/orders/${co.orderId}/payment-link`).set(h(a)).expect(400);
+      expect(res.body.message).toMatch(/marketplace/i);
+      // Even a link token that somehow exists is dead.
+      await db.execute(`UPDATE \`order\` SET paymentLinkToken = ?, paymentLinkExpiresAt = ? WHERE id = ?`, [`tok-${f.uniq()}`, new Date(Date.now() + 3600_000), co.orderId]);
+      const tok = (await f.orderRow(co.orderId)).paymentLinkToken as string;
+      await r().get(`/pay/${tok}`).expect(404);
+      expect(await db.query<RowDataPacket[]>(`SELECT 1 FROM paymenttransaction WHERE orderId = ?`, [co.orderId])).toHaveLength(0);
+    });
+
     it('the order cannot be re-priced locally', async () => {
       const p = await product(a, 10);
       await mapItem(a, 'edit-sku', p.id);
