@@ -53,6 +53,6 @@ test('customer browses, selects a variant, adds to cart, and checks out', async 
 
   await page.getByRole('button', { name: 'Place order' }).click();
 
-  await page.waitForURL(/\/orders\/\d+/, { timeout: 20_000 });
-  await expect(page.getByRole('heading', { name: 'Thank you!' })).toBeVisible();
+  await page.waitForURL(/\/orders\/[0-9A-Fa-f]{32}$/, { timeout: 20_000 });
+  await expect(page.getByRole('heading', { name: 'Thank you for your order' })).toBeVisible();
 });

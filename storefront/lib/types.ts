@@ -540,30 +540,61 @@ export interface CreateOrderResponse {
   checkoutUrl: string | null;
 }
 
+// The ONE shape a holder of an order's tracking token may read (GET
+// /public/orders/lookup). Hand-mirrored from backend/src/public/order-lookup.ts
+// (PublicOrderView). Money is in `currency`, the ORDER's own captured currency.
 export interface OrderLookupResult {
+  // Kept for the tracking page's ownership check; never shown to a person.
   id: number;
-  // Per-shop display number. `id` remains the identity used for URLs and every
-  // API call - this is only what the customer is shown.
+  // The per-shop number a human is shown.
   shopOrderNumber: number;
   shopName: string;
   outletName: string;
   customerName: string;
   status: string;
   orderType: string | null;
+  createdAt: string;
+  paymentMethod: string | null;
+  // The server's word on payment. Nothing in a URL is evidence of payment.
   paymentStatus: string;
+  // An online (card / BNPL) method: an unpaid order is waiting on the gateway.
+  onlinePayment: boolean;
+  // A gateway reported a failed payment and the order is still unpaid.
+  paymentFailed: boolean;
+  // YYYY-MM-DD
   deliveryDate: string | null;
   deliveryTimeSlot: string | null;
-  items: { productName: string; variantLabel: string | null; quantity: number; priceAtPurchase: string }[];
+  estimatedTime: string | null;
+  items: {
+    productName: string;
+    variantLabel: string | null;
+    quantity: number;
+    priceAtPurchase: string;
+    lineTotal: string;
+    imageUrl: string | null;
+    note: string | null;
+  }[];
+  currency: string;
+  subtotal: string;
+  discountCode: string | null;
+  discountAmount: string | null;
   deliveryFee: string | null;
   taxAmount: string | null;
+  taxInclusive: boolean;
+  giftCardAmount: string | null;
+  storeCreditAmount: string | null;
   total: string;
-  currency: string;
-  createdAt: string;
-  estimatedTime: string | null;
-  // Whether this order's contact info belongs to a registered (has ever set
-  // a password) customer account — not whether anyone is currently signed
-  // in. Drives the light "sign in to see all your orders" prompt on the
-  // tracking page for a guest visitor holding the link.
+  amountDue: string;
+  deliveryAddress: string | null;
+  region: { id: number; nameEn: string; nameAr: string } | null;
+  area: string | null;
+  pickupLocation: {
+    name: string;
+    area: string | null;
+    phone: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
   hasAccount: boolean;
 }
 

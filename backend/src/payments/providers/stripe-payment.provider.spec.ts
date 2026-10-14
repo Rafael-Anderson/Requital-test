@@ -30,6 +30,7 @@ describe('StripePaymentProvider amount serialisation', () => {
     const provider = new StripePaymentProvider();
     await provider.createCheckoutSession({
       orderId: 1,
+      orderNumber: 1,
       amount,
       currency,
       successUrl: 'https://shop.example/success',
@@ -68,6 +69,30 @@ describe('StripePaymentProvider amount serialisation', () => {
   it('always sends an integer amount', async () => {
     const priceData = await checkout(1.005, 'AED');
     expect(Number.isInteger(priceData.unit_amount)).toBe(true);
+  });
+
+  // The customer reads this line on Stripe's own page and receipt: it must be
+  // the per-shop number they were shown, while the machine identity (the id the
+  // webhook maps back to an order) stays the global id.
+  it('labels the line with the per-shop order number and keeps the id in metadata', async () => {
+    const provider = new StripePaymentProvider();
+    await provider.createCheckoutSession({
+      orderId: 9001,
+      orderNumber: 7,
+      amount: 10,
+      currency: 'AED',
+      successUrl: 'https://shop.example/success',
+      cancelUrl: 'https://shop.example/cancel',
+      credentials: { secretKey: 'sk_test_label' },
+    });
+    const arg = (
+      createSession.mock.calls as unknown as {
+        line_items: { price_data: { product_data: { name: string } } }[];
+        metadata: { orderId: string };
+      }[][]
+    )[0][0];
+    expect(arg.line_items[0].price_data.product_data.name).toBe('Order #7');
+    expect(arg.metadata.orderId).toBe('9001');
   });
 
   // refundPayment is the OTHER amount conversion in this provider. As of Phase

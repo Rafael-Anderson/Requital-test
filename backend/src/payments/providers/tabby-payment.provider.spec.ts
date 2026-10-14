@@ -33,6 +33,7 @@ describe('TabbyPaymentProvider', () => {
       const provider = new TabbyPaymentProvider();
       const session = await provider.createCheckoutSession({
         orderId: 42,
+        orderNumber: 1,
         amount: 100,
         currency: 'AED',
         successUrl: 'https://shop.example/success',
@@ -57,6 +58,7 @@ describe('TabbyPaymentProvider', () => {
       await expect(
         provider.createCheckoutSession({
           orderId: 1,
+          orderNumber: 1,
           amount: 10,
           currency: 'AED',
           successUrl: 'https://x',
@@ -82,6 +84,7 @@ describe('TabbyPaymentProvider', () => {
       const provider = new TabbyPaymentProvider();
       await provider.createCheckoutSession({
         orderId: 1,
+        orderNumber: 1,
         amount: 10,
         currency: 'AED',
         successUrl: 'https://x',

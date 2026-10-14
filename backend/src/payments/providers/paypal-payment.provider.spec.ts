@@ -50,6 +50,7 @@ describe('PayPalPaymentProvider', () => {
       await expect(
         provider.createCheckoutSession({
           orderId: 1,
+          orderNumber: 1,
           amount: 100,
           currency: 'AED',
           successUrl: 'https://example.com/success',
@@ -72,6 +73,7 @@ describe('PayPalPaymentProvider', () => {
 
       const session = await provider.createCheckoutSession({
         orderId: 42,
+        orderNumber: 1,
         amount: 123.5,
         currency: 'AED',
         successUrl: 'https://example.com/success',
@@ -102,6 +104,7 @@ describe('PayPalPaymentProvider', () => {
 
       await provider.createCheckoutSession({
         orderId: 1,
+        orderNumber: 1,
         amount: 10,
         currency: 'AED',
         successUrl: 'https://example.com/success',
@@ -131,6 +134,7 @@ describe('PayPalPaymentProvider', () => {
       await expect(
         provider.createCheckoutSession({
           orderId: 1,
+          orderNumber: 1,
           amount: 10,
           currency: 'AED',
           successUrl: 'https://example.com/success',
@@ -153,6 +157,7 @@ describe('PayPalPaymentProvider', () => {
 
       await provider.createCheckoutSession({
         orderId: 1,
+        orderNumber: 1,
         amount: 10,
         currency: 'AED',
         successUrl: 'https://example.com/success',
@@ -161,6 +166,7 @@ describe('PayPalPaymentProvider', () => {
       });
       await provider.createCheckoutSession({
         orderId: 2,
+        orderNumber: 1,
         amount: 10,
         currency: 'AED',
         successUrl: 'https://example.com/success',

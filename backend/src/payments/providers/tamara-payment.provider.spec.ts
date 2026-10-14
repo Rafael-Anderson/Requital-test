@@ -29,6 +29,7 @@ describe('TamaraPaymentProvider', () => {
       const provider = new TamaraPaymentProvider();
       const session = await provider.createCheckoutSession({
         orderId: 7,
+        orderNumber: 1,
         amount: 250,
         currency: 'AED',
         successUrl: 'https://shop.example/success',
@@ -58,6 +59,7 @@ describe('TamaraPaymentProvider', () => {
       await expect(
         provider.createCheckoutSession({
           orderId: 1,
+          orderNumber: 1,
           amount: 10,
           currency: 'AED',
           successUrl: 'https://x',
@@ -81,6 +83,7 @@ describe('TamaraPaymentProvider', () => {
       const provider = new TamaraPaymentProvider();
       await provider.createCheckoutSession({
         orderId: 1,
+        orderNumber: 1,
         amount: 10,
         currency: 'AED',
         successUrl: 'https://x',

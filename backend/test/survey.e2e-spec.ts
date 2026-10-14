@@ -270,6 +270,13 @@ describe('Post-purchase survey (e2e)', () => {
     expect(payload.subject).toContain('How was your order');
     // Per-shop number in customer-facing copy; order.id remains the lookup key.
     expect(payload.bodyText).toContain(`#${order.shopOrderNumber}`);
+    // The subject and the HTML heading too: they once printed the global id.
+    expect(payload.subject).toContain(`#${order.shopOrderNumber}`);
+    expect(payload.html).toContain(`<strong>#${order.shopOrderNumber}</strong>`);
+    if (order.id !== order.shopOrderNumber) {
+      expect(payload.subject).not.toContain(`#${order.id}`);
+      expect(payload.html).not.toContain(`<strong>#${order.id}</strong>`);
+    }
     // Structural markers the redesigned HTML email template carries — the
     // teal brand header/CTA button and the divider+copyright footer.
     expect(payload.html).toBeDefined();

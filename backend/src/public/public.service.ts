@@ -18,7 +18,8 @@ import { createLogger } from '../common/logging/logger';
 
 const logger = createLogger('PublicService');
 import { haversineDistanceKm } from '../common/geo';
-import { TRACKING_TOKEN_SHAPE, withTrackingToken } from '../common/token-hash';
+import { withTrackingToken } from '../common/token-hash';
+import { lookupOrderView, type PublicOrderView } from './order-lookup';
 import {
   computeOrderTotals,
   matchDeliveryZone,
@@ -1257,103 +1258,12 @@ export class PublicService {
     return reverseGeocodeAddress(lat, lon);
   }
 
-  // Not shop-scoped by design — trackingToken is globally unique, so the
-  // token alone is sufficient (and the only thing) that identifies the
-  // order; no shopSlug needed in the URL. Deliberately excludes
-  // customerPhone/customerEmail/customerAddress from the response even
-  // though the token itself proves ownership — no reason to hand back more
-  // PII than a status page needs.
-  async lookupOrder(token?: string) {
-    if (!token?.trim()) {
-      throw new BadRequestException('A tracking code is required');
-    }
-    // Only the two issued shapes (32 hex, or the legacy 10 hex) can match; any
-    // other string gets the same 404 as an unknown token, with no DB query.
-    const orders = TRACKING_TOKEN_SHAPE.test(token)
-      ? await this.db.query<RowDataPacket[]>(
-          `SELECT * FROM \`order\` WHERE trackingToken = ? LIMIT 1`,
-          [token],
-        )
-      : [];
-    const order = orders[0];
-    if (!order) {
-      throw new NotFoundException('No order found for that tracking code');
-    }
-
-    const [items, shopRows, outletRows, customerRows] = await Promise.all([
-      this.db.query<RowDataPacket[]>(
-        `SELECT productName, variantLabel, quantity, priceAtPurchase FROM orderitem WHERE orderId = ?`,
-        [order.id],
-      ),
-      this.db.query<RowDataPacket[]>(
-        `SELECT name, currency, estimatedDeliveryTimeFrom, estimatedDeliveryTimeTo, estimatedDeliveryTimeUnit, pickupPreparationTimeMinutes
-         FROM shop WHERE id = ?`,
-        [order.shopId],
-      ),
-      this.db.query<RowDataPacket[]>(`SELECT name FROM outlet WHERE id = ?`, [
-        order.outletId,
-      ]),
-      // Only for `hasAccount` below — never returning the hash itself, just
-      // whether one is set. See customer.passwordHash's own comment: null =
-      // guest, never registered.
-      order.customerId !== null
-        ? this.db.query<RowDataPacket[]>(
-            `SELECT passwordHash FROM customer WHERE id = ?`,
-            [order.customerId],
-          )
-        : Promise.resolve([] as RowDataPacket[]),
-    ]);
-    const shop = shopRows[0];
-    const outlet = outletRows[0];
-    const customer = customerRows[0];
-
-    const estimatedTime =
-      order.orderType === 'delivery'
-        ? `${shop.estimatedDeliveryTimeFrom}-${shop.estimatedDeliveryTimeTo} ${shop.estimatedDeliveryTimeUnit}`
-        : order.orderType === 'pickup'
-          ? `${shop.pickupPreparationTimeMinutes} minutes`
-          : null;
-
-    return {
-      id: order.id,
-      // The number the customer is shown. Easy to miss here and nowhere else:
-      // every other order response either spreads a `SELECT *` row or names the
-      // column in its SELECT list, so it picked this column up for free when
-      // migration 20260923130000 added it. This one endpoint deliberately
-      // builds a narrow, explicitly-listed shape (see the customerPhone /
-      // customerEmail omissions the test below pins), which means a new column
-      // has to be added by hand — and the storefront's OrderLookupResult type
-      // is a hand-maintained mirror, so nothing type-checks the gap.
-      shopOrderNumber: order.shopOrderNumber as number,
-      shopName: shop.name as string,
-      outletName: outlet.name as string,
-      customerName: order.customerName,
-      status: order.status,
-      orderType: order.orderType,
-      paymentStatus: order.paymentStatus,
-      deliveryDate: order.deliveryDate,
-      deliveryTimeSlot: order.deliveryTimeSlot,
-      items: items.map((i) => ({
-        productName: i.productName as string,
-        variantLabel: i.variantLabel as string | null,
-        quantity: i.quantity as number,
-        priceAtPurchase: trimDecimal(i.priceAtPurchase as string),
-      })),
-      deliveryFee: trimDecimal(order.deliveryFee as string | null),
-      taxAmount: trimDecimal(order.taxAmount as string | null),
-      total: trimDecimal(order.total as string),
-      currency: shop.currency as string,
-      createdAt: order.createdAt,
-      estimatedTime,
-      // Lets the storefront offer a light "sign in to see all your orders"
-      // nudge to a guest who happens to hold the tracking link for an order
-      // whose contact info is already tied to a registered account — never
-      // exposing the account's email/phone itself, just this one boolean.
-      // Not a new privacy exposure: the tracking token itself already grants
-      // full read access to this order and its (guest-creatable) customer
-      // row, same trust boundary as everything else this endpoint returns.
-      hasAccount: (customer?.passwordHash ?? null) != null,
-    };
+  // The narrow, explicitly-typed customer view lives in order-lookup.ts. Not
+  // shop-scoped by design unless the caller passes its own `shopSlug` (the
+  // storefront's confirmation page does): trackingToken is globally unique, so
+  // the token alone identifies the order.
+  lookupOrder(token?: string, shopSlug?: string): Promise<PublicOrderView> {
+    return lookupOrderView(this.db, token, shopSlug);
   }
 
   // Not shop-scoped, same reasoning as lookupOrder above — a survey token is
@@ -2053,13 +1963,21 @@ export class PublicService {
       );
       const session = await provider.createCheckoutSession({
         orderId: order.id,
+        orderNumber: order.shopOrderNumber,
         amount: remainderTotal,
         currency: shop.currency,
         // Built from THIS shop's own public host, not a platform-wide base
         // URL - see common/storefront-url.ts. The slug is deliberately absent
         // from the path: on a real host proxy.ts prepends it, so including it
         // here produced a 404 on every gateway return.
-        successUrl: storefrontUrl(shop, `/orders/${order.id}?paid=1`),
+        // Carries the order's tracking token, never its sequential id: the
+        // confirmation page reads the order with that token, so the id in a URL
+        // can never be used to enumerate orders. The page decides what to say
+        // from the order's paymentStatus, not from anything in this URL.
+        successUrl: storefrontUrl(
+          shop,
+          `/orders/${orderRows[0].trackingToken as string}`,
+        ),
         cancelUrl: storefrontUrl(shop, `/checkout?orderId=${order.id}`),
         credentials,
       });

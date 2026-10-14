@@ -141,6 +141,95 @@ describe("after consent, track() reaches the provider globals", () => {
   });
 });
 
+describe("a page whose URL carries a bearer token", () => {
+  const T = "A1B2C3D4E5F60718293A4B5C6D7E8F90";
+  type W = { dataLayer: unknown[]; fbq?: { queue: unknown[][]; disablePushState?: boolean }; snaptr?: { queue: unknown[] }; ttq?: unknown[] };
+  const win = () => window as unknown as W;
+  const ga = () => (win().dataLayer ?? []).map((a) => Array.from(a as ArrayLike<unknown>));
+  const everythingSent = () => JSON.stringify([ga(), win().fbq?.queue ?? [], win().snaptr?.queue ?? [], win().ttq ?? []]);
+
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  // Consent on a page that is ALREADY at `path` (a hard load); nothing is cleared.
+  function hardLoadAt(path: string) {
+    window.history.replaceState(null, "", path);
+    initAnalytics(ALL, "AED");
+    setAnalyticsConsent(true);
+  }
+
+  it("a hard load of /orders/<token> sends the token to nothing, config calls included", () => {
+    hardLoadAt(`/rose/orders/${T}`);
+    expect(everythingSent()).not.toContain(T);
+    // Both gtag targets are told not to send their own page view.
+    const configs = ga().filter((a) => a[0] === "config");
+    expect(configs.length).toBeGreaterThanOrEqual(2);
+    for (const c of configs) expect(c[2]).toMatchObject({ send_page_view: false });
+    // Meta / TikTok / Snap are not even loaded while the page carries a token.
+    expect(scriptSrcs().some((x) => /fbevents|tiktok|scevent/.test(x ?? ""))).toBe(false);
+    expect(win().fbq).toBeUndefined();
+    expect(win().ttq).toBeUndefined();
+    expect(win().snaptr).toBeUndefined();
+  });
+
+  it("they install on the first report from a clean page, and gtag is unpinned with the real URL", () => {
+    hardLoadAt(`/rose/orders/${T}`);
+    window.history.replaceState(null, "", "/rose/products/red-roses");
+    track("page_view");
+    expect(win().fbq).toBeDefined();
+    expect(scriptSrcs().some((x) => /fbevents/.test(x ?? ""))).toBe(true);
+    const configs = ga().filter((a) => a[0] === "config");
+    const last = configs[configs.length - 1][2] as { page_location: string };
+    expect(last.page_location).toContain("/rose/products/red-roses");
+  });
+
+  it("Meta's own pushState PageView is switched off (set before the script loads)", () => {
+    hardLoadAt("/rose/checkout");
+    expect(win().fbq?.disablePushState).toBe(true);
+  });
+
+  it("a consented page_view on /orders/<token> sends the token to no provider call", () => {
+    hardLoadAt("/rose/checkout");
+    window.history.replaceState(null, "", `/rose/orders/${T}`);
+    track("page_view");
+    expect(everythingSent()).not.toContain(T);
+    // Already-installed Meta, TikTok and Snap cannot override the URL they read,
+    // so they are skipped for this call (nothing past the install-time queue).
+    expect(JSON.stringify(win().fbq?.queue)).not.toContain("PageView");
+    // GA4 still gets the page view, with the URL it is told to use.
+    const pv = ga().find((a) => a[0] === "event" && a[1] === "page_view");
+    expect(pv?.[2]).toMatchObject({ page_location: expect.stringContaining("/rose/orders/[redacted]") as string });
+  });
+
+  it("the purchase event on that page is also redacted for GA4 and skipped elsewhere", () => {
+    hardLoadAt("/rose/checkout");
+    window.history.replaceState(null, "", `/rose/orders/${T}`);
+    track("purchase", { value: 10, transactionId: "1", eventId: "order_1", items: [{ id: 1, name: "x", price: 10 }] });
+    expect(everythingSent()).not.toContain(T);
+    expect(ga().some((a) => a[1] === "purchase")).toBe(true);
+    expect(JSON.stringify(win().fbq?.queue)).not.toContain("Purchase");
+  });
+
+  it("query tokens (track, survey, pay, cart recovery) are treated the same", () => {
+    for (const path of [`/orders/track?token=${T}`, `/survey?token=${T}`, `/pay?token=${T}`, `/cart/recover?token=${T}`]) {
+      resetAnalyticsForTests();
+      for (const k of ["dataLayer", "fbq", "_fbq", "ttq", "snaptr", "gtag"]) delete (window as unknown as Record<string, unknown>)[k];
+      hardLoadAt(path);
+      track("page_view");
+      expect(everythingSent()).not.toContain(T);
+      expect(win().fbq).toBeUndefined();
+    }
+  });
+
+  it("an ordinary page is unchanged: every provider is called and nothing is overridden", () => {
+    hardLoadAt("/rose/products/red-roses");
+    track("page_view");
+    expect(win().fbq?.queue.length).toBeGreaterThan(0);
+    const pv = ga().find((a) => a[0] === "event" && a[1] === "page_view");
+    expect(pv?.[2]).not.toHaveProperty("page_location");
+    expect(ga().filter((a) => a[0] === "config").every((c) => !(c[2] as object).hasOwnProperty("page_location"))).toBe(true);
+  });
+});
+
 describe("vocabulary -> provider event names", () => {
   const items = [{ id: 7, name: "Rose", price: 50, quantity: 2, variant: "Red", brand: "Acme" }];
   const base = { items, currency: "AED" };

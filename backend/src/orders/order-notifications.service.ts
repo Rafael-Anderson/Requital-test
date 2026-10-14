@@ -287,7 +287,7 @@ export class OrderNotificationsService {
 <tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
 <tr><td style="padding:40px;">
 <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(order.customerName)},</p>
-<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">We'd love your feedback on order <strong>#${order.id}</strong> from ${escapeHtml(shopDisplayName)}.</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">We'd love your feedback on order <strong>#${order.shopOrderNumber}</strong> from ${escapeHtml(shopDisplayName)}.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td style="border-radius:6px;background-color:#0d9488;"><a href="${link}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">Leave feedback</a></td></tr></table>
 <p style="margin:0 0 4px;font-size:13px;color:#666666;">Or copy this link into your browser:</p>
 <p style="margin:0;font-size:12px;color:#999999;font-family:monospace;word-break:break-all;">${link}</p>
@@ -304,7 +304,7 @@ export class OrderNotificationsService {
       'send_email',
       {
         to: order.customerEmail,
-        subject: `How was your order? — #${order.id}`,
+        subject: `How was your order? — #${order.shopOrderNumber}`,
         bodyText: `Hi ${order.customerName}, we'd love your feedback on order #${order.shopOrderNumber}: ${link}`,
         html: surveyHtml,
         fromName: shopDisplayName,
