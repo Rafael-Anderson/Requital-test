@@ -13,11 +13,21 @@ import { ChannelOrdersService } from './channel-orders.service';
 import { ChannelProviderRegistry } from './channel-provider.registry';
 import { ChannelSweepService } from './channel-sweep.service';
 import { ChannelsController } from './channels.controller';
+import { PlatformAuditLogService } from '../platform-admin/platform-audit-log.service';
 import { StubChannelProvider } from './providers/stub-channel.provider';
 
 // E2 (Deliveroo) and E3 (Talabat) register their providers on
 // ChannelProviderRegistry from their own modules and call
 // ChannelIngestionService.receive() from their webhook controllers.
+function stubAllowed(): boolean {
+  const env = process.env.NODE_ENV;
+  return (
+    env === 'test' ||
+    env === 'development' ||
+    process.env.ENABLE_STUB_CHANNEL === '1'
+  );
+}
+
 @Module({
   imports: [
     AuditLogModule,
@@ -37,8 +47,13 @@ import { StubChannelProvider } from './providers/stub-channel.provider';
     ChannelOrdersService,
     ChannelSweepService,
     StubChannelProvider,
+    PlatformAuditLogService,
   ],
-  exports: [ChannelProviderRegistry, ChannelIngestionService],
+  exports: [
+    ChannelProviderRegistry,
+    ChannelIngestionService,
+    ChannelConnectionsService,
+  ],
 })
 export class ChannelsModule implements OnModuleInit {
   constructor(
@@ -47,9 +62,10 @@ export class ChannelsModule implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    // The stub claims to prove location ownership, so it must never exist in
-    // production: it would let any merchant "own" any location id.
-    if (process.env.NODE_ENV !== 'production') {
+    // The stub claims a merchant-bound location proof, so it must never exist
+    // in production (or staging with an unset NODE_ENV): allow-list, not
+    // deny-list.
+    if (stubAllowed()) {
       this.registry.register(this.stub);
     }
   }

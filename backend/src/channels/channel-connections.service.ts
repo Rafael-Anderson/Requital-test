@@ -14,6 +14,7 @@ import type { TenantContext } from '../common/tenant-context';
 import { FeaturesService } from '../features/features.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import type { ChannelconnectionRow } from '../db/types';
+import { PlatformAuditLogService } from '../platform-admin/platform-audit-log.service';
 import { ChannelProviderRegistry } from './channel-provider.registry';
 import type { BoundChannelConnection } from './channel.types';
 import type {
@@ -36,6 +37,7 @@ export interface ChannelConnectionView {
   lastSyncAt: Date | null;
   lastSyncStatus: string | null;
   lastError: string | null;
+  locationVerified: boolean;
   createdAt: Date;
 }
 
@@ -70,6 +72,7 @@ export class ChannelConnectionsService {
     private readonly features: FeaturesService,
     private readonly audit: AuditLogService,
     private readonly registry: ChannelProviderRegistry,
+    private readonly platformAudit: PlatformAuditLogService,
   ) {}
 
   static view(row: ChannelconnectionRow): ChannelConnectionView {
@@ -86,6 +89,7 @@ export class ChannelConnectionsService {
       lastSyncAt: row.lastSyncAt,
       lastSyncStatus: row.lastSyncStatus,
       lastError: row.lastError,
+      locationVerified: !!row.locationVerifiedAt,
       createdAt: row.createdAt,
     };
   }
@@ -181,12 +185,16 @@ export class ChannelConnectionsService {
     const sets: string[] = ['updatedAt = ?'];
     const params: QueryParam[] = [new Date()];
     const idChange =
-      dto.externalLocationId !== undefined &&
-      dto.externalLocationId !== before.externalLocationId;
+      (dto.externalLocationId !== undefined &&
+        dto.externalLocationId !== before.externalLocationId) ||
+      (dto.externalBrandId !== undefined &&
+        dto.externalBrandId !== before.externalBrandId) ||
+      (dto.externalSiteId !== undefined &&
+        dto.externalSiteId !== before.externalSiteId);
     // The location id is the routing key: it cannot move under a live connection.
     if (idChange && before.enabled) {
       throw new ConflictException(
-        'Disable the connection before changing its location id',
+        'Disable the connection before changing its ids',
       );
     }
     if (dto.externalLocationId !== undefined) {
@@ -209,16 +217,36 @@ export class ChannelConnectionsService {
           : encrypt(JSON.stringify(assertCredentialMap(dto.credentials))),
       );
     }
+    // Any id or credential in the request voids the staff verification, in the
+    // SAME statement as the change, so there is no window where the new value
+    // is stored but the old verification still stands.
+    if (
+      dto.externalLocationId !== undefined ||
+      dto.externalBrandId !== undefined ||
+      dto.externalSiteId !== undefined ||
+      dto.credentials !== undefined
+    ) {
+      sets.push('locationVerifiedAt = NULL', 'locationVerifiedBy = NULL');
+    }
     if (dto.webhookSecret !== undefined) {
       sets.push('webhookSecret = ?');
       params.push(
         dto.webhookSecret === null ? null : encrypt(dto.webhookSecret),
       );
     }
-    await this.db.execute(
-      `UPDATE channelconnection SET ${sets.join(', ')} WHERE id = ? AND shopId = ?`,
+    // An id change is only valid while the connection is off, and that is
+    // checked by the UPDATE itself (not by the read above): a concurrent
+    // enable cannot slip between them.
+    const res = await this.db.execute(
+      `UPDATE channelconnection SET ${sets.join(', ')}
+        WHERE id = ? AND shopId = ? ${idChange ? 'AND enabled = 0' : ''}`,
       [...params, id, ctx.shopId],
     );
+    if (res.affectedRows === 0) {
+      throw new ConflictException(
+        'The connection changed while saving; reload and try again',
+      );
+    }
     const after = await this.load(ctx, id);
     await this.audit.logCtx(ctx, {
       action: 'channel.connection_updated',
@@ -231,8 +259,19 @@ export class ChannelConnectionsService {
   }
 
   // Off by default. Turning it ON needs the flag, the ids and credentials, a
-  // registered provider that can prove location ownership, and a passing
-  // testConnection(). Turning it OFF is always allowed.
+  // passing testConnection(), and PROOF THAT THE LOCATION IS THIS SHOP'S: either
+  // the provider has a merchant-bound proof (capabilities.provesLocationOwnership
+  // and a test that shows the credentials can see that location) or platform
+  // staff have verified the ids with the marketplace (locationVerifiedAt, set
+  // only through the platform-admin tier). Marketplace credentials are likely
+  // integrator-level, so "these credentials can see the location" alone proves
+  // nothing about who the location belongs to.
+  //
+  // The enable is ONE conditional UPDATE that restates everything that was
+  // tested and verified (ids, credentials, secret, the verification itself), so a
+  // concurrent edit during the network round trip makes it match no row (409)
+  // instead of enabling something nobody checked.
+  // Turning it OFF is always allowed.
   async setEnabled(ctx: TenantContext, id: number, enabled: boolean) {
     const row = await this.load(ctx, id);
     if (!enabled) {
@@ -260,37 +299,56 @@ export class ChannelConnectionsService {
         'Credentials and a webhook secret are required before enabling',
       );
     }
-    if (
-      !provider.capabilities.provesLocationOwnership ||
-      !provider.testConnection
-    ) {
-      throw new BadRequestException(
-        'This marketplace cannot yet verify location ownership, so it cannot be enabled',
+    const merchantBound = provider.capabilities.provesLocationOwnership;
+    if (!merchantBound && !row.locationVerifiedAt) {
+      throw new ConflictException(
+        'Requital staff must verify this location with the marketplace before it can be enabled',
       );
     }
+    if (!provider.testConnection) {
+      throw new BadRequestException('This marketplace has no connection test');
+    }
     const test = await provider.testConnection(this.bind(row));
+    const proven = test.ok && (!merchantBound || test.provesLocation);
     await this.db.execute(
       `UPDATE channelconnection SET lastSyncAt = ?, lastSyncStatus = ?, lastError = ? WHERE id = ? AND shopId = ?`,
       [
         new Date(),
-        test.ok && test.provesLocation ? 'ok' : 'failed',
-        test.ok && test.provesLocation
-          ? null
-          : (test.message ?? 'Connection test failed').slice(0, 500),
+        proven ? 'ok' : 'failed',
+        proven ? null : this.safeMessage(row, test.message),
         id,
         ctx.shopId,
       ],
     );
-    if (!test.ok || !test.provesLocation) {
+    if (!proven) {
       throw new BadRequestException(
-        `Connection test failed: ${test.message ?? 'the marketplace did not accept the credentials for this location'}`,
+        `Connection test failed: ${this.safeMessage(row, test.message)}`,
       );
     }
     try {
-      await this.db.execute(
-        `UPDATE channelconnection SET enabled = 1, updatedAt = ? WHERE id = ? AND shopId = ?`,
-        [new Date(), id, ctx.shopId],
+      const res = await this.db.execute(
+        `UPDATE channelconnection SET enabled = 1, updatedAt = ?
+          WHERE id = ? AND shopId = ? AND enabled = 0
+            AND externalLocationId <=> ? AND externalBrandId <=> ? AND externalSiteId <=> ?
+            AND credentials <=> ? AND webhookSecret <=> ?
+            AND (? = 1 OR locationVerifiedAt IS NOT NULL)`,
+        [
+          new Date(),
+          id,
+          ctx.shopId,
+          row.externalLocationId,
+          row.externalBrandId,
+          row.externalSiteId,
+          row.credentials,
+          row.webhookSecret,
+          merchantBound ? 1 : 0,
+        ],
       );
+      if (res.affectedRows === 0) {
+        throw new ConflictException(
+          'The connection changed while it was being checked; review it and try again',
+        );
+      }
     } catch (e) {
       // UNIQUE(routingKey): another enabled connection owns this location.
       // Deliberately generic: it must not confirm whose it is.
@@ -306,6 +364,22 @@ export class ChannelConnectionsService {
     return ChannelConnectionsService.view(await this.load(ctx, id));
   }
 
+  // A provider's message is stored and shown to the merchant: cap it and strip
+  // any credential value a careless provider echoed into it.
+  private safeMessage(row: ChannelconnectionRow, message?: string): string {
+    let out = (message ?? 'the marketplace did not accept the credentials for this location').slice(0, 500);
+    try {
+      const secrets = [
+        ...Object.values(this.bind(row).credentials ?? {}),
+        this.bind(row).webhookSecret ?? '',
+      ].filter((v) => v.length >= 4);
+      for (const v of secrets) out = out.split(v).join('***');
+    } catch {
+      /* undecryptable: nothing to redact */
+    }
+    return out;
+  }
+
   async remove(ctx: TenantContext, id: number) {
     const row = await this.load(ctx, id);
     const orders = await this.db.query<RowDataPacket[]>(
@@ -315,6 +389,17 @@ export class ChannelConnectionsService {
     if (orders.length > 0) {
       throw new ConflictException(
         'This connection has marketplace orders; disable it instead',
+      );
+    }
+    // Deleting cascades to the inbox: an event that has not been processed may
+    // be an accepted order, so it must be resolved first.
+    const pending = await this.db.query<RowDataPacket[]>(
+      `SELECT 1 FROM channelinboundevent WHERE connectionId = ? AND status <> 'processed' LIMIT 1`,
+      [id],
+    );
+    if (pending.length > 0) {
+      throw new ConflictException(
+        'This connection has unprocessed marketplace deliveries; disable it instead',
       );
     }
     await this.db.execute(
@@ -342,14 +427,103 @@ export class ChannelConnectionsService {
       [
         new Date(),
         test.ok ? 'ok' : 'failed',
-        test.ok
-          ? null
-          : (test.message ?? 'Connection test failed').slice(0, 500),
+        test.ok ? null : this.safeMessage(row, test.message),
         id,
         ctx.shopId,
       ],
     );
-    return { ok: test.ok, message: test.message ?? null };
+    return { ok: test.ok, message: test.ok ? null : this.safeMessage(row, test.message) };
+  }
+
+  // ---- platform staff (called only from the platform-admin tier) ----------
+
+  // What staff see: ids and verification state, never secrets.
+  async listForShop(shopId: number): Promise<ChannelConnectionView[]> {
+    const rows = await this.db.query<(ChannelconnectionRow & RowDataPacket)[]>(
+      `SELECT * FROM channelconnection WHERE shopId = ? ORDER BY id`,
+      [shopId],
+    );
+    return rows.map((r) => ChannelConnectionsService.view(r));
+  }
+
+  // Staff confirm the ids THEY checked with the marketplace's integration
+  // team. The UPDATE restates those ids, so if the merchant changed anything
+  // after staff looked, nothing is verified (409). The audit row is written in
+  // the same transaction: no verification without a record.
+  async platformVerifyLocation(
+    platformAdminId: number,
+    shopId: number,
+    id: number,
+    confirmed: {
+      externalLocationId: string;
+      externalBrandId: string | null;
+      externalSiteId: string | null;
+    },
+  ): Promise<ChannelConnectionView> {
+    await this.db.transaction(async (conn) => {
+      const [res] = await conn.query(
+        `UPDATE channelconnection SET locationVerifiedAt = ?, locationVerifiedBy = ?, updatedAt = ?
+          WHERE id = ? AND shopId = ?
+            AND externalLocationId <=> ? AND externalBrandId <=> ? AND externalSiteId <=> ?`,
+        [
+          new Date(),
+          platformAdminId,
+          new Date(),
+          id,
+          shopId,
+          confirmed.externalLocationId,
+          confirmed.externalBrandId,
+          confirmed.externalSiteId,
+        ],
+      );
+      if ((res as { affectedRows: number }).affectedRows === 0) {
+        throw new ConflictException(
+          'No such connection, or its ids differ from the ones confirmed',
+        );
+      }
+      await this.platformAudit.log(
+        platformAdminId,
+        'shop.channel_connection.location_verified',
+        shopId,
+        { connectionId: id, ...confirmed },
+        conn,
+      );
+    });
+    return ChannelConnectionsService.view(await this.requireForShop(shopId, id));
+  }
+
+  async platformUnverifyLocation(
+    platformAdminId: number,
+    shopId: number,
+    id: number,
+  ): Promise<ChannelConnectionView> {
+    await this.db.transaction(async (conn) => {
+      const [res] = await conn.query(
+        `UPDATE channelconnection SET locationVerifiedAt = NULL, locationVerifiedBy = NULL, enabled = 0, updatedAt = ?
+          WHERE id = ? AND shopId = ?`,
+        [new Date(), id, shopId],
+      );
+      if ((res as { affectedRows: number }).affectedRows === 0) {
+        throw new NotFoundException('Connection not found');
+      }
+      await this.platformAudit.log(
+        platformAdminId,
+        'shop.channel_connection.location_unverified',
+        shopId,
+        { connectionId: id },
+        conn,
+      );
+    });
+    return ChannelConnectionsService.view(await this.requireForShop(shopId, id));
+  }
+
+  private async requireForShop(shopId: number, id: number) {
+    const rows = await this.db.query<(ChannelconnectionRow & RowDataPacket)[]>(
+      `SELECT * FROM channelconnection WHERE id = ? AND shopId = ?`,
+      [id, shopId],
+    );
+    if (!rows[0]) throw new NotFoundException('Connection not found');
+    return rows[0];
   }
 
   // Decrypts one connection for a provider call. Takes a row the caller loaded

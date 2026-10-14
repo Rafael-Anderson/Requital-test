@@ -7,6 +7,7 @@ import type { SendConversionEventJobPayload } from '../jobs/jobs.types';
 import { createLogger } from '../common/logging/logger';
 import { trimDecimal } from '../database/decimal.util';
 import { storefrontUrl } from '../common/storefront-url';
+import { isMarketplaceChannel } from '../channels/marketplace-channels';
 import { hasMarketingConsent, parseAttribution } from './attribution';
 import { ShopAnalyticsService } from './shop-analytics.service';
 import { MetaCapiClient } from './meta-capi.client';
@@ -53,12 +54,15 @@ export class ConversionEventsService implements OnModuleInit {
   async enqueuePurchase(orderId: number): Promise<number | null> {
     try {
       const rows = await this.db.query<RowDataPacket[]>(
-        `SELECT id, shopId, total, currency, attributionJson
+        `SELECT id, shopId, channel, total, currency, attributionJson
            FROM \`order\` WHERE id = ?`,
         [orderId],
       );
       const order = rows[0];
       if (!order) return null;
+      // A marketplace customer is the marketplace's, never ours to report to an
+      // ad platform (also checked at send time below).
+      if (isMarketplaceChannel(order.channel as string | null)) return null;
       if (!hasMarketingConsent(order.attributionJson)) return null;
       const shopId = order.shopId as number;
       const creds =
@@ -102,7 +106,7 @@ export class ConversionEventsService implements OnModuleInit {
     }
     // Tenant check: the order must belong to the shop the job was queued for.
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT o.id, o.customerEmail, o.customerPhone, o.attributionJson,
+      `SELECT o.id, o.channel, o.customerEmail, o.customerPhone, o.attributionJson,
               s.subdomain AS shopSubdomain, s.domainType AS shopDomainType,
               s.customDomain AS shopCustomDomain,
               s.customDomainStatus AS shopCustomDomainStatus,
@@ -113,6 +117,7 @@ export class ConversionEventsService implements OnModuleInit {
     );
     const order = rows[0];
     if (!order) return;
+    if (isMarketplaceChannel(order.channel as string | null)) return;
 
     // Re-checked at send time, not just at enqueue: the guard has to hold on the
     // path that actually talks to the third party.

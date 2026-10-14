@@ -19,3 +19,16 @@ export function isMarketplaceChannel(
     (MARKETPLACE_ORDER_CHANNELS as readonly string[]).includes(channel)
   );
 }
+
+// For INPUT validation: the same test, but forgiving about case and padding, so
+// "Deliveroo " and "DELIVEROO" cannot be typed into a hand-made order either.
+export function isMarketplaceChannelValue(
+  channel: string | null | undefined,
+): boolean {
+  return (
+    typeof channel === 'string' &&
+    (MARKETPLACE_ORDER_CHANNELS as readonly string[]).includes(
+      channel.trim().toLowerCase(),
+    )
+  );
+}
