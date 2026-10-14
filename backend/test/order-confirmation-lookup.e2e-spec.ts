@@ -282,16 +282,18 @@ describe('Order confirmation lookup (e2e)', () => {
 
     // Random: the column is unique and the dev DB outlives a run.
     const legacy = randomBytes(5).toString('hex');
-    await db.execute('UPDATE `order` SET trackingToken = ?, area = ? WHERE id = ?', [
-      legacy,
-      'Marina',
-      o.id,
-    ]);
+    await db.execute(
+      "UPDATE `order` SET trackingToken = ?, area = ?, discountCode = 'SAVE10' WHERE id = ?",
+      [legacy, 'Marina', o.id],
+    );
     const v = body<View>(await lookup(legacy).expect(200));
     expect(v.deliveryAddress).toBeNull();
     expect(v.area).toBeNull();
     expect(v.region).toBeNull();
     expect(v.items[0].note).toBeNull();
+    expect(v.customerName).toBe('');
+    expect(v.discountCode).toBeNull();
+    expect(JSON.stringify(v)).not.toContain('Confirm Customer');
     expect(JSON.stringify(v)).not.toContain('9 Palm Street');
     expect(JSON.stringify(v)).not.toContain('ring the bell');
     // Status, items and totals are still there.
@@ -446,6 +448,23 @@ describe('Order confirmation lookup (e2e)', () => {
       `INSERT INTO paymenttransaction (orderId, gateway, gatewayReference, amount, status, currency)
        VALUES (?, 'stripe', ?, 50, 'failed', 'AED')`,
       [o.id, `evt_failed_${runId}`],
+    );
+    v = body<View>(await lookup(o.trackingToken).expect(200));
+    expect(v.paymentFailed).toBe(true);
+
+    // A retry whose latest gateway report is not a failure: no longer failed,
+    // even though an older failed row exists.
+    await db.execute(
+      `INSERT INTO paymenttransaction (orderId, gateway, gatewayReference, amount, status, currency)
+       VALUES (?, 'stripe', ?, 50, 'paid', 'AED')`,
+      [o.id, `evt_retry_${runId}`],
+    );
+    v = body<View>(await lookup(o.trackingToken).expect(200));
+    expect(v.paymentFailed).toBe(false);
+    await db.execute(
+      `INSERT INTO paymenttransaction (orderId, gateway, gatewayReference, amount, status, currency)
+       VALUES (?, 'stripe', ?, 50, 'failed', 'AED')`,
+      [o.id, `evt_failed_again_${runId}`],
     );
     v = body<View>(await lookup(o.trackingToken).expect(200));
     expect(v.paymentFailed).toBe(true);

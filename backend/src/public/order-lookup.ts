@@ -130,7 +130,7 @@ export async function lookupOrderView(
                 COALESCE(
                   (SELECT pi.url FROM productvariant pv
                      JOIN product pp ON pp.id = pv.productId AND pp.shopId = ?
-                     JOIN productimage pi ON pi.id = pv.imageId
+                     JOIN productimage pi ON pi.id = pv.imageId AND pi.productId = pv.productId
                     WHERE pv.id = oi.variantId AND pv.productId = oi.productId LIMIT 1),
                   (SELECT pi2.url FROM productimage pi2
                      JOIN product p ON p.id = pi2.productId AND p.shopId = ?
@@ -159,7 +159,7 @@ export async function lookupOrderView(
         : Promise.resolve([] as RowDataPacket[]),
       order.paymentStatus === 'unpaid'
         ? db.query<RowDataPacket[]>(
-            `SELECT 1 AS failed FROM paymenttransaction WHERE orderId = ? AND status = 'failed' LIMIT 1`,
+            `SELECT status FROM paymenttransaction WHERE orderId = ? ORDER BY id DESC LIMIT 1`,
             [order.id],
           )
         : Promise.resolve([] as RowDataPacket[]),
@@ -168,7 +168,7 @@ export async function lookupOrderView(
   const region = regionRows[0];
   const isPickup = order.orderType === 'pickup';
   // A legacy 10-hex (40-bit) token must not unlock the richer data this view
-  // added: no address, region/area or item notes. Status, items and totals stay.
+  // added: no address, region/area, item notes, customer name or discount code. Status, items and totals stay.
   const legacyToken = token.length === 10;
 
   // Exact line totals in minor units of the order's own currency.
@@ -192,7 +192,8 @@ export async function lookupOrderView(
     shopOrderNumber: order.shopOrderNumber as number,
     shopName: order.shopName as string,
     outletName: (outlet?.name ?? '') as string,
-    customerName: order.customerName as string,
+    // Withheld for a legacy token, like the address and item notes.
+    customerName: legacyToken ? '' : (order.customerName as string),
     status: order.status as string,
     orderType: order.orderType as string | null,
     createdAt: order.createdAt as Date,
@@ -201,7 +202,9 @@ export async function lookupOrderView(
     onlinePayment: ONLINE_PAYMENT_METHODS.includes(
       order.paymentMethod as string,
     ),
-    paymentFailed: failedRows.length > 0,
+    // Only the LATEST gateway report counts: a failure followed by a retry is
+    // not a failed order.
+    paymentFailed: failedRows[0]?.status === 'failed',
     deliveryDate: order.deliveryDate as string | null,
     deliveryTimeSlot: order.deliveryTimeSlot as string | null,
     estimatedTime,
@@ -216,7 +219,7 @@ export async function lookupOrderView(
     })),
     currency,
     subtotal: trimDecimal(minorToDecimal(subtotalMinor, currency)),
-    discountCode: order.discountCode as string | null,
+    discountCode: legacyToken ? null : (order.discountCode as string | null),
     discountAmount: trimDecimal(order.discountAmount as string | null),
     deliveryFee: trimDecimal(order.deliveryFee as string | null),
     taxAmount: trimDecimal(order.taxAmount as string | null),

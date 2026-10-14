@@ -26,6 +26,21 @@ export function capiPurchaseIdempotencyKey(orderId: number): string {
   return `capi:purchase:${orderId}`;
 }
 
+// Where Meta is told the conversion happened: the shop's own storefront home.
+// Never an order URL: neither the sequential order id nor the tracking token
+// (a bearer capability) belongs in a request to a third party.
+export function capiEventSourceUrl(order: Record<string, unknown>): string {
+  return storefrontUrl(
+    {
+      subdomain: order.shopSubdomain as string,
+      domainType: order.shopDomainType as string | null,
+      customDomain: order.shopCustomDomain as string | null,
+      customDomainStatus: order.shopCustomDomainStatus as string | null,
+    },
+    '/',
+  );
+}
+
 @Injectable()
 export class ConversionEventsService implements OnModuleInit {
   constructor(
@@ -142,15 +157,7 @@ export class ConversionEventsService implements OnModuleInit {
         unitPrice: trimDecimal(i.priceAtPurchase as string),
       })),
       attribution: parseAttribution(order.attributionJson),
-      eventSourceUrl: storefrontUrl(
-        {
-          subdomain: order.shopSubdomain as string,
-          domainType: order.shopDomainType as string | null,
-          customDomain: order.shopCustomDomain as string | null,
-          customDomainStatus: order.shopCustomDomainStatus as string | null,
-        },
-        `/orders/${payload.orderId}`,
-      ),
+      eventSourceUrl: capiEventSourceUrl(order),
     });
 
     await this.metaCapiClient.send({

@@ -273,9 +273,13 @@ interface RuntimeState {
   currency?: string;
   // True once the visitor has accepted AND the provider stubs are installed.
   active: boolean;
+  // Meta / TikTok / Snap have been installed (deferred while a page carries a token).
+  pixelsInstalled: boolean;
+  // gtag config currently carries a redacted page_location.
+  gaPinned: boolean;
 }
 
-const state: RuntimeState = { config: {}, active: false };
+const state: RuntimeState = { config: {}, active: false, pixelsInstalled: false, gaPinned: false };
 
 // Registers the shop's configured ids. Loads nothing: loading is gated on consent
 // below. Call again (shop change) to reset.
@@ -283,6 +287,8 @@ export function initAnalytics(rawConfig: unknown, currency?: string): void {
   state.config = sanitizeAnalyticsConfig(rawConfig);
   state.currency = currency;
   state.active = false;
+  state.pixelsInstalled = false;
+  state.gaPinned = false;
 }
 
 export function hasConfiguredProviders(): boolean {
@@ -307,7 +313,7 @@ function installGtag(id: string, adsId?: string): void {
   // Page views are sent by <Analytics/> on every route change (an SPA never
   // reloads), so the automatic one is off.
   win.gtag("config", id, { send_page_view: false });
-  if (adsId && adsId !== id) win.gtag("config", adsId);
+  if (adsId && adsId !== id) win.gtag("config", adsId, { send_page_view: false });
   void loadScriptOnce(`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`).catch(() => {});
 }
 
@@ -325,6 +331,11 @@ function installMeta(pixelId: string): void {
     win.fbq = fbq;
     win._fbq = fbq;
   }
+  // fbevents otherwise fires its own PageView on every history.pushState, which
+  // would report a token-bearing URL (checkout's router.push to the confirmation
+  // page) and double-count the page_view <Analytics/> already sends by hand.
+  // Must be set before the script loads.
+  (win.fbq as { disablePushState?: boolean }).disablePushState = true;
   win.fbq("init", pixelId);
   void loadScriptOnce("https://connect.facebook.net/en_US/fbevents.js").catch(() => {});
 }
@@ -384,10 +395,45 @@ export function setAnalyticsConsent(granted: boolean): void {
   const c = state.config;
   const gtagId = c.ga4MeasurementId ?? c.googleAdsConversionId;
   if (gtagId) installGtag(gtagId, c.googleAdsConversionId);
+  state.active = true;
+  syncGaLocation();
+  ensurePixels();
+}
+
+// Meta, TikTok and Snap read document.location / document.referrer on their own
+// and offer no override, so they are not even loaded while the page carries a
+// bearer token (see lib/redact-token-url.ts); they install on the first track()
+// from a clean page. Everything else about consent is unchanged.
+function ensurePixels(): void {
+  if (!state.active || state.pixelsInstalled || locationCarriesToken()) return;
+  const c = state.config;
   if (c.metaPixelId) installMeta(c.metaPixelId);
   if (c.tiktokPixelId) installTikTok(c.tiktokPixelId);
   if (c.snapPixelId) installSnap(c.snapPixelId);
-  state.active = true;
+  state.pixelsInstalled = true;
+}
+
+function locationCarriesToken(): boolean {
+  return carriesToken(window.location.href) || carriesToken(document.referrer);
+}
+
+// gtag keeps `config` parameters per target, so on a token page the redacted
+// page_location / page_referrer are pinned there (covering gtag's own automatic
+// events, not just the ones track() sends), and unpinned with the real values as
+// soon as a clean page is reported.
+function syncGaLocation(): void {
+  const win = w();
+  const leaky = locationCarriesToken();
+  if (!win.gtag || (!leaky && !state.gaPinned)) return;
+  const href = window.location.href;
+  const referrer = document.referrer;
+  const params = leaky
+    ? { page_location: redactTokenUrl(href), ...(referrer ? { page_referrer: redactTokenUrl(referrer) } : {}) }
+    : { page_location: href, ...(referrer ? { page_referrer: referrer } : {}) };
+  const c = state.config;
+  const ids = new Set([c.ga4MeasurementId ?? c.googleAdsConversionId, c.googleAdsConversionId].filter((x): x is string => !!x));
+  for (const id of ids) win.gtag("config", id, { send_page_view: false, ...params });
+  state.gaPinned = leaky;
 }
 
 function dispatch(call: ProviderCall): void {
@@ -438,6 +484,8 @@ function guardTokenUrls(calls: ProviderCall[]): ProviderCall[] {
 // configured, so it is always safe to call (and cheap) from any component.
 export function track(event: AnalyticsEventName, payload: AnalyticsPayload = {}): void {
   if (typeof window === "undefined" || !state.active) return;
+  syncGaLocation();
+  ensurePixels();
   const full: AnalyticsPayload = { ...payload, currency: payload.currency ?? state.currency };
   for (const call of guardTokenUrls(buildProviderCalls(event, full, state.config))) {
     try {
@@ -453,4 +501,6 @@ export function resetAnalyticsForTests(): void {
   state.config = {};
   state.currency = undefined;
   state.active = false;
+  state.pixelsInstalled = false;
+  state.gaPinned = false;
 }
