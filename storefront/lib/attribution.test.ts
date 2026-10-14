@@ -31,6 +31,16 @@ describe("deriveTouch", () => {
     expect(JSON.stringify(touch)).not.toContain("secret");
   });
 
+  it("never stores a token in the landing path or referrer", () => {
+    const T = "A1B2C3D4E5F60718293A4B5C6D7E8F90";
+    const a = deriveTouch(new URL(`https://shop.requital.io/rose/orders/${T}`), "", NOW);
+    expect(a.touch.landingPath).toBe("/rose/orders/[redacted]");
+    const b = deriveTouch(new URL(`https://shop.requital.io/orders/track?token=${T}`), "", NOW);
+    expect(JSON.stringify(b.touch)).not.toContain(T);
+    const c = deriveTouch(new URL("https://shop.requital.io/"), `https://mail.example.com/orders/${T}`, NOW);
+    expect(JSON.stringify(c.touch)).not.toContain(T);
+  });
+
   it("infers a source from a click id when there are no UTMs", () => {
     expect(deriveTouch(new URL("https://s.io/?gclid=abc"), "", NOW).touch).toMatchObject({ source: "google", medium: "cpc", gclid: "abc" });
     expect(deriveTouch(new URL("https://s.io/?fbclid=abc"), "", NOW).touch).toMatchObject({ source: "facebook", medium: "social" });

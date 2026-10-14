@@ -141,6 +141,68 @@ describe("after consent, track() reaches the provider globals", () => {
   });
 });
 
+describe("a page whose URL carries a bearer token", () => {
+  const T = "A1B2C3D4E5F60718293A4B5C6D7E8F90";
+  type W = { dataLayer: unknown[]; fbq: { queue: unknown[][] }; snaptr: { queue: unknown[] }; ttq: unknown[] };
+  const win = () => window as unknown as W;
+  const ga = () => win().dataLayer.map((a) => Array.from(a as ArrayLike<unknown>));
+  const everythingSent = () => JSON.stringify([ga(), win().fbq.queue, win().snaptr.queue, win().ttq ?? []]);
+
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  function consented() {
+    initAnalytics(ALL, "AED");
+    setAnalyticsConsent(true);
+    // Whatever installing the providers queued is not under test.
+    win().dataLayer.length = 0;
+    win().fbq.queue.length = 0;
+    win().snaptr.queue.length = 0;
+  }
+
+  it("a consented page_view on /orders/<token> sends the token to no provider call", () => {
+    window.history.replaceState(null, "", `/rose/orders/${T}`);
+    consented();
+    track("page_view");
+    expect(everythingSent()).not.toContain(T);
+    // Meta, TikTok and Snap cannot override the URL they read, so they are skipped.
+    expect(win().fbq.queue).toEqual([]);
+    expect(win().snaptr.queue).toEqual([]);
+    // GA4 still gets the page view, with the URL it is told to use.
+    const pv = ga().find((a) => a[0] === "event" && a[1] === "page_view");
+    expect(pv?.[2]).toMatchObject({ page_location: expect.stringContaining("/rose/orders/[redacted]") as string });
+  });
+
+  it("the purchase event on that page is also redacted for GA4 and skipped elsewhere", () => {
+    window.history.replaceState(null, "", `/rose/orders/${T}`);
+    consented();
+    track("purchase", { value: 10, transactionId: "1", eventId: "order_1", items: [{ id: 1, name: "x", price: 10 }] });
+    expect(everythingSent()).not.toContain(T);
+    expect(ga().some((a) => a[1] === "purchase")).toBe(true);
+    expect(win().fbq.queue).toEqual([]);
+  });
+
+  it("query tokens (track, survey, pay, cart recovery) and a token-bearing referrer are treated the same", () => {
+    for (const path of [`/orders/track?token=${T}`, `/survey?token=${T}`, `/pay?token=${T}`, `/cart/recover?token=${T}`]) {
+      window.history.replaceState(null, "", path);
+      consented();
+      track("page_view");
+      expect(everythingSent()).not.toContain(T);
+      expect(win().fbq.queue).toEqual([]);
+      resetAnalyticsForTests();
+      win().dataLayer.length = 0;
+    }
+  });
+
+  it("an ordinary page is unchanged: every provider is called and nothing is overridden", () => {
+    window.history.replaceState(null, "", "/rose/products/red-roses");
+    consented();
+    track("page_view");
+    expect(win().fbq.queue.length).toBeGreaterThan(0);
+    const pv = ga().find((a) => a[0] === "event" && a[1] === "page_view");
+    expect(pv?.[2]).not.toHaveProperty("page_location");
+  });
+});
+
 describe("vocabulary -> provider event names", () => {
   const items = [{ id: 7, name: "Rose", price: 50, quantity: 2, variant: "Red", brand: "Acme" }];
   const base = { items, currency: "AED" };

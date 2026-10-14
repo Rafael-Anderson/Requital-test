@@ -13,6 +13,7 @@
 // rule (backend shop-analytics/attribution.ts), so a modified client cannot
 // smuggle them in without consent either.
 import { getConsent } from "./consent";
+import { redactTokenUrl } from "./redact-token-url";
 
 export interface AttributionTouch {
   source?: string;
@@ -113,8 +114,8 @@ export function deriveTouch(
     term: get("utm_term"),
     content: get("utm_content"),
     // Origin + path only: a referrer's query string can carry anything.
-    referrer: refHost ? `${new URL(referrer).origin}${new URL(referrer).pathname}` : undefined,
-    landingPath: url.pathname,
+    referrer: refHost ? redactTokenUrl(`${new URL(referrer).origin}${new URL(referrer).pathname}`) : undefined,
+    landingPath: redactTokenUrl(url.pathname),
     gclid,
     fbclid,
     ttclid,

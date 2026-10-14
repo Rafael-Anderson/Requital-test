@@ -129,6 +129,7 @@ export async function lookupOrderView(
                 oi.taxRate, oi.taxAmount,
                 COALESCE(
                   (SELECT pi.url FROM productvariant pv
+                     JOIN product pp ON pp.id = pv.productId AND pp.shopId = ?
                      JOIN productimage pi ON pi.id = pv.imageId
                     WHERE pv.id = oi.variantId AND pv.productId = oi.productId LIMIT 1),
                   (SELECT pi2.url FROM productimage pi2
@@ -137,7 +138,7 @@ export async function lookupOrderView(
                     ORDER BY pi2.\`order\` ASC, pi2.id ASC LIMIT 1)
                 ) AS imageUrl
            FROM orderitem oi WHERE oi.orderId = ? ORDER BY oi.id ASC`,
-        [shopId, order.id],
+        [shopId, shopId, order.id],
       ),
       db.query<RowDataPacket[]>(
         `SELECT name, area, phone, latitude, longitude FROM outlet WHERE id = ? AND shopId = ?`,
@@ -166,6 +167,9 @@ export async function lookupOrderView(
   const outlet = outletRows[0];
   const region = regionRows[0];
   const isPickup = order.orderType === 'pickup';
+  // A legacy 10-hex (40-bit) token must not unlock the richer data this view
+  // added: no address, region/area or item notes. Status, items and totals stay.
+  const legacyToken = token.length === 10;
 
   // Exact line totals in minor units of the order's own currency.
   const lineMinor = items.map(
@@ -208,7 +212,7 @@ export async function lookupOrderView(
       priceAtPurchase: trimDecimal(i.priceAtPurchase as string),
       lineTotal: trimDecimal(minorToDecimal(lineMinor[idx], currency)),
       imageUrl: (i.imageUrl as string | null) ?? null,
-      note: (i.note as string | null) ?? null,
+      note: legacyToken ? null : ((i.note as string | null) ?? null),
     })),
     currency,
     subtotal: trimDecimal(minorToDecimal(subtotalMinor, currency)),
@@ -235,15 +239,17 @@ export async function lookupOrderView(
     storeCreditAmount: trimDecimal(order.storeCreditAmount as string | null),
     total: trimDecimal(order.total as string),
     amountDue: trimDecimal(amountDueDecimal(order)),
-    deliveryAddress: isPickup ? null : (order.customerAddress as string),
-    region: region
-      ? {
-          id: region.id as number,
-          nameEn: region.nameEn as string,
-          nameAr: region.nameAr as string,
-        }
-      : null,
-    area: (order.area as string | null) ?? null,
+    deliveryAddress:
+      isPickup || legacyToken ? null : (order.customerAddress as string),
+    region:
+      region && !legacyToken
+        ? {
+            id: region.id as number,
+            nameEn: region.nameEn as string,
+            nameAr: region.nameAr as string,
+          }
+        : null,
+    area: legacyToken ? null : ((order.area as string | null) ?? null),
     pickupLocation:
       isPickup && outlet
         ? {

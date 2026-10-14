@@ -257,6 +257,47 @@ describe('Order confirmation lookup (e2e)', () => {
     expect(view.customerName).toBe('Confirm Customer');
   });
 
+  it('is never cached', async () => {
+    const shop = await setupShop('cnf-cache');
+    const o = await place(shop);
+    const ok = await lookup(o.trackingToken).expect(200);
+    expect(ok.headers['cache-control']).toBe('no-store');
+  });
+
+  it('a legacy 10-hex token reads status, items and totals but not the address, region or item notes', async () => {
+    const shop = await setupShop('cnf-legacy');
+    const o = await place(shop, {
+      orderType: 'delivery',
+      paymentMethod: 'cash_on_delivery',
+      customerAddress: '9 Palm Street',
+      latitude: 25.2,
+      longitude: 55.27,
+      items: [{ productId: shop.productId, quantity: 1, note: 'ring the bell' }],
+    });
+    // The full token still shows them.
+    const full = body<View>(await lookup(o.trackingToken).expect(200));
+    expect(full.deliveryAddress).toBe('9 Palm Street');
+    expect(full.items[0].note).toBe('ring the bell');
+
+    const legacy = 'a1b2c3d4e5';
+    await db.execute('UPDATE `order` SET trackingToken = ?, area = ? WHERE id = ?', [
+      legacy,
+      'Marina',
+      o.id,
+    ]);
+    const v = body<View>(await lookup(legacy).expect(200));
+    expect(v.deliveryAddress).toBeNull();
+    expect(v.area).toBeNull();
+    expect(v.region).toBeNull();
+    expect(v.items[0].note).toBeNull();
+    expect(JSON.stringify(v)).not.toContain('9 Palm Street');
+    expect(JSON.stringify(v)).not.toContain('ring the bell');
+    // Status, items and totals are still there.
+    expect(v.items[0].productName).toBeDefined();
+    expect(Number(v.total)).toBeGreaterThan(0);
+    expect(v.shopOrderNumber).toBe(o.shopOrderNumber);
+  });
+
   it('shows the per-shop number, and the global id is a different value', async () => {
     const a = await setupShop('cnf-num-a');
     const b = await setupShop('cnf-num-b');

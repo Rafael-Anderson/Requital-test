@@ -126,7 +126,7 @@ test('a sequential order id in the URL opens nothing and asks for no order data'
     if (r.url().includes('/orders/lookup')) lookups.push(r.url());
   });
   await page.goto(`${STOREFRONT_URL}/${shop.subdomain}/orders/${o.id}?paid=1`);
-  await expect(page.getByText('We cannot open this order from here')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('This order link is out of date')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('body')).not.toContainText('Rose Bouquet');
   await expect(page.locator('body')).not.toContainText('Confirm Customer');
   await expect(page.getByText('Payment received')).toHaveCount(0);

@@ -372,8 +372,10 @@ describe("order confirmation page", () => {
       lookupOrder.mockReset();
       const { unmount } = await renderPage();
       expect(lookupOrder).not.toHaveBeenCalled();
-      expect(screen.getByText(/We cannot open this order from here/)).toBeInTheDocument();
+      expect(screen.getByText(/This order link is out of date/)).toBeInTheDocument();
       expect(screen.queryByText("#7")).not.toBeInTheDocument();
+      // Says nothing about payment either way.
+      expect(document.body.textContent).not.toMatch(/payment|paid/i);
       unmount();
     }
   });

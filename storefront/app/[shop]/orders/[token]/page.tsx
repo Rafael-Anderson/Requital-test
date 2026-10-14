@@ -339,15 +339,17 @@ function OrderBody({ order, token, view, onCheckAgain }: { order: OrderLookupRes
 }
 
 // A link that carries something other than a tracking code (the old
-// /orders/<number> shape) opens nothing: no request is made and no order data
-// is ever shown for a sequential id.
+// /orders/<number> shape, e.g. a gateway return created before the token
+// URLs) opens nothing: no request is made, no order data is shown, and nothing
+// is said about payment either way.
 function CannotOpen() {
   const { shopBasePath } = useShop();
   return (
     <div className={`${CARD} text-center`}>
-      <h1 className="text-xl font-semibold">We cannot open this order from here</h1>
+      <h1 className="text-xl font-semibold">This order link is out of date</h1>
       <p className="mt-2 text-sm text-foreground/70">
-        Use the tracking code from your order confirmation message to check your order.
+        Links that use an order number can no longer open an order. Use the link in your order confirmation email or message, or
+        look the order up with your tracking code.
       </p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-center">
         <Link href={`${shopBasePath}/orders/track`} className={BUTTON_PRIMARY}>

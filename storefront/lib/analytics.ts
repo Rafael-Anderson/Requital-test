@@ -16,6 +16,7 @@
 // Only browser-side events live here. The server-side Meta Conversions API event
 // for a purchase is sent by the backend and shares `purchaseEventId` with the
 // browser's own purchase event so Meta deduplicates the pair.
+import { carriesToken, redactTokenUrl } from "./redact-token-url";
 import { loadScriptOnce } from "./load-script";
 import { sanitizeAnalyticsConfig, type PublicAnalyticsConfig } from "./analytics-ids";
 
@@ -411,12 +412,34 @@ function dispatch(call: ProviderCall): void {
   }
 }
 
+// Pages whose URL (or referrer) carries a bearer token (see lib/redact-token-url.ts).
+// gtag lets the caller override page_location / page_referrer, so GA4 and Google
+// Ads get the redacted strings. Meta, TikTok and Snap read document.location
+// themselves on EVERY event and offer no override, so on such a page their
+// browser-side events are skipped (the server-side Meta Conversions API purchase
+// carries no URL and is unaffected).
+function guardTokenUrls(calls: ProviderCall[]): ProviderCall[] {
+  const href = window.location.href;
+  const referrer = typeof document === "undefined" ? "" : document.referrer;
+  if (!carriesToken(href) && !carriesToken(referrer)) return calls;
+  const overrides = { page_location: redactTokenUrl(href), ...(referrer ? { page_referrer: redactTokenUrl(referrer) } : {}) };
+  return calls
+    .filter((c) => c.provider === "ga4" || c.provider === "googleAds")
+    .map((c) => {
+      const args = [...c.args];
+      const last = args[args.length - 1];
+      if (last && typeof last === "object" && !Array.isArray(last)) args[args.length - 1] = { ...(last as object), ...overrides };
+      else args.push(overrides);
+      return { ...c, args };
+    });
+}
+
 // Report one event. A no-op unless the visitor consented and a provider is
 // configured, so it is always safe to call (and cheap) from any component.
 export function track(event: AnalyticsEventName, payload: AnalyticsPayload = {}): void {
   if (typeof window === "undefined" || !state.active) return;
   const full: AnalyticsPayload = { ...payload, currency: payload.currency ?? state.currency };
-  for (const call of buildProviderCalls(event, full, state.config)) {
+  for (const call of guardTokenUrls(buildProviderCalls(event, full, state.config))) {
     try {
       dispatch(call);
     } catch {
