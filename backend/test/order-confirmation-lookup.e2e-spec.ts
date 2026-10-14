@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { randomBytes } from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
@@ -279,7 +280,8 @@ describe('Order confirmation lookup (e2e)', () => {
     expect(full.deliveryAddress).toBe('9 Palm Street');
     expect(full.items[0].note).toBe('ring the bell');
 
-    const legacy = 'a1b2c3d4e5';
+    // Random: the column is unique and the dev DB outlives a run.
+    const legacy = randomBytes(5).toString('hex');
     await db.execute('UPDATE `order` SET trackingToken = ?, area = ? WHERE id = ?', [
       legacy,
       'Marina',
