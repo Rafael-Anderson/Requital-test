@@ -531,7 +531,7 @@ async function authedFetch<T>(shopSlug: string, path: string, init: RequestInit 
       if (!refreshRes.ok) throw new Error("Refresh failed");
       return authedFetch<T>(shopSlug, path, init, true);
     } catch {
-      throw new Error("Your session has expired — please log in again");
+      throw new Error("Your session has expired. Please log in again");
     }
   }
   if (!res.ok) {
@@ -729,7 +729,7 @@ async function authedFetchText(shopSlug: string, path: string, isRetry = false):
       if (!refreshRes.ok) throw new Error("Refresh failed");
       return authedFetchText(shopSlug, path, true);
     } catch {
-      throw new Error("Your session has expired — please log in again");
+      throw new Error("Your session has expired. Please log in again");
     }
   }
   if (!res.ok) {

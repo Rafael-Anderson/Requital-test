@@ -116,7 +116,7 @@ const PREVIEW_MODE_CSS = `
   }
   /* The rule above only covers the reorderable element itself, not an <img>
      nested inside it (e.g. a product/hero image inside a draggable
-     section) — browsers make <img> natively draggable by default, and that
+     section) - browsers make <img> natively draggable by default, and that
      native drag starts on mousedown before the pointer-based drag logic in
      this file ever sees the gesture, showing the "can't drop" cursor and
      eating the pointerdown. Blanket-covers every image in preview mode,

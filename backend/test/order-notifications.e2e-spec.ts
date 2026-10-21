@@ -273,7 +273,7 @@ describe('Order status customer email notifications (e2e)', () => {
     const payload = job!.payload as EmailJobPayload;
     expect(payload.to).toBe(email);
     expect(payload.subject).toContain(
-      `Order confirmation — #${order.shopOrderNumber}`,
+      `Order confirmation #${order.shopOrderNumber}`,
     );
     expectHtmlStructure(payload.html);
     expect(payload.html).toContain(`#${order.shopOrderNumber}`);
@@ -885,7 +885,7 @@ describe('Order status customer email notifications (e2e)', () => {
       const sentBody = JSON.parse(init.body);
       expect(sentBody.to).toBe(email);
       expect(sentBody.subject).toContain(
-        `Order confirmation — #${order.shopOrderNumber}`,
+        `Order confirmation #${order.shopOrderNumber}`,
       );
       expect(sentBody.from).toBe('Requital <noreply@requital.io>');
       expect(sentBody.html).toContain('<p style=');

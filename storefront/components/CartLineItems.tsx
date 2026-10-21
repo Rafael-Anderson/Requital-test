@@ -3,6 +3,7 @@
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import CurrencySymbol from "@/components/CurrencySymbol";
+import { formatPriceAmount } from "@/lib/currency";
 
 // The actual line-item list + qty controls, shared verbatim between the
 // full-page cart (app/[shop]/cart/page.tsx) and the slide-out CartDrawer —
@@ -31,12 +32,20 @@ export default function CartLineItems() {
           <div className="flex-1 min-w-0">
             <p className="font-medium truncate text-sm text-product-name">{item.name}</p>
             {item.variantLabel && <p className="text-xs text-zinc-500">{item.variantLabel}</p>}
+            {item.maxStock !== null && item.quantity >= item.maxStock && (
+              <p className="text-xs text-zinc-500">Only {item.maxStock} available</p>
+            )}
             <p className="text-sm text-price-main">
-              {item.price} <CurrencySymbol code={shop?.currency} />
+              {formatPriceAmount(item.price, shop?.currency)} <CurrencySymbol code={shop?.currency} />
             </p>
           </div>
           <div className="flex items-center border border-stroke rounded-lg shrink-0">
-            <button type="button" onClick={() => setQuantity(item.productId, item.quantity - 1, item.variantId)} className="px-2 py-1 cursor-pointer">
+            <button
+              type="button"
+              onClick={() => setQuantity(item.productId, item.quantity - 1, item.variantId)}
+              aria-label={`Decrease quantity of ${item.name}`}
+              className="min-h-9 min-w-9 cursor-pointer"
+            >
               −
             </button>
             <span className="px-1.5 min-w-6 text-center text-sm">{item.quantity}</span>
@@ -44,12 +53,17 @@ export default function CartLineItems() {
               type="button"
               onClick={() => setQuantity(item.productId, item.quantity + 1, item.variantId)}
               disabled={item.maxStock !== null && item.quantity >= item.maxStock}
-              className="px-2 py-1 cursor-pointer disabled:opacity-30"
+              aria-label={`Increase quantity of ${item.name}`}
+              className="min-h-9 min-w-9 cursor-pointer disabled:opacity-30"
             >
               +
             </button>
           </div>
-          <button type="button" onClick={() => removeItem(item.productId, item.variantId)} className="text-xs text-zinc-400 hover:text-red-600 cursor-pointer shrink-0">
+          <button
+            type="button"
+            onClick={() => removeItem(item.productId, item.variantId)}
+            aria-label={`Remove ${item.name} from cart`}
+            className="text-xs text-zinc-400 hover:text-red-600 cursor-pointer shrink-0">
             Remove
           </button>
         </div>

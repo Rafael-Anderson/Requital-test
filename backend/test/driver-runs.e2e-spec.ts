@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { OrdersService } from '../src/orders/orders.service';
 import { bootDriverFixture, body } from './helpers/driver-fixture';
 import type { W5Shop } from './helpers/driver-fixture';
 
@@ -342,6 +343,11 @@ describe('SHP-5 drivers and delivery runs (staff API)', () => {
       const cancelled = await fx.deliveryOrder(a, { status: 'cancelled' });
       const elsewhereOutlet = await fx.deliveryOrder(a, { outletId: outlet2 });
       const foreign = await fx.deliveryOrder(b);
+      // Distinct from any global id, whatever the database's state.
+      await fx.db.execute(
+        `UPDATE \`order\` SET shopOrderNumber = 900003 WHERE id = ?`,
+        [pickup.id],
+      );
 
       const res = await fx
         .r()
@@ -372,12 +378,53 @@ describe('SHP-5 drivers and delivery runs (staff API)', () => {
       // another outlet's order and another shop's order are indistinguishable from a missing one
       expect(reason(elsewhereOutlet.id)).toBe('not_found');
       expect(reason(foreign.id)).toBe('not_found');
+      // The message a person reads names orders by the number they see and says
+      // what is wrong in words, never a global id or a raw reason code.
+      const message = body<{ message: string }>(res).message;
+      expect(message).toContain('#900003 (not a delivery order)');
+      expect(message).not.toMatch(/not_delivery|bad_status|not_found/);
+      expect(message).toContain(`order id ${foreign.id} (not found)`);
       // and the failed create left no run behind
       const runs = await fx.row(
         `SELECT id FROM deliveryrun WHERE shopId = ? AND driverId = ?`,
         [a.shopId, driver.id],
       );
       expect(runs).toHaveLength(0);
+    });
+
+    it('names an order by its per-shop number when it is no longer ready to leave', async () => {
+      const driver = await fx.createDriver(a);
+      const o = await fx.deliveryOrder(a, { status: 'preparing' });
+      const run = await fx.createRun(a, driver.id, [o.id]);
+      // A number no global id can equal (on a fresh database both are tiny).
+      const number = 900002;
+      await fx.db.execute(
+        `UPDATE \`order\` SET shopOrderNumber = ? WHERE id = ?`,
+        [number, o.id],
+      );
+
+      // The order is cancelled by hand before the run is dispatched.
+      await fx.db.execute(`UPDATE \`order\` SET status = 'cancelled' WHERE id = ?`, [o.id]);
+      const res = await fx
+        .r()
+        .post(`/delivery-runs/${run.id}/dispatch`)
+        .set(fx.h(a.adminToken))
+        .expect(409);
+      expect(body<{ message: string }>(res).message).toContain(`#${number}.`);
+
+      // And the state machine's own compare-and-swap, reached directly.
+      await expect(
+        fx.db.transaction((conn) =>
+          fx.app
+            .get(OrdersService)
+            .moveToOutForDeliveryTx(
+              conn,
+              { userId: 1, shopId: a.shopId, role: 'admin', outletId: null },
+              o.id,
+              a.outletId,
+            ),
+        ),
+      ).rejects.toThrow(`Order #${number} is no longer ready to leave`);
     });
 
     it('refuses an order with an active external courier handoff', async () => {
@@ -408,6 +455,9 @@ describe('SHP-5 drivers and delivery runs (staff API)', () => {
         .set(fx.h(a.adminToken))
         .send({ driverId: driver.id, outletId: a.outletId, orderIds: [o.id] });
       expect(dup.status).toBe(409);
+      expect(body<{ message: string }>(dup).message).toBe(
+        `Order #${(await fx.f.orderRow(o.id)).shopOrderNumber as number} is already on an active run`,
+      );
 
       // race: two runs created at once for one fresh order, exactly one wins
       const o2 = await fx.deliveryOrder(a);

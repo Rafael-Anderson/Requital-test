@@ -77,4 +77,16 @@ describe("StoreCreditCard", () => {
     expect(await screen.findByText("20.00")).toBeInTheDocument();
     expect(screen.queryByLabelText("Amount")).not.toBeInTheDocument();
   });
+  it("names an order by its per-shop number in the ledger, never its global id", async () => {
+    vi.mocked(api.getCustomerStoreCredit).mockResolvedValue({
+      ...overview,
+      entries: [
+        { id: 1, currency: "AED", amount: "-10.00", type: "spend", reason: null, orderId: 56410, orderNumber: 7, returnId: null, actorName: null, createdAt: "2026-10-01T10:00:00Z" },
+      ],
+    } as never);
+    wrap();
+    await screen.findByText("20.00");
+    expect(screen.getByText(/order #7/)).toBeInTheDocument();
+    expect(screen.queryByText(/56410/)).toBeNull();
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derivePaymentView, formatDeliveryDate, isTrackingToken, paymentMethodLabel, timelineSteps } from "./order-confirmation";
+import { derivePaymentView, formatDeliveryDate, isTrackingToken, orderStatusLabel, paymentMethodLabel, paymentStatusLabel, timelineSteps } from "./order-confirmation";
 
 const base = { status: "pending", paymentStatus: "unpaid", onlinePayment: false, paymentFailed: false, orderType: "delivery", paymentMethod: "cash_on_delivery" };
 
@@ -56,5 +56,18 @@ describe("misc", () => {
   it("labels payment methods", () => {
     expect(paymentMethodLabel("card_online")).toBe("Card (online)");
     expect(paymentMethodLabel(null)).toBeNull();
+  });
+});
+
+describe("orderStatusLabel / paymentStatusLabel", () => {
+  it("never prints a raw enum value", () => {
+    expect(orderStatusLabel("out_for_delivery", "delivery")).toBe("Out for delivery");
+    expect(orderStatusLabel("out_for_delivery", "pickup")).toBe("Ready for pickup");
+    expect(orderStatusLabel("delivered", "pickup")).toBe("Collected");
+    expect(orderStatusLabel("pending", null)).toBe("Order placed");
+    expect(orderStatusLabel("cancelled", "delivery")).toBe("Cancelled");
+    expect(orderStatusLabel("on_hold", null)).toBe("On hold");
+    expect(paymentStatusLabel("unpaid")).toBe("Unpaid");
+    expect(paymentStatusLabel("partially_refunded")).toBe("Partially refunded");
   });
 });

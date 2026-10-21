@@ -12,13 +12,14 @@ interface AuthResponse {
 }
 interface IdRow {
   id: number;
+  shopOrderNumber: number;
 }
 interface OutletRow {
   id: number;
 }
 interface SearchResult {
   products: { id: number; name: string; sku: string }[];
-  orders: { id: number; customerName: string }[];
+  orders: { id: number; shopOrderNumber: number; customerName: string }[];
   customers: { id: number; name: string }[];
 }
 
@@ -151,7 +152,7 @@ describe('Global search (e2e)', () => {
     expect(result.customers.some((c) => c.name.includes(uniqueTag))).toBe(true);
   });
 
-  it('finds an order by its numeric id', async () => {
+  it('finds an order by the per-shop number a merchant sees, not the global id', async () => {
     const { adminToken, collectionId, outletId } =
       await setupShop('search-by-id');
     const product = await createProduct(
@@ -167,12 +168,17 @@ describe('Global search (e2e)', () => {
     );
 
     const res = await request(app.getHttpServer())
-      .get(`/search?q=${order.id}`)
+      .get(`/search?q=${order.shopOrderNumber}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
     expect(body<SearchResult>(res).orders.some((o) => o.id === order.id)).toBe(
       true,
     );
+    // The palette prints "Order #<shopOrderNumber>"; it must be in the payload.
+    expect(
+      body<SearchResult>(res).orders.find((o) => o.id === order.id)
+        ?.shopOrderNumber,
+    ).toBe(order.shopOrderNumber);
   });
 
   it('caps each collection at 5 results', async () => {

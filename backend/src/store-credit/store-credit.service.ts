@@ -96,10 +96,11 @@ export class StoreCreditService {
   ) {
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT e.id, e.currency, e.amount, e.entryType, e.reason,
-              COALESCE(e.orderId, rt.orderId) AS orderId, e.returnId,
+              COALESCE(e.orderId, rt.orderId) AS orderId, o.shopOrderNumber AS orderNumber, e.returnId,
               e.actorUserId, u.name AS actorName, e.createdAt
          FROM storecreditentry e
          LEFT JOIN orderreturn rt ON rt.id = e.returnId
+         LEFT JOIN \`order\` o ON o.id = COALESCE(e.orderId, rt.orderId) AND o.shopId = e.shopId
          LEFT JOIN user u ON u.id = e.actorUserId AND u.shopId = e.shopId
         WHERE e.customerId = ? AND e.shopId = ?
         ORDER BY e.id DESC
@@ -119,6 +120,8 @@ export class StoreCreditService {
           ? null
           : ((r.reason as string | null) ?? null),
       orderId: (r.orderId as number | null) ?? null,
+      // The number a person is shown; orderId stays the identity.
+      orderNumber: (r.orderNumber as number | null) ?? null,
       returnId: (r.returnId as number | null) ?? null,
       actorName: customerView ? null : ((r.actorName as string | null) ?? null),
       createdAt: r.createdAt as Date,

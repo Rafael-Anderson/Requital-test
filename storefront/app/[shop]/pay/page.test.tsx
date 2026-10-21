@@ -117,4 +117,13 @@ describe("PayPage", () => {
     expect(getPaymentLinkSummary).not.toHaveBeenCalled();
     expect(startPaymentLinkCheckout).not.toHaveBeenCalled();
   });
+  it("offers Try again when the link cannot be loaded, and recovers", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getPaymentLinkSummary).mockRejectedValueOnce(new Error("Network down"));
+    render(<PayPage />);
+    expect(await screen.findByText("Network down")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText(/Order #12/)).toBeInTheDocument();
+    expect(getPaymentLinkSummary).toHaveBeenCalledTimes(2);
+  });
 });

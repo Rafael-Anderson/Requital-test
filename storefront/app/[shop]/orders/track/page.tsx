@@ -10,6 +10,8 @@ import type { OrderLookupResult } from "@/lib/types";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import { AUTH_CARD_CLASS, AUTH_HEADING_CLASS, FIELD_CLASS, BUTTON_PRIMARY_CLASS } from "@/lib/form-styles";
 import CurrencySymbol from "@/components/CurrencySymbol";
+import { formatPriceAmount } from "@/lib/currency";
+import { orderStatusLabel } from "@/lib/order-confirmation";
 
 function TrackOrderContent() {
   const { shopSlug, shopBasePath, shop } = useShop();
@@ -109,6 +111,7 @@ function TrackOrderContent() {
           value={token}
           onChange={(e) => setToken(e.target.value)}
           placeholder="Tracking code"
+          aria-label="Tracking code"
           className={`flex-1 ${FIELD_CLASS}`}
         />
         <button type="submit" disabled={loading} className={BUTTON_PRIMARY_CLASS}>
@@ -134,7 +137,7 @@ function TrackOrderContent() {
           )}
           <div>
             <p className="text-xs text-zinc-400 uppercase tracking-wide">Order #{order.shopOrderNumber}</p>
-            <p className="font-medium">{order.status}</p>
+            <p className="font-medium">{orderStatusLabel(order.status, order.orderType)}</p>
           </div>
           <div className="text-sm space-y-1">
             <div className="flex justify-between">
@@ -172,7 +175,7 @@ function TrackOrderContent() {
             <div className="flex justify-between font-medium pt-1">
               <span>Total</span>
               <span>
-                {order.total} <CurrencySymbol code={order.currency} />
+                {formatPriceAmount(order.total, order.currency)} <CurrencySymbol code={order.currency} />
               </span>
             </div>
           </div>

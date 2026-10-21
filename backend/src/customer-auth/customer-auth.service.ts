@@ -206,7 +206,7 @@ export class CustomerAuthService {
         [new Date(), stored.familyId],
       );
       throw new UnauthorizedException(
-        'Refresh token reuse detected — all sessions revoked, please log in again',
+        'Refresh token reuse detected. All sessions revoked, please log in again',
       );
     }
 

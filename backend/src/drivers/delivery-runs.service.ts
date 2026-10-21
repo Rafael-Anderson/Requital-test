@@ -23,6 +23,7 @@ import { createLogger } from '../common/logging/logger';
 import { decimalToMinor, minorToDecimal } from './cash';
 import { amountDueDecimal } from '../common/amount-due';
 import { completeRunIfDone, connExec } from './run-lifecycle';
+import { shopOrderNumberLabel } from '../orders/order-number';
 import { renderRunSheetHtml } from './run-sheet-html';
 import {
   AddStopsDto,
@@ -50,6 +51,30 @@ export type OrderIneligibility =
   | 'external_courier'
   | 'already_delivered'
   | 'already_on_a_run';
+
+const INELIGIBLE_REASON_TEXT: Record<OrderIneligibility, string> = {
+  not_found: 'not found',
+  not_delivery: 'not a delivery order',
+  bad_status: 'not ready to leave yet, or already finished',
+  external_courier: 'already with an outside courier',
+  already_delivered: 'already delivered',
+  already_on_a_run: 'already on another run',
+};
+
+// "#12 (not a delivery order)": the per-shop number a person sees, and words
+// instead of the raw reason code (the code stays in `details` for the app). An
+// order that was not found has no number, so it is named by the id asked for.
+function ineligibleOrderText(p: {
+  orderId: number;
+  reason: OrderIneligibility;
+  shopOrderNumber?: number;
+}): string {
+  const name =
+    p.shopOrderNumber !== undefined
+      ? `#${p.shopOrderNumber}`
+      : `order id ${p.orderId}`;
+  return `${name} (${INELIGIBLE_REASON_TEXT[p.reason]})`;
+}
 
 type RunRow = DeliveryrunRow & RowDataPacket;
 
@@ -533,7 +558,7 @@ export class DeliveryRunsService {
   ): Promise<void> {
     const ph = orderIds.map(() => '?').join(', ');
     const [rows] = await conn.query<RowDataPacket[]>(
-      `SELECT o.id, o.orderType, o.status,
+      `SELECT o.id, o.shopOrderNumber, o.orderType, o.status,
               EXISTS (SELECT 1 FROM externaldelivery e WHERE e.orderId = o.id AND e.status <> 'cancelled') AS external,
               EXISTS (SELECT 1 FROM deliveryrunstop s WHERE s.orderId = o.id AND s.shopId = o.shopId AND s.status = 'delivered') AS wasDelivered
          FROM \`order\` o
@@ -541,7 +566,11 @@ export class DeliveryRunsService {
       [...orderIds, shopId, outletId],
     );
     const byId = new Map(rows.map((r) => [r.id as number, r]));
-    const problems: { orderId: number; reason: OrderIneligibility }[] = [];
+    const problems: {
+      orderId: number;
+      reason: OrderIneligibility;
+      shopOrderNumber?: number;
+    }[] = [];
     for (const id of orderIds) {
       const o = byId.get(id);
       let reason: OrderIneligibility | null = null;
@@ -551,13 +580,18 @@ export class DeliveryRunsService {
         reason = 'bad_status';
       else if (Number(o.external) === 1) reason = 'external_courier';
       else if (Number(o.wasDelivered) === 1) reason = 'already_delivered';
-      if (reason) problems.push({ orderId: id, reason });
+      if (reason)
+        problems.push({
+          orderId: id,
+          reason,
+          shopOrderNumber: o?.shopOrderNumber as number | undefined,
+        });
     }
     if (problems.length > 0) {
       throw new BadRequestException({
         statusCode: 400,
         message: `These orders cannot be put on a run: ${problems
-          .map((p) => `#${p.orderId} (${p.reason})`)
+          .map((p) => `${ineligibleOrderText(p)}`)
           .join(', ')}`,
         details: problems,
       });
@@ -592,7 +626,7 @@ export class DeliveryRunsService {
       } catch (error) {
         if (isDuplicateKeyError(error)) {
           throw new ConflictException(
-            `Order #${orderId} is already on an active run`,
+            `${await shopOrderNumberLabel(conn, shopId, orderId)} is already on an active run`,
           );
         }
         throw error;
@@ -863,7 +897,7 @@ export class DeliveryRunsService {
       }
       // Locked in a fixed (order id) sequence so two dispatches cannot deadlock.
       const [stops] = await conn.query<RowDataPacket[]>(
-        `SELECT s.id, s.orderId, o.status AS orderStatus, o.orderType
+        `SELECT s.id, s.orderId, o.shopOrderNumber, o.status AS orderStatus, o.orderType
            FROM deliveryrunstop s JOIN \`order\` o ON o.id = s.orderId AND o.shopId = s.shopId
           WHERE s.runId = ? AND s.shopId = ?
           ORDER BY s.orderId
@@ -884,7 +918,7 @@ export class DeliveryRunsService {
       if (bad.length > 0) {
         throw new ConflictException({
           statusCode: 409,
-          message: `These orders are no longer ready: ${bad.map((s) => `#${s.orderId as number}`).join(', ')}. Remove them and try again`,
+          message: `These orders are no longer ready: ${bad.map((s) => `#${s.shopOrderNumber as number}`).join(', ')}. Remove them and try again`,
           details: bad.map((s) => ({
             orderId: s.orderId as number,
             status: s.orderStatus as string,

@@ -16,7 +16,7 @@ import { trimDecimal } from '../database/decimal.util';
 import type { OrderRow, OrderitemRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
-import { withShopOrderNumber } from './order-number';
+import { shopOrderNumberLabel, withShopOrderNumber } from './order-number';
 import {
   isMarketplaceChannel,
   isMarketplaceChannelValue,
@@ -144,7 +144,7 @@ export class OrdersService {
       const orParts = ['o.customerName LIKE ?', 'o.customerPhone LIKE ?'];
       const orParams: QueryParam[] = [`%${searchTerm}%`, `%${searchTerm}%`];
       if (searchAsId !== undefined) {
-        orParts.push('o.id = ?');
+        orParts.push('o.shopOrderNumber = ?');
         orParams.push(searchAsId);
       }
       conditions.push(`(${orParts.join(' OR ')})`);
@@ -919,8 +919,9 @@ export class OrdersService {
       [orderId, ctx.shopId, outletId],
     );
     if ((result as { affectedRows: number }).affectedRows === 0) {
+      const label = await shopOrderNumberLabel(conn, ctx.shopId, orderId);
       throw new ConflictException(
-        `Order #${orderId} is no longer ready to leave`,
+        `${label} is no longer ready to leave`,
       );
     }
   }

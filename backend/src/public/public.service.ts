@@ -2355,12 +2355,12 @@ export class PublicService {
       // all — block rather than guess.
       if (outlet.deliveryRadiusKm == null) {
         throw new BadRequestException(
-          'Delivery is not available to this address — it did not match any configured delivery zone',
+          'Delivery is not available to this address. It did not match any configured delivery zone',
         );
       }
       if (!quiet) {
         logger.warn(
-        'address matched no configured delivery zone — falling back to the shop default delivery fee via radius eligibility; check for a zone-name mismatch',
+        'address matched no configured delivery zone, falling back to the shop default delivery fee via radius eligibility; check for a zone-name mismatch',
         {
           outletId: outlet.id,
           area: dto.area ?? null,

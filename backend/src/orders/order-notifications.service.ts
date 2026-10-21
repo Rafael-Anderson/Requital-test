@@ -114,7 +114,7 @@ export class OrderNotificationsService {
       this.sendEmail(
         shopId,
         order,
-        `Order confirmation — #${order.shopOrderNumber}`,
+        `Order confirmation #${order.shopOrderNumber}`,
         bodyText,
         html,
         `order:${order.id}:confirmed-email`,
@@ -325,7 +325,7 @@ export class OrderNotificationsService {
       'send_email',
       {
         to: order.customerEmail,
-        subject: `How was your order? — #${order.shopOrderNumber}`,
+        subject: `How was your order #${order.shopOrderNumber}?`,
         bodyText: `Hi ${order.customerName}, we'd love your feedback on order #${order.shopOrderNumber}: ${link}`,
         html: surveyHtml,
         fromName: shopDisplayName,
@@ -459,7 +459,7 @@ export class OrderNotificationsService {
       );
       if (!to) {
         logger.warn(
-          `order #${order.id}: customer phone could not be normalized to E.164 — skipping`,
+          `order #${order.id}: customer phone could not be normalized to E.164, skipping`,
           { orderId: order.id, shopId },
         );
         return;
@@ -544,7 +544,7 @@ export class OrderNotificationsService {
     );
     if (!to) {
       logger.warn(
-        `outlet phone could not be normalized to E.164 — skipping merchant alert`,
+        `outlet phone could not be normalized to E.164, skipping merchant alert`,
         { orderId: logOrderId, outletId, shopId },
       );
       return null;

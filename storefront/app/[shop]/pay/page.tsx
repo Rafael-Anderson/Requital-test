@@ -32,6 +32,7 @@ function PayContent() {
   // than set from the effect (which would be a cascading-render setState, and
   // there is nothing to load in that case anyway).
   const [loading, setLoading] = useState(Boolean(token));
+  const [retryKey, setRetryKey] = useState(0);
   const [starting, setStarting] = useState(false);
   const shownError = token
     ? error
@@ -60,7 +61,7 @@ function PayContent() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, retryKey]);
 
   async function handlePay() {
     setStarting(true);
@@ -81,6 +82,12 @@ function PayContent() {
     }
   }
 
+  function retry() {
+    setError(null);
+    setLoading(true);
+    setRetryKey((k) => k + 1);
+  }
+
   return (
     <StorefrontPageShell variant="narrow">
       <div className={AUTH_CARD_CLASS}>
@@ -89,7 +96,14 @@ function PayContent() {
         {loading && <p className="text-sm text-zinc-500">Loading…</p>}
 
         {!loading && shownError && (
-          <p className="text-sm text-red-600">{shownError}</p>
+          <div role="alert" className="space-y-3">
+            <p className="text-sm text-red-600">{shownError}</p>
+            {token && !summary && (
+              <button type="button" onClick={retry} className="text-sm font-medium text-accent-text hover:underline cursor-pointer">
+                Try again
+              </button>
+            )}
+          </div>
         )}
 
         {!loading && summary && (

@@ -319,6 +319,18 @@ describe('Store credit (e2e)', () => {
         ['grant', 30, null],
         ['spend', -30, order.id],
       ]);
+      // The staff ledger shows the per-shop number, not the global id.
+      const shown = body<{
+        entries: { orderId: number | null; orderNumber: number | null }[];
+      }>(
+        await admin(
+          shop,
+          'get',
+          `/customers/${customer.customerId}/store-credit`,
+        ).expect(200),
+      );
+      const spend = shown.entries.find((e) => e.orderId === order.id);
+      expect(spend?.orderNumber).toBe(row.shopOrderNumber);
     });
 
     it('a balance larger than the order is capped at the payable amount and the order is paid', async () => {

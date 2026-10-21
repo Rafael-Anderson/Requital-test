@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useShop } from "@/lib/shop-context";
 import { useCart } from "@/lib/cart";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import { listProducts } from "@/lib/api";
 import { storeButtonClassName } from "@/lib/button-style";
+import { formatPriceAmount } from "@/lib/currency";
+import { useDialogBehavior } from "@/lib/use-dialog-behavior";
 import type { Product } from "@/lib/types";
 
 // Shown once per checkout attempt, before the real checkout layout renders,
@@ -28,6 +30,9 @@ export default function AddonPrompt({
   const { addItem } = useCart();
   const [addons, setAddons] = useState<Product[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Escape skips, Tab stays inside, focus moves in and back out.
+  useDialogBehavior({ open: addons !== null, onClose: onDone, containerRef: panelRef });
 
   useEffect(() => {
     let cancelled = false;
@@ -85,10 +90,14 @@ export default function AddonPrompt({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onDone}>
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="addon-prompt-title"
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-md max-h-[85vh] overflow-y-auto rounded-lg bg-header text-header-fg p-6"
       >
-        <h2 className="text-lg font-semibold">Would you like to add any extras?</h2>
+        <h2 id="addon-prompt-title" className="text-lg font-semibold">Would you like to add any extras?</h2>
         <div className="mt-4 divide-y divide-black/5">
           {addons!.map((product) => (
             <label key={product.id} className="flex items-center gap-3 py-3 cursor-pointer">
@@ -99,11 +108,11 @@ export default function AddonPrompt({
                 className="size-4 shrink-0"
               />
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={product.thumbnail} alt={product.name} className="size-12 rounded-lg object-cover bg-black/5 shrink-0" />
+              <img src={product.thumbnail} alt="" className="size-12 rounded-lg object-cover bg-black/5 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{product.name}</p>
                 <p className="text-sm text-zinc-500">
-                  {product.price} <CurrencySymbol code={shop?.currency} />
+                  {formatPriceAmount(product.price, shop?.currency)} <CurrencySymbol code={shop?.currency} />
                 </p>
               </div>
             </label>

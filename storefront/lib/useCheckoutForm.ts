@@ -8,7 +8,7 @@ import { buildQuoteRequest, quoteBlocksSubmit, useDeliveryQuote } from "@/lib/us
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 import { captureAbandonedCart, createOrder, listMyAddresses } from "@/lib/api";
-import { generateTimeSlots, isDateBlocked } from "@/lib/slots";
+import { generateTimeSlots, isDateBlocked, localDateKey } from "@/lib/slots";
 import { resolvePaymentMethods } from "@/lib/payment-methods";
 import { effectiveOrderType, resolveFulfilmentOptions } from "@/lib/fulfilment";
 import { getStoredReferralCode } from "@/lib/referral";
@@ -101,6 +101,22 @@ export function useCheckoutForm() {
   const [deliveryTimeSlot, setDeliveryTimeSlot] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
   const [submitting, setSubmitting] = useState(false);
+  // A ref as well as state: two submit events in the same tick both see the old
+  // state, and only the ref closes that gap.
+  const submitInFlight = useRef(false);
+  // The latch is held while the browser leaves for the gateway. If the shopper comes
+  // back with Back, the browser may restore this page from its back/forward cache
+  // with that state frozen in; `persisted` is the signal, so unlock then (and only
+  // then, never during the redirect itself).
+  useEffect(() => {
+    function onPageShow(e: PageTransitionEvent) {
+      if (!e.persisted) return;
+      submitInFlight.current = false;
+      setSubmitting(false);
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   // begin_checkout, once per visit to this page, as soon as the cart (restored
   // from localStorage after mount) actually has something in it. A ref, not state:
@@ -163,7 +179,7 @@ export function useCheckoutForm() {
   }, [orderType, JSON.stringify(availablePaymentMethods)]);
 
   const today = new Date();
-  const minDate = today.toISOString().slice(0, 10);
+  const minDate = localDateKey(today);
   const dateForSlots = deliveryDate ? new Date(deliveryDate) : today;
   const relevantHours = orderType === "pickup" ? shop?.pickupHours ?? null : shop?.deliveryHours ?? null;
   const gapMinutes = orderType === "pickup" ? shop?.pickupTimeSlotGapMinutes ?? 30 : shop?.deliveryTimeSlotGapMinutes ?? 60;
@@ -198,7 +214,7 @@ export function useCheckoutForm() {
 
   function useMyLocation() {
     if (!navigator.geolocation) {
-      setError("Geolocation isn't available in this browser — search your address instead.");
+      setError("Geolocation isn't available in this browser. Search your address instead.");
       return;
     }
     setLocating(true);
@@ -208,7 +224,7 @@ export function useCheckoutForm() {
         setLocating(false);
       },
       () => {
-        setError("Couldn't get your location — search your address instead, or enter it manually.");
+        setError("Couldn't get your location. Search your address instead, or enter it manually.");
         setLocating(false);
       },
     );
@@ -243,9 +259,11 @@ export function useCheckoutForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!orderType || !outletId || !paymentMethod || quoteBlocked) return;
+    if (!orderType || !outletId || !paymentMethod || quoteBlocked || submitInFlight.current) return;
+    submitInFlight.current = true;
     setSubmitting(true);
     setError(null);
+    let redirecting = false;
     try {
       track("add_payment_info", { items: cartAnalyticsItems(items), value: subtotal, paymentType: paymentMethod });
       const res = await createOrder(shopSlug, {
@@ -288,6 +306,9 @@ export function useCheckoutForm() {
         // Leaves for the gateway: the browser purchase event is sent when the
         // customer returns (orders/<token>, once the server says paid), see lib/purchase-tracking.ts.
         stashPurchase(res.order.id, purchase);
+        // Stay "submitting" while the browser leaves: re-enabling the button here
+        // would let a second click place a second order.
+        redirecting = true;
         window.location.href = res.checkoutUrl;
         return;
       }
@@ -303,7 +324,10 @@ export function useCheckoutForm() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not place order");
     } finally {
-      setSubmitting(false);
+      if (!redirecting) {
+        submitInFlight.current = false;
+        setSubmitting(false);
+      }
     }
   }
 
@@ -320,6 +344,19 @@ export function useCheckoutForm() {
     !dateBlocked &&
     (!deliveryDate || !!deliveryTimeSlot) &&
     (selectedOutlet ? selectedOutlet.isOpen : false);
+
+  // Why Place order is off, in words, for the cases the page does not already
+  // explain next to the field (a closed outlet and an unavailable delivery have
+  // their own messages). null while the button is enabled or the reason is shown
+  // elsewhere.
+  const blockedReason =
+    canSubmit || submitting
+      ? null
+      : availablePaymentMethods.length === 0
+        ? "No payment method is available for this order."
+        : deliveryDate && !deliveryTimeSlot
+          ? "Choose a time slot to place your order."
+          : null;
 
   return {
     shopSlug,
@@ -381,6 +418,7 @@ export function useCheckoutForm() {
     dateBlocked,
     todayFullyBooked,
     canSubmit,
+    blockedReason,
   };
 }
 

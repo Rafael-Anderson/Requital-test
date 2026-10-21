@@ -38,6 +38,8 @@ interface AffiliateCodeRow {
 interface AffiliateOrderRow {
   id: number;
   orderId: number;
+  shopOrderNumber: number;
+  currency: string;
   code: string;
   affiliateName: string;
   orderTotal: number;
@@ -234,8 +236,10 @@ describe('Affiliate (e2e)', () => {
       });
 
       const orderRes = await placeOrder(shop.slug, shop, code.code).expect(201);
-      const orderId = body<{ order: { id: number; total: string } }>(orderRes)
-        .order.id;
+      const placed = body<{
+        order: { id: number; shopOrderNumber: number; total: string };
+      }>(orderRes).order;
+      const orderId = placed.id;
 
       const orders = await request(app.getHttpServer())
         .get('/affiliates/orders')
@@ -249,6 +253,9 @@ describe('Affiliate (e2e)', () => {
       expect(row!.orderTotal).toBe(50);
       expect(row!.commissionAmount).toBe(5); // 10% of 50
       expect(row!.status).toBe('pending');
+      // The merchant is shown the per-shop number and the order's own currency.
+      expect(row!.shopOrderNumber).toBe(placed.shopOrderNumber);
+      expect(row!.currency).toBe('AED');
     });
 
     it('a valid fixed-amount code computes a flat commission regardless of order total', async () => {

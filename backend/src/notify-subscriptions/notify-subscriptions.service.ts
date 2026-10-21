@@ -65,7 +65,7 @@ export class NotifySubscriptionsService {
     const recentCount = Number(countRows[0].c);
     if (recentCount >= RATE_LIMIT_PER_HOUR) {
       throw new BadRequestException(
-        'Too many notify-me subscriptions from this email — try again later',
+        'Too many notify-me subscriptions from this email. Try again later',
       );
     }
 
@@ -147,7 +147,7 @@ export class NotifySubscriptionsService {
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
 <tr><td style="padding:40px;">
-<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">Good news — ${escapeHtml(productName)} is back in stock at ${escapeHtml(shopName)}.</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">Good news! ${escapeHtml(productName)} is back in stock at ${escapeHtml(shopName)}.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td style="border-radius:6px;background-color:#0d9488;"><a href="${productUrl}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">View product</a></td></tr></table>
 <p style="margin:0 0 4px;font-size:13px;color:#666666;">Or copy this link into your browser:</p>
 <p style="margin:0;font-size:12px;color:#999999;font-family:monospace;word-break:break-all;">${productUrl}</p>
@@ -166,7 +166,7 @@ export class NotifySubscriptionsService {
               to: sub.email,
               subject: `${productName} is back in stock!`,
               bodyText: [
-                `Good news — ${productName} is back in stock at ${shopName}.`,
+                `Good news! ${productName} is back in stock at ${shopName}.`,
                 '',
                 `View it here: ${productUrl}`,
                 '',

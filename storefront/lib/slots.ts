@@ -54,6 +54,13 @@ export function generateTimeSlots(
 // acceptance-window check — pulled out as a pure function (rather than
 // left inline in the checkout page) so this real gating logic is testable
 // directly instead of only through a full component render.
+// YYYY-MM-DD in the viewer's own calendar. toISOString() is UTC, which in the
+// Gulf (UTC+4) names yesterday for the first four hours of every day, and turns
+// a local-midnight Date into the previous day's key.
+export function localDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export function isDateBlocked(
   deliveryDate: string,
   referenceDate: Date,
@@ -61,8 +68,9 @@ export function isDateBlocked(
   allowNextDayOrders: boolean | undefined,
 ): boolean {
   if (!deliveryDate) return false;
-  const minDate = referenceDate.toISOString().slice(0, 10);
-  const tomorrow = new Date(referenceDate.getTime() + 86400000).toISOString().slice(0, 10);
+  const minDate = localDateKey(referenceDate);
+  const next = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate() + 1);
+  const tomorrow = localDateKey(next);
   const dateIsToday = deliveryDate === minDate;
   const dateIsTomorrow = deliveryDate === tomorrow;
   return (dateIsToday && allowSameDayOrders === false) || (dateIsTomorrow && allowNextDayOrders === false);
