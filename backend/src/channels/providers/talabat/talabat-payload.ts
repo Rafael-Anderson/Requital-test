@@ -111,6 +111,7 @@ function buildOrder(b: Obj): CanonicalChannelOrder {
   const placed = text(sys.created_at);
   const promised = text(b.promised_for);
 
+  const handover = handoverOf(b.delivery_type);
   return {
     externalOrderId: orderId,
     displayId: text(b.order_code),
@@ -127,7 +128,7 @@ function buildOrder(b: Obj): CanonicalChannelOrder {
         ? promised
         : null,
     currency,
-    handover: handoverOf(b.delivery_type),
+    handover,
     lines,
     totals: {
       subtotalMinor: money(pay.sub_total, currency, 'payment.sub_total'),
@@ -143,10 +144,13 @@ function buildOrder(b: Obj): CanonicalChannelOrder {
       // INFERRED: a cash payment type means the customer owes the whole total.
       cashDueMinor: /cash/i.test(type) ? total : null,
     },
+    // Minimal customer data: the phone and address are kept only when the
+    // merchant delivers the order itself. For a marketplace courier or a pickup
+    // they stay NULL and are never stored.
     customer: {
       name: text(customer.name),
-      phone: text(customer.phone),
-      address: text(customer.address),
+      phone: handover === 'merchant_delivery' ? text(customer.phone) : null,
+      address: handover === 'merchant_delivery' ? text(customer.address) : null,
       notes: text(customer.comment),
     },
   };

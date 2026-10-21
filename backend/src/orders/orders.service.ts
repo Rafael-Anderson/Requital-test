@@ -2082,6 +2082,7 @@ export class OrdersService {
         ...i,
         priceAtPurchase: trimDecimal(i.priceAtPurchase),
         autoDiscountAmount: trimDecimal(i.autoDiscountAmount),
+        marketplaceDiscountAmount: trimDecimal(i.marketplaceDiscountAmount),
       })),
       paymenttransaction: order.paymenttransaction.map((p) => ({
         ...p,

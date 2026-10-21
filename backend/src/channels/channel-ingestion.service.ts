@@ -703,10 +703,10 @@ export class ChannelIngestionService {
     const newOrderId = (res as { insertId: number }).insertId;
 
     const placeholders = resolved
-      .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)')
+      .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)')
       .join(', ');
     await c.query(
-      `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost, taxClassId, taxRate, taxAmount, note)
+      `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost, taxClassId, taxRate, taxAmount, note, marketplaceDiscountAmount)
        VALUES ${placeholders}`,
       resolved.flatMap((r, k) => {
         const line = order.lines[lineIdx[k]];
@@ -723,6 +723,9 @@ export class ChannelIngestionService {
           r.unitCost,
           decimalOrNull(line.taxMinor, currency),
           line.note ? clip(line.note, 255) : null,
+          // What the marketplace says it discounted on this line (all units);
+          // NULL when the payload did not say.
+          decimalOrNull(line.discountMinor, currency),
         ];
       }),
     );

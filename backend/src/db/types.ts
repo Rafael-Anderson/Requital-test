@@ -203,6 +203,10 @@ export interface OrderitemRow {
   taxRate: string | null;
   taxAmount: string | null;
   note: string | null;
+  // Marketplace orders only (migration 20261112100000): the discount the
+  // marketplace states it applied to this whole line. NULL = not stated, which
+  // is not the same as zero. priceAtPurchase stays the price BEFORE it.
+  marketplaceDiscountAmount: string | null;
 }
 
 export interface OrderreturnRow {
