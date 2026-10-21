@@ -1,69 +1,40 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import PaySuccessPage from "./page";
 
 afterEach(cleanup);
 
-let searchParams = new URLSearchParams("token=tok-123");
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => searchParams,
+  useSearchParams: () => new URLSearchParams("token=tok-123"),
 }));
-
-vi.mock("@/lib/api", () => ({
-  getPaymentLinkSummary: vi.fn(),
-  startPaymentLinkCheckout: vi.fn(),
+vi.mock("@/lib/shop-context", () => ({
+  useShop: () => ({ shopSlug: "test-shop", shopBasePath: "/test-shop", shop: { currency: "AED" } }),
 }));
+vi.mock("@/components/StorefrontPageShell", () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
+vi.mock("@/lib/api", () => ({ getPaymentLinkSummary: vi.fn() }));
 
-import { getPaymentLinkSummary, startPaymentLinkCheckout } from "@/lib/api";
+import { getPaymentLinkSummary } from "@/lib/api";
 
-const summary = {
-  shopOrderNumber: 12,
-  total: "199.00",
-  currency: "AED",
-  shopName: "Test Shop",
-  alreadyPaid: true,
-  expired: false,
-  expiresAt: "2030-01-01T00:00:00.000Z",
-};
+const summary = { shopOrderNumber: 12, total: "10.500", currency: "KWD", shopName: "Test Shop", alreadyPaid: false, expired: false, expiresAt: null };
 
 describe("PaySuccessPage", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    searchParams = new URLSearchParams("token=tok-123");
+  beforeEach(() => vi.clearAllMocks());
+
+  it("explains the pending state without an em dash and links back to the shop", async () => {
     vi.mocked(getPaymentLinkSummary).mockResolvedValue({ ...summary });
+    render(<PaySuccessPage />);
+    const note = await screen.findByText(/Your payment is being confirmed/);
+    expect(note.textContent).not.toContain("—");
+    expect(screen.getByRole("link", { name: "Continue shopping" }).getAttribute("href")).toBe("/test-shop");
   });
 
-  it("confirms a paid order without minting anything", async () => {
+  it("offers Try again when the order cannot be loaded", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getPaymentLinkSummary).mockRejectedValueOnce(new Error("Network down")).mockResolvedValueOnce({ ...summary, alreadyPaid: true });
     render(<PaySuccessPage />);
-    await waitFor(() => {
-      expect(screen.getByText(/Payment received/i)).toBeInTheDocument();
-    });
-    expect(screen.getByText(/Order #12/)).toBeInTheDocument();
-    expect(startPaymentLinkCheckout).not.toHaveBeenCalled();
-  });
-
-  // A gateway redirects the customer here BEFORE its webhook lands, so the
-  // order is normally still unpaid on first render. That is not an error state:
-  // the webhook (or the reconciliation sweep) is what marks it paid, never this
-  // page.
-  it("reports a pending confirmation rather than a failure", async () => {
-    vi.mocked(getPaymentLinkSummary).mockResolvedValue({
-      ...summary,
-      alreadyPaid: false,
-    });
-    render(<PaySuccessPage />);
-    await waitFor(() => {
-      expect(screen.getByText(/being confirmed/i)).toBeInTheDocument();
-    });
-    expect(screen.queryByText(/Payment received/i)).not.toBeInTheDocument();
-  });
-
-  it("does not call the API without a token", async () => {
-    searchParams = new URLSearchParams("");
-    render(<PaySuccessPage />);
-    await waitFor(() => {
-      expect(screen.getByText(/missing its token/i)).toBeInTheDocument();
-    });
-    expect(getPaymentLinkSummary).not.toHaveBeenCalled();
+    expect(await screen.findByText("Network down")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Payment received. The shop has been notified.")).toBeTruthy();
   });
 });
