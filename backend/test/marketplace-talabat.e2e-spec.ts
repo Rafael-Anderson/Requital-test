@@ -231,9 +231,20 @@ describe('Marketplace channels: Talabat simulator (E3)', () => {
   describe('a real Talabat connection is impossible', () => {
     it('lists the provider without a merchant-bound location proof', async () => {
       const res = await r().get('/channels/providers').set(h(a)).expect(200);
-      const t = body<{ name: string; capabilities: Record<string, boolean> }[]>(
-        res,
-      ).find((p) => p.name === TALABAT)!;
+      const t = body<
+        {
+          name: string;
+          displayName: string;
+          credentialFields: { key: string; label: string }[];
+          capabilities: Record<string, boolean>;
+        }[]
+      >(res).find((p) => p.name === TALABAT)!;
+      expect(t.displayName).toBe('Talabat');
+      expect(t.credentialFields.map((x) => x.key)).toEqual([
+        'clientId',
+        'clientSecret',
+        'chainId',
+      ]);
       expect(t.capabilities).toMatchObject({
         provesLocationOwnership: false,
         platformWebhookSecret: false,

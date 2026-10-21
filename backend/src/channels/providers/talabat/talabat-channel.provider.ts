@@ -70,6 +70,14 @@ interface Creds {
 @Injectable()
 export class TalabatChannelProvider implements ChannelProvider {
   readonly name = TALABAT_PROVIDER;
+  readonly displayName = 'Talabat';
+  // Exactly the keys creds() reads and requires. `apiBase` is deliberately not a
+  // merchant field: it exists only so a test can prove a real endpoint is refused.
+  readonly credentialFields = [
+    { key: 'clientId', label: 'Client ID' },
+    { key: 'clientSecret', label: 'Client secret' },
+    { key: 'chainId', label: 'Chain ID' },
+  ];
   // Never provesLocationOwnership: one token covers EVERY store of a chain
   // (VERIFIED), so "these credentials see this store" says nothing about who the
   // store belongs to. Requital staff verify the store id with Talabat instead.

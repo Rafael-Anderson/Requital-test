@@ -343,6 +343,20 @@ describe('Talabat webhook credential (a shared secret, not an HMAC)', () => {
 });
 
 describe('Talabat provider against the simulator', () => {
+  it('declares exactly the credential keys it requires', async () => {
+    const { provider, conn } = setup();
+    const keys = provider.credentialFields.map((f) => f.key);
+    expect(keys).toEqual(['clientId', 'clientSecret', 'chainId']);
+    expect((await provider.testConnection(conn())).ok).toBe(true);
+    for (const k of keys) {
+      const creds: Record<string, string> = { ...CREDS };
+      delete creds[k];
+      expect(
+        (await provider.testConnection(conn({ credentials: creds }))).ok,
+      ).toBe(false);
+    }
+  });
+
   it('refuses any real endpoint before making a single call', async () => {
     const { sim, provider, conn } = setup();
     for (const apiBase of [
