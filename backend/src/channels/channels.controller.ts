@@ -28,6 +28,10 @@ import {
   UpdateChannelConnectionDto,
 } from './dto/channels.dto';
 
+function windowMinutes(raw?: string): number {
+  return Math.min(Math.max(parseInt(raw ?? '1440', 10) || 1440, 1), 43200);
+}
+
 // Configuration (connections, mappings, ops) is admin-only. The orders desk is
 // also open to branch and order_manager: acceptance has a minutes-long deadline
 // and is done by whoever is on shift; every action still checks orders.manage at
@@ -181,17 +185,34 @@ export class ChannelsController {
     return this.orders.reject(ctx, id, dto);
   }
 
-  // The SLO numbers for this shop (ingestion success %, failure %).
+  // The SLO numbers for this shop (ingestion success %, failure %), optionally
+  // for one connection of the shop (a foreign id simply matches no rows).
   @Get('stats')
   stats(
     @CurrentUser() ctx: TenantContext,
     @Query('sinceMinutes') sinceMinutes?: string,
+    @Query('connectionId') connectionId?: string,
   ) {
-    const n = Math.min(
-      Math.max(parseInt(sinceMinutes ?? '1440', 10) || 1440, 1),
-      43200,
-    );
-    return this.ingestion.stats({ shopId: ctx.shopId, sinceMinutes: n });
+    const id = connectionId === undefined ? undefined : Number(connectionId);
+    if (id !== undefined && (!Number.isInteger(id) || id < 1))
+      throw new BadRequestException('connectionId must be a positive integer');
+    return this.ingestion.stats({
+      shopId: ctx.shopId,
+      connectionId: id,
+      sinceMinutes: windowMinutes(sinceMinutes),
+    });
+  }
+
+  // Per connection, with the verdict against the Talabat targets.
+  @Get('stats/connections')
+  statsByConnection(
+    @CurrentUser() ctx: TenantContext,
+    @Query('sinceMinutes') sinceMinutes?: string,
+  ) {
+    return this.ingestion.statsByConnection({
+      shopId: ctx.shopId,
+      sinceMinutes: windowMinutes(sinceMinutes),
+    });
   }
 
   // Replays only the rows named. An empty or all-invalid list is a 400, never

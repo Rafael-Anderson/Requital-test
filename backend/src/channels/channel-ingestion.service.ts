@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
-import { DatabaseService } from '../database/database.service';
+import { DatabaseService, type QueryParam } from '../database/database.service';
 import { isDuplicateKeyError, isLockConflict } from '../database/mysql-errors';
 import { decrypt } from '../common/crypto';
 import { createLogger } from '../common/logging/logger';
@@ -99,6 +99,9 @@ export function clip(value: string | null | undefined, max: number): string {
   const chars = Array.from(wf);
   return chars.length <= max ? wf : chars.slice(0, max).join('');
 }
+
+// Talabat's baseline (owner supplied, not on a public page: INFERRED).
+export const SLO_TARGETS = { ingestionSuccessPct: 98.9, failurePct: 2.5 };
 
 function sha256(buf: Buffer | string): string {
   return createHash('sha256').update(buf).digest('hex');
@@ -982,32 +985,96 @@ export class ChannelIngestionService {
   }
 
   // SLO hooks: Talabat asks for >= 98.9% order ingestion success and <= 2.5%
-  // vendor failure. `delivered` counts what reached a final state; `pending` is
-  // still in flight and counts toward neither side.
-  async stats(opts: { shopId?: number; sinceMinutes: number }) {
-    const since = new Date(Date.now() - opts.sinceMinutes * 60_000);
-    const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT status, COUNT(*) AS n FROM channelinboundevent
-        WHERE receivedAt >= ? ${opts.shopId !== undefined ? 'AND shopId = ?' : ''}
-        GROUP BY status`,
-      opts.shopId !== undefined ? [since, opts.shopId] : [since],
-    );
-    const by = Object.fromEntries(
-      rows.map((r) => [r.status as string, Number(r.n)]),
-    );
+  // failure. Computed from the inbox only. A row counts as finished when it is
+  // `processed` (success) or `failed`/`dead` (failure: a `failed` row is still
+  // retrying, so the figure is the conservative one); `inFlight` counts toward
+  // neither side. Which events Talabat itself counts is its to define (Q9).
+  private summarise(by: Record<string, number>, sinceMinutes: number) {
     const processed = by.processed ?? 0;
     const failed = (by.failed ?? 0) + (by.dead ?? 0);
     const final = processed + failed;
+    // null (never 100) when nothing has finished: no data is not perfect data.
+    const pct = (n: number) =>
+      final === 0 ? null : Math.round((n / final) * 1000) / 10;
     return {
-      sinceMinutes: opts.sinceMinutes,
+      sinceMinutes,
       received: Object.values(by).reduce((a, b) => a + b, 0),
       processed,
       failed,
+      dead: by.dead ?? 0,
       inFlight: (by.received ?? 0) + (by.processing ?? 0),
-      // null (never 100) when nothing has finished: no data is not perfect data.
-      ingestionSuccessPct:
-        final === 0 ? null : Math.round((processed / final) * 1000) / 10,
-      failurePct: final === 0 ? null : Math.round((failed / final) * 1000) / 10,
+      ingestionSuccessPct: pct(processed),
+      failurePct: pct(failed),
     };
+  }
+
+  async stats(opts: {
+    shopId?: number;
+    connectionId?: number;
+    sinceMinutes: number;
+  }) {
+    const since = new Date(Date.now() - opts.sinceMinutes * 60_000);
+    const where = ['receivedAt >= ?'];
+    const params: QueryParam[] = [since];
+    if (opts.shopId !== undefined) {
+      where.push('shopId = ?');
+      params.push(opts.shopId);
+    }
+    if (opts.connectionId !== undefined) {
+      where.push('connectionId = ?');
+      params.push(opts.connectionId);
+    }
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT status, COUNT(*) AS n FROM channelinboundevent
+        WHERE ${where.join(' AND ')} GROUP BY status`,
+      params,
+    );
+    return this.summarise(
+      Object.fromEntries(rows.map((r) => [r.status as string, Number(r.n)])),
+      opts.sinceMinutes,
+    );
+  }
+
+  // One row per connection of the shop (including ones with no traffic), each
+  // checked against the Talabat targets. Shop-scoped on BOTH tables.
+  async statsByConnection(opts: { shopId: number; sinceMinutes: number }) {
+    const since = new Date(Date.now() - opts.sinceMinutes * 60_000);
+    const [conns, rows] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT id, provider, outletId, enabled FROM channelconnection WHERE shopId = ? ORDER BY id`,
+        [opts.shopId],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT connectionId, status, COUNT(*) AS n FROM channelinboundevent
+          WHERE receivedAt >= ? AND shopId = ? GROUP BY connectionId, status`,
+        [since, opts.shopId],
+      ),
+    ]);
+    const byConn = new Map<number, Record<string, number>>();
+    for (const r of rows) {
+      const m = byConn.get(r.connectionId as number) ?? {};
+      m[r.status as string] = Number(r.n);
+      byConn.set(r.connectionId as number, m);
+    }
+    return conns.map((c) => {
+      const s = this.summarise(
+        byConn.get(c.id as number) ?? {},
+        opts.sinceMinutes,
+      );
+      return {
+        connectionId: c.id as number,
+        provider: c.provider as string,
+        outletId: c.outletId as number,
+        enabled: !!c.enabled,
+        ...s,
+        // null = nothing finished yet, so no verdict.
+        meetsIngestionTarget:
+          s.ingestionSuccessPct === null
+            ? null
+            : s.ingestionSuccessPct >= SLO_TARGETS.ingestionSuccessPct,
+        meetsFailureTarget:
+          s.failurePct === null ? null : s.failurePct <= SLO_TARGETS.failurePct,
+      };
+    });
   }
 }
