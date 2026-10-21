@@ -129,6 +129,18 @@ describe("useCheckoutForm - submit safety and reasons", () => {
         await result.current.handleSubmit(submitEvent);
       });
       expect(createOrder).toHaveBeenCalledTimes(1);
+
+      // A pageshow that is NOT a back/forward-cache restore changes nothing.
+      act(() => {
+        window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: false }));
+      });
+      expect(result.current.submitting).toBe(true);
+      // Coming back from the gateway via Back (bfcache) unlocks the button.
+      act(() => {
+        window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+      });
+      expect(result.current.submitting).toBe(false);
+      expect(result.current.canSubmit).toBe(true);
     } finally {
       Object.defineProperty(window, "location", { configurable: true, value: original });
     }

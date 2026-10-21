@@ -19,7 +19,7 @@ interface OutletRow {
 }
 interface SearchResult {
   products: { id: number; name: string; sku: string }[];
-  orders: { id: number; customerName: string }[];
+  orders: { id: number; shopOrderNumber: number; customerName: string }[];
   customers: { id: number; name: string }[];
 }
 
@@ -174,6 +174,11 @@ describe('Global search (e2e)', () => {
     expect(body<SearchResult>(res).orders.some((o) => o.id === order.id)).toBe(
       true,
     );
+    // The palette prints "Order #<shopOrderNumber>"; it must be in the payload.
+    expect(
+      body<SearchResult>(res).orders.find((o) => o.id === order.id)
+        ?.shopOrderNumber,
+    ).toBe(order.shopOrderNumber);
   });
 
   it('caps each collection at 5 results', async () => {

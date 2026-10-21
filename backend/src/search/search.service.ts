@@ -97,6 +97,8 @@ export class SearchService {
     );
     return rows.map((o) => ({
       id: o.id as number,
+      // What the palette shows ("Order #12"); id stays the link identity.
+      shopOrderNumber: o.shopOrderNumber as number,
       customerName: o.customerName as string,
       status: o.status as string,
       total: o.total as string,

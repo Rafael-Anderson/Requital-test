@@ -104,6 +104,19 @@ export function useCheckoutForm() {
   // A ref as well as state: two submit events in the same tick both see the old
   // state, and only the ref closes that gap.
   const submitInFlight = useRef(false);
+  // The latch is held while the browser leaves for the gateway. If the shopper comes
+  // back with Back, the browser may restore this page from its back/forward cache
+  // with that state frozen in; `persisted` is the signal, so unlock then (and only
+  // then, never during the redirect itself).
+  useEffect(() => {
+    function onPageShow(e: PageTransitionEvent) {
+      if (!e.persisted) return;
+      submitInFlight.current = false;
+      setSubmitting(false);
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   // begin_checkout, once per visit to this page, as soon as the cart (restored
   // from localStorage after mount) actually has something in it. A ref, not state:
