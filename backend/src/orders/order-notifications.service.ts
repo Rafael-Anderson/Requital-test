@@ -544,7 +544,7 @@ export class OrderNotificationsService {
     );
     if (!to) {
       logger.warn(
-        `outlet phone could not be normalized to E.164 — skipping merchant alert`,
+        `outlet phone could not be normalized to E.164, skipping merchant alert`,
         { orderId: logOrderId, outletId, shopId },
       );
       return null;
