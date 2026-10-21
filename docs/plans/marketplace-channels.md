@@ -447,3 +447,8 @@ VERIFIED fields as in section 2. Choices: `totalMinor` = `total_price` (Q5, INFE
 - A body between 100 KB and 1 MB is refused by the parser (413) and only recovered by polling.
 - The staleness window (2 h) and the 240/min throttle are INFERRED numbers.
 - Credentials are likely integrator-level: tenant isolation rests entirely on the staff-verified `location_id`; do not set `provesLocationOwnership` without a per-merchant proof.
+
+### 12.8 Live sandbox smoke (2026-10-21, one call, no secret printed)
+
+One form-encoded client-credentials POST to `https://auth-sandbox.developers.deliveroo.com/oauth2/token` with the owner's sandbox client id and secret (a script that printed only presence booleans and the HTTP status): **HTTP 400, error code `invalid_client`**, no token. Both values were checked for stray whitespace, quotes and newlines (none). So the request shape and host answer, but **these credentials are not accepted by that host**. Most likely candidates, none verified: they belong to the other token URL the docs list (`deliveroo-api.auth.eu-west-1.amazoncognito.com`, Q4; not called because it is not a documented sandbox host), or the sandbox client is not yet enabled for the integration. Request 4 in section 9 is therefore blocking for any outbound sandbox call; inbound (webhook) handling does not depend on it. No order, accept or menu call was made against the real sandbox.
+
