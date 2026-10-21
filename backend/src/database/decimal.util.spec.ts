@@ -11,10 +11,14 @@ describe('trimOrderRow', () => {
       orderitem: [
         {
           priceAtPurchase: '5.000000000000000000000000000000',
+          autoDiscountAmount: null,
+          unitCost: null,
           marketplaceDiscountAmount: '1.500000000000000000000000000000',
         },
         {
           priceAtPurchase: '5.000000000000000000000000000000',
+          autoDiscountAmount: null,
+          unitCost: null,
           marketplaceDiscountAmount: null,
         },
       ],
