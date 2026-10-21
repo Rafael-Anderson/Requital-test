@@ -19,6 +19,7 @@ import {
 } from './helpers/deliveroo-fixtures';
 import { DatabaseService } from '../src/database/database.service';
 import { ChannelIngestionService } from '../src/channels/channel-ingestion.service';
+import { ChannelConnectionsService } from '../src/channels/channel-connections.service';
 import { ChannelSweepService } from '../src/channels/channel-sweep.service';
 import { ChannelProviderRegistry } from '../src/channels/channel-provider.registry';
 import {
@@ -671,6 +672,165 @@ describe('Deliveroo marketplace channel (E2)', () => {
       ).toBe(401);
     });
 
+    it('M1 a connection with its own secret rejects the platform secret (401, nothing written)', async () => {
+      const o = ord(ca);
+      const raw = webhookBody('order.new', o);
+      const before = await countInbox(ca.id);
+      const res = await post(
+        raw,
+        deliverooHeaders(PLATFORM_SECRET, `g-m1-${++gseq}`, raw),
+      );
+      expect(res.status).toBe(401);
+      expect(await countInbox(ca.id)).toBe(before);
+      expect(await link(ca, o.id as string)).toBeUndefined();
+    });
+
+    it('M1 the platform secret is accepted for a connection without its own secret only outside production, and in production only with the explicit flag', async () => {
+      const c = await connect(a, {
+        outletId: await newOutlet(a),
+        ownSecret: false,
+      });
+      const send = async () => {
+        const o = ord(c);
+        const raw = webhookBody('order.new', o);
+        const res = await post(
+          raw,
+          deliverooHeaders(PLATFORM_SECRET, `g-m1p-${++gseq}`, raw),
+        );
+        return { res, o };
+      };
+      expect((await send()).res.status).toBe(200);
+      // Prepared before NODE_ENV changes (the staff test bearer is test-only).
+      const created = await r()
+        .post('/channels/connections')
+        .set(h(a))
+        .send({
+          outletId: await newOutlet(a),
+          provider: DELIVEROO_PROVIDER,
+          externalLocationId: `FAKE-LOC-${f.uniq()}`,
+          credentials: {
+            clientId: FAKE_CLIENT_ID,
+            clientSecret: FAKE_CLIENT_SECRET,
+          },
+        })
+        .expect(201);
+      const noSecret = {
+        id: created.body.id as number,
+      };
+      await staffVerify(a, noSecret.id, {
+        externalLocationId: (
+          await db.query<RowDataPacket[]>(
+            `SELECT externalLocationId FROM channelconnection WHERE id = ?`,
+            [noSecret.id],
+          )
+        )[0].externalLocationId as string,
+      }).expect(201);
+      const prevEnv = process.env.NODE_ENV;
+      const prevFlag = process.env.DELIVEROO_ALLOW_PLATFORM_WEBHOOK_SECRET;
+      try {
+        process.env.NODE_ENV = 'production';
+        delete process.env.DELIVEROO_ALLOW_PLATFORM_WEBHOOK_SECRET;
+        const before = await countInbox(c.id);
+        const refused = await send();
+        expect(refused.res.status).toBe(401);
+        expect(await countInbox(c.id)).toBe(before);
+        // Enabling is refused too: there would be no usable secret.
+        await expect(
+          app
+            .get(ChannelConnectionsService)
+            .setEnabled(
+              { userId: 1, shopId: a.shopId, role: 'admin', outletId: null },
+              noSecret.id,
+              true,
+            ),
+        ).rejects.toMatchObject({ status: 400 });
+        process.env.DELIVEROO_ALLOW_PLATFORM_WEBHOOK_SECRET = '1';
+        const allowed = await send();
+        expect(allowed.res.status).toBe(200);
+        await settle(c.id, 'g-m1p-');
+      } finally {
+        process.env.NODE_ENV = prevEnv;
+        if (prevFlag === undefined)
+          delete process.env.DELIVEROO_ALLOW_PLATFORM_WEBHOOK_SECRET;
+        else process.env.DELIVEROO_ALLOW_PLATFORM_WEBHOOK_SECRET = prevFlag;
+      }
+    });
+
+    it('L3 a correctly signed body without a parseable status_log is refused with the same 401', async () => {
+      for (const order of [
+        { ...ord(ca), status_log: undefined },
+        { ...ord(ca), status_log: [] },
+        { ...ord(ca), status_log: [{ status: 'placed', at: 'not a date' }] },
+      ]) {
+        const raw = webhookBody('order.new', order);
+        const before = await countInbox(ca.id);
+        const res = await post(
+          raw,
+          deliverooHeaders(ca.secret, `g-l3-${++gseq}`, raw),
+        );
+        expect(res.status).toBe(401);
+        expect(await countInbox(ca.id)).toBe(before);
+      }
+    });
+
+    it('L4 an unknown location still goes through one HMAC comparison (timing equaliser), with a dummy secret', async () => {
+      const spy = jest.spyOn(provider, 'verifyWebhook');
+      try {
+        const raw = webhookBody(
+          'order.new',
+          fakeOrder({ location_id: 'FAKE-NOPE' }),
+        );
+        const res = await post(
+          raw,
+          deliverooHeaders(ca.secret, `g-l4-${++gseq}`, raw),
+        );
+        expect(res.status).toBe(401);
+        expect(spy).toHaveBeenCalledTimes(1);
+        const secrets = spy.mock.calls[0][0].secrets;
+        expect(secrets).toHaveLength(1);
+        for (const real of [ca.secret, cb.secret, PLATFORM_SECRET])
+          expect(secrets).not.toContain(real);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('L1 a brand, site or location id of ".." (or any path-like id) is refused at the API', async () => {
+      for (const bad of ['..', '.', '../x', 'a/b', '.hidden']) {
+        for (const field of [
+          'externalBrandId',
+          'externalSiteId',
+          'externalLocationId',
+        ]) {
+          await r()
+            .post('/channels/connections')
+            .set(h(a))
+            .send({
+              outletId: a.outletId,
+              provider: DELIVEROO_PROVIDER,
+              externalLocationId: 'FAKE-OK',
+              [field]: bad,
+            })
+            .expect(400);
+        }
+      }
+      await r()
+        .patch(`/channels/connections/${ca.id}`)
+        .set(h(a))
+        .send({ externalBrandId: '..' })
+        .expect(400);
+    });
+
+    it('M2 the provider declares its name and exact credential fields to the admin', async () => {
+      const res = await r().get('/channels/providers').set(h(a)).expect(200);
+      const d = res.body.find((x: { name: string }) => x.name === 'deliveroo');
+      expect(d.displayName).toBe('Deliveroo');
+      expect(d.credentialFields).toEqual([
+        { key: 'clientId', label: 'Client ID' },
+        { key: 'clientSecret', label: 'Client secret' },
+      ]);
+    });
+
     it('no secret or credential appears in a stored error or a job payload', async () => {
       const rows = await db.query<RowDataPacket[]>(
         `SELECT CONCAT_WS(' ', e.lastError, c.lastError) AS t FROM channelconnection c LEFT JOIN channelinboundevent e ON e.connectionId = c.id WHERE c.shopId IN (?, ?)`,
@@ -1305,6 +1465,38 @@ describe('Deliveroo marketplace channel (E2)', () => {
       );
       await sweep.pollConnections();
       expect(await inboxRows(c.id)).toHaveLength(0);
+    });
+
+    it('L5 a failing poll-failure alert cannot abort the polling loop', async () => {
+      const c1 = await connect(a, { outletId: await newOutlet(a) });
+      const c2 = await connect(a, { outletId: await newOutlet(a) });
+      listHandler = () => ({ status: 500, json: {} });
+      const spy = jest
+        .spyOn(
+          sweep as unknown as { escalatePollFailure: () => Promise<void> },
+          'escalatePollFailure',
+        )
+        .mockRejectedValue(new Error('alert failed'));
+      try {
+        await db.execute(
+          `UPDATE channelconnection SET lastSyncAt = NULL WHERE id IN (?, ?)`,
+          [c1.id, c2.id],
+        );
+        await expect(sweep.pollConnections()).resolves.toBeDefined();
+        expect(spy.mock.calls.length).toBeGreaterThanOrEqual(2);
+        for (const c of [c1, c2]) {
+          const row = (
+            await db.query<RowDataPacket[]>(
+              `SELECT lastSyncStatus, pollFailures FROM channelconnection WHERE id = ?`,
+              [c.id],
+            )
+          )[0];
+          expect(row.lastSyncStatus).toBe('failed');
+          expect(row.pollFailures).toBe(1);
+        }
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('turning the platform flag off does not stop an enabled connection from receiving', async () => {

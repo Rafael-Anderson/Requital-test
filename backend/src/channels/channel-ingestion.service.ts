@@ -151,23 +151,43 @@ export class ChannelIngestionService {
       [`${provider.name}:${routingKey}`],
     );
     const conn = rows[0];
-    if (!conn) return reject();
+    // Best-effort timing equaliser: an unknown or disabled location does the same
+    // HMAC work a known one does, so the response time does not say which exist.
+    const burn = (): never => {
+      try {
+        provider.verifyWebhook({
+          rawBody: input.rawBody,
+          headers: input.headers,
+          secrets: ['unknown-location-timing-equaliser'],
+        });
+      } catch {
+        /* nothing to learn from it */
+      }
+      return reject();
+    };
+    if (!conn) return burn();
     // (Ownership was proven when the connection was ENABLED, and its ids cannot
     // change while enabled, so nothing here may reject an enabled connection
     // for a later verification change: that would drop accepted orders.)
 
+    // A connection's OWN secret is the only candidate when it has one: the
+    // platform-level secret (shared by every merchant of an integrator) is used
+    // only for a connection that has none, so one merchant holding the shared
+    // secret can never sign for another merchant's connection. An undecryptable
+    // own secret fails closed (no fallback).
     const secrets: string[] = [];
-    try {
-      if (conn.webhookSecret) secrets.push(decrypt(conn.webhookSecret));
-    } catch {
-      /* an undecryptable secret is simply not a usable secret */
-    }
-    if (provider.capabilities.platformWebhookSecret) {
+    if (conn.webhookSecret) {
+      try {
+        secrets.push(decrypt(conn.webhookSecret));
+      } catch {
+        /* an undecryptable secret is simply not a usable secret */
+      }
+    } else if (provider.capabilities.platformWebhookSecret) {
       secrets.push(
         ...(provider.platformWebhookSecrets?.() ?? []).filter(Boolean),
       );
     }
-    if (secrets.length === 0) return reject();
+    if (secrets.length === 0) return burn();
 
     const verified = provider.verifyWebhook({
       rawBody: input.rawBody,

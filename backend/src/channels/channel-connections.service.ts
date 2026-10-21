@@ -319,7 +319,11 @@ export class ChannelConnectionsService {
     if (!row.externalLocationId) {
       throw new BadRequestException('Set the location id before enabling');
     }
-    const usesPlatformSecret = provider.capabilities.platformWebhookSecret;
+    // Only a platform secret that is actually usable here counts (a provider can
+    // switch it off, for example in production).
+    const usesPlatformSecret =
+      provider.capabilities.platformWebhookSecret &&
+      (provider.platformWebhookSecrets?.() ?? []).some(Boolean);
     if (!row.credentials || (!row.webhookSecret && !usesPlatformSecret)) {
       throw new BadRequestException(
         'Credentials and a webhook secret are required before enabling',

@@ -15,6 +15,7 @@ import {
   DeliverooApiClient,
   DeliverooCallError,
   assertSandboxUrl,
+  resolveCredentials,
 } from './deliveroo-api.client';
 import {
   DeliverooChannelProvider,
@@ -142,6 +143,132 @@ describe('Deliveroo webhook verification', () => {
     const a = verify(deliverooHeaders(FAKE_WEBHOOK_SECRET, 'same', raw), raw);
     const b = verify(deliverooHeaders(FAKE_WEBHOOK_SECRET, 'same', raw2), raw2);
     expect(a.eventId).not.toBe(b.eventId);
+  });
+});
+
+describe('Deliveroo review fixes', () => {
+  const p = new DeliverooChannelProvider();
+  const raw = (order: Record<string, unknown>) =>
+    Buffer.from(webhookBody('order.new', order));
+  const verify = (b: Buffer) =>
+    p.verifyWebhook({
+      rawBody: b,
+      headers: deliverooHeaders(FAKE_WEBHOOK_SECRET, 'g-r', b),
+      secrets: [FAKE_WEBHOOK_SECRET],
+    });
+
+  it('L3 a signed body without a parseable status_log is refused', () => {
+    expect(verify(raw(fakeOrder())).valid).toBe(true);
+    expect(verify(raw({ ...fakeOrder(), status_log: undefined })).valid).toBe(
+      false,
+    );
+    expect(verify(raw(fakeOrder({ status_log: [] }))).valid).toBe(false);
+    expect(
+      verify(raw(fakeOrder({ status_log: [{ status: 'placed', at: 'x' }] })))
+        .valid,
+    ).toBe(false);
+    expect(verify(Buffer.from('not json')).valid).toBe(false);
+  });
+  it('M2 declares its display name and exact credential keys', () => {
+    expect(p.displayName).toBe('Deliveroo');
+    expect(p.credentialFields).toEqual([
+      { key: 'clientId', label: 'Client ID' },
+      { key: 'clientSecret', label: 'Client secret' },
+    ]);
+  });
+  it('M2 removing a declared credential key makes testConnection fail without any call', async () => {
+    const q = new DeliverooChannelProvider();
+    const http = fakeHttp(() => ({ status: 200, json: { orders: [] } }));
+    q.api.fetchImpl = http.fn;
+    const full = conn({ externalBrandId: null });
+    expect((await q.testConnection(full)).ok).toBe(true);
+    for (const key of p.credentialFields.map((f) => f.key)) {
+      const creds = { ...full.credentials! };
+      delete creds[key];
+      http.calls.length = 0;
+      const r = await q.testConnection({ ...full, credentials: creds });
+      expect(r.ok).toBe(false);
+      expect(r.message).toContain('Client ID and a Client secret');
+      expect(http.calls).toHaveLength(0);
+    }
+  });
+  it('M1 the platform webhook secret is off in production unless explicitly allowed', () => {
+    const keys = [
+      'NODE_ENV',
+      'DELIVEROO_ALLOW_PLATFORM_WEBHOOK_SECRET',
+      'DELIVEROO_SANDBOX_WEBHOOK_SECRET',
+    ] as const;
+    const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    try {
+      process.env.DELIVEROO_SANDBOX_WEBHOOK_SECRET =
+        'fake-platform-secret-unit';
+      process.env.NODE_ENV = 'test';
+      expect(p.platformWebhookSecrets()).toEqual(['fake-platform-secret-unit']);
+      process.env.NODE_ENV = 'production';
+      delete process.env.DELIVEROO_ALLOW_PLATFORM_WEBHOOK_SECRET;
+      expect(p.platformWebhookSecrets()).toEqual([]);
+      process.env.DELIVEROO_ALLOW_PLATFORM_WEBHOOK_SECRET = '1';
+      expect(p.platformWebhookSecrets()).toEqual(['fake-platform-secret-unit']);
+    } finally {
+      for (const k of keys) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    }
+  });
+  it('M1 the platform sandbox credentials never apply in production and never complete a half-filled pair', () => {
+    const keys = [
+      'NODE_ENV',
+      'DELIVEROO_SANDBOX_CLIENT_ID',
+      'DELIVEROO_SANDBOX_CLIENT_SECRET',
+    ] as const;
+    const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    try {
+      process.env.DELIVEROO_SANDBOX_CLIENT_ID = 'platform-fake-id';
+      process.env.DELIVEROO_SANDBOX_CLIENT_SECRET = 'platform-fake-secret';
+      process.env.NODE_ENV = 'test';
+      expect(resolveCredentials(null)).toEqual({
+        clientId: 'platform-fake-id',
+        clientSecret: 'platform-fake-secret',
+      });
+      expect(resolveCredentials({ clientId: 'own-id' })).toBeNull();
+      expect(resolveCredentials({ clientSecret: 'own-secret' })).toBeNull();
+      expect(
+        resolveCredentials({ clientId: 'own-id', clientSecret: 'own-secret' }),
+      ).toEqual({ clientId: 'own-id', clientSecret: 'own-secret' });
+      process.env.NODE_ENV = 'production';
+      expect(resolveCredentials(null)).toBeNull();
+    } finally {
+      for (const k of keys) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    }
+  });
+  it('L1 ids that could change a URL path are refused, and never reach the network', async () => {
+    const q = new DeliverooChannelProvider();
+    const http = fakeHttp(() => ({ status: 200 }));
+    q.api.fetchImpl = http.fn;
+    for (const bad of ['..', '.', '.x', '../x', 'a/b']) {
+      expect(
+        (await q.setItemAvailability(conn({ externalBrandId: bad }), [])).ok,
+      ).toBe(false);
+      expect(
+        (await q.setItemAvailability(conn({ externalSiteId: bad }), [])).ok,
+      ).toBe(false);
+      expect((await q.acceptOrder(conn(), bad)).ok).toBe(false);
+      await expect(
+        q.listOpenOrders(conn({ externalLocationId: bad })),
+      ).rejects.toBeInstanceOf(DeliverooCallError);
+    }
+    expect(
+      http.calls.filter((c) => !c.url.includes('/oauth2/token')),
+    ).toHaveLength(0);
+    const hd = deliverooHeaders(FAKE_WEBHOOK_SECRET, 'g-1', Buffer.from('{}'));
+    const body = Buffer.from(
+      JSON.stringify({ body: { order: { location_id: '..' } } }),
+    );
+    expect(q.extractRoutingKey(body, hd)).toBeNull();
   });
 });
 
@@ -652,7 +779,7 @@ describe('Deliveroo outbound calls', () => {
       );
       expect(r).toEqual({
         ok: false,
-        message: 'No Deliveroo credentials are set',
+        message: 'Deliveroo needs both a Client ID and a Client secret',
       });
       process.env.DELIVEROO_SANDBOX_CLIENT_ID = 'platform-fake-id';
       process.env.DELIVEROO_SANDBOX_CLIENT_SECRET = 'platform-fake-secret';

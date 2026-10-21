@@ -166,7 +166,15 @@ export class ChannelSweepService {
             conn.id,
           ],
         );
-        await this.escalatePollFailure(conn.id);
+        try {
+          await this.escalatePollFailure(conn.id);
+        } catch (e) {
+          // The alert is best effort: it must never abort the polling loop.
+          logger.error('poll-failure escalation failed', {
+            connectionId: conn.id,
+            error: e instanceof Error ? e.message.slice(0, 200) : String(e),
+          });
+        }
       }
     }
     return polled;

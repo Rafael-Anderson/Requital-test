@@ -49,22 +49,29 @@ export function assertSandboxUrl(url: string): URL {
   return u;
 }
 
-// Platform-level sandbox fallback (env). Read per call so a rotation needs no
-// restart; presence is all that is ever inspected outside this function.
+// Platform-level sandbox fallback (env), outside production only. Read per call
+// so a rotation needs no restart; presence is all that is ever inspected outside
+// this function.
 export function platformCredentials(): DeliverooCredentials | null {
+  if (process.env.NODE_ENV === 'production') return null;
   const clientId = process.env.DELIVEROO_SANDBOX_CLIENT_ID;
   const clientSecret = process.env.DELIVEROO_SANDBOX_CLIENT_SECRET;
   return clientId && clientSecret ? { clientId, clientSecret } : null;
 }
 
-// The connection's own credentials win; the platform fallback is used only when
-// the connection has none of its own. Never a mix of the two.
+// The connection's own credentials win. A half-filled pair (one declared key
+// missing) is NOT usable and never completed from the platform fallback; the
+// platform sandbox credentials apply only to a connection that sets neither key,
+// and never in production.
 export function resolveCredentials(
   own: Record<string, string> | null,
 ): DeliverooCredentials | null {
-  if (own?.clientId && own?.clientSecret) {
+  const hasId = !!own?.clientId;
+  const hasSecret = !!own?.clientSecret;
+  if (hasId && hasSecret) {
     return { clientId: own.clientId, clientSecret: own.clientSecret };
   }
+  if (hasId || hasSecret) return null;
   return platformCredentials();
 }
 

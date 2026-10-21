@@ -50,7 +50,7 @@ export function locationIdOf(payload: unknown): string | null {
       : typeof v === 'string'
         ? v
         : null;
-  return s !== null && /^[A-Za-z0-9._:-]{1,191}$/.test(s) ? s : null;
+  return s !== null && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/.test(s) ? s : null;
 }
 
 export function mapStatus(status: unknown): CanonicalOrderStatus {

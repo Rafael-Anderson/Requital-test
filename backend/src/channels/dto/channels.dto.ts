@@ -6,6 +6,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   Min,
   MinLength,
@@ -13,6 +14,12 @@ import {
 } from 'class-validator';
 
 const ID = { min: 1, max: 191 };
+// A marketplace id ends up in a routing key and in outbound URL paths: letters,
+// digits and . _ : - only, starting with a letter or digit (so '.' and '..' are
+// refused).
+const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+const ID_MESSAGE =
+  'must start with a letter or digit and contain only letters, digits and . _ : -';
 
 export class CreateChannelConnectionDto {
   @Type(() => Number)
@@ -29,16 +36,19 @@ export class CreateChannelConnectionDto {
   @IsString()
   @MinLength(ID.min)
   @MaxLength(ID.max)
+  @Matches(ID_PATTERN, { message: ID_MESSAGE })
   externalLocationId?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(ID.max)
+  @Matches(ID_PATTERN, { message: ID_MESSAGE })
   externalBrandId?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(ID.max)
+  @Matches(ID_PATTERN, { message: ID_MESSAGE })
   externalSiteId?: string;
 
   // WRITE-ONLY. Flat string map; encrypted at rest, never returned.
@@ -61,18 +71,21 @@ export class UpdateChannelConnectionDto {
   @IsString()
   @MinLength(ID.min)
   @MaxLength(ID.max)
+  @Matches(ID_PATTERN, { message: ID_MESSAGE })
   externalLocationId?: string | null;
 
   @IsOptional()
   @ValidateIf((_o, v) => v !== null)
   @IsString()
   @MaxLength(ID.max)
+  @Matches(ID_PATTERN, { message: ID_MESSAGE })
   externalBrandId?: string | null;
 
   @IsOptional()
   @ValidateIf((_o, v) => v !== null)
   @IsString()
   @MaxLength(ID.max)
+  @Matches(ID_PATTERN, { message: ID_MESSAGE })
   externalSiteId?: string | null;
 
   @IsOptional()
@@ -177,15 +190,18 @@ export class VerifyChannelLocationDto {
   @IsString()
   @MinLength(ID.min)
   @MaxLength(ID.max)
+  @Matches(ID_PATTERN, { message: ID_MESSAGE })
   externalLocationId: string;
 
   @ValidateIf((_o, v) => v !== null)
   @IsString()
   @MaxLength(ID.max)
+  @Matches(ID_PATTERN, { message: ID_MESSAGE })
   externalBrandId: string | null;
 
   @ValidateIf((_o, v) => v !== null)
   @IsString()
   @MaxLength(ID.max)
+  @Matches(ID_PATTERN, { message: ID_MESSAGE })
   externalSiteId: string | null;
 }

@@ -41,7 +41,8 @@ const SIGNATURE_HEADER = 'x-deliveroo-hmac-sha256';
 // (guid, body) pair be presented as a different pair.
 const GUID_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 const SIGNATURE_RE = /^[0-9a-fA-F]{64}$/;
-const ID_RE = /^[A-Za-z0-9._:-]{1,191}$/;
+// Starts alphanumeric so '.' and '..' can never become a path segment.
+const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,190}$/;
 
 // Replay window. Deliveroo documents NO timestamp in the signature, so the one
 // signed time we have is the newest status_log entry inside the (signed) body.
@@ -75,6 +76,13 @@ function singleHeader(h: Headers, name: string): string | null {
 @Injectable()
 export class DeliverooChannelProvider implements ChannelProvider {
   readonly name = DELIVEROO_PROVIDER;
+  readonly displayName = 'Deliveroo';
+  // The exact keys this provider reads out of `credentials` (the admin draws
+  // its form from these).
+  readonly credentialFields = [
+    { key: 'clientId', label: 'Client ID' },
+    { key: 'clientSecret', label: 'Client secret' },
+  ];
 
   // provesLocationOwnership stays FALSE: the credentials are almost certainly
   // integrator-level (one set for every merchant), so "these credentials can see
@@ -106,7 +114,16 @@ export class DeliverooChannelProvider implements ChannelProvider {
 
   // --- inbound -------------------------------------------------------------
 
+  // The platform secret is one value shared by every merchant of the
+  // integration, so in production it is OFF unless explicitly allowed
+  // (DELIVEROO_ALLOW_PLATFORM_WEBHOOK_SECRET=1). The core also uses it only for a
+  // connection that has no secret of its own.
   platformWebhookSecrets(): string[] {
+    if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.DELIVEROO_ALLOW_PLATFORM_WEBHOOK_SECRET !== '1'
+    )
+      return [];
     const s = process.env.DELIVEROO_SANDBOX_WEBHOOK_SECRET;
     return s ? [s] : [];
   }
@@ -158,24 +175,27 @@ export class DeliverooChannelProvider implements ChannelProvider {
     return { valid: true, eventId: `${guid}:${bodyHash}` };
   }
 
+  // True = refuse. After a valid HMAC, the body must carry a parseable
+  // status_log (every real order has one, VERIFIED) whose newest entry is inside
+  // the replay window.
   private isStale(rawBody: Buffer): boolean {
     try {
       const p = JSON.parse(rawBody.toString('utf8')) as {
         body?: { order?: { status_log?: { at?: unknown }[] } };
       };
       const log = p.body?.order?.status_log;
-      if (!Array.isArray(log)) return false;
+      if (!Array.isArray(log)) return true;
       const times = log
         .map((e) => (typeof e?.at === 'string' ? Date.parse(e.at) : NaN))
         .filter((t) => !Number.isNaN(t));
-      if (times.length === 0) return false;
+      if (times.length === 0) return true;
       const newest = Math.max(...times);
       const now = this.now();
       return (
         now - newest > MAX_EVENT_AGE_MS || newest - now > MAX_EVENT_FUTURE_MS
       );
     } catch {
-      return false;
+      return true;
     }
   }
 
@@ -241,7 +261,10 @@ export class DeliverooChannelProvider implements ChannelProvider {
 
   private creds(conn: BoundChannelConnection): DeliverooCredentials {
     const c = resolveCredentials(conn.credentials);
-    if (!c) throw new DeliverooCallError('No Deliveroo credentials are set');
+    if (!c)
+      throw new DeliverooCallError(
+        'Deliveroo needs both a Client ID and a Client secret',
+      );
     return c;
   }
 
