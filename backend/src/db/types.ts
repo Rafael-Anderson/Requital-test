@@ -1694,6 +1694,8 @@ export interface ChannelconnectionRow {
   lastSyncAt: Date | null;
   lastSyncStatus: string | null;
   lastError: string | null;
+  // Consecutive failed polls (reset by a good one); escalated at the threshold.
+  pollFailures: number;
   // Platform-staff confirmation of the location (NULL = not verified).
   locationVerifiedAt: Date | null;
   locationVerifiedBy: number | null;
