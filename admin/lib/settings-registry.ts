@@ -92,6 +92,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     pages: [
       { href: "/integrations/messaging", label: "Messaging", description: "WhatsApp number, notifications and API credentials", external: true },
       { href: "/integrations/analytics", label: "Analytics & Pixels", description: "Tracking pixels and analytics credentials", external: true },
+      { href: "/settings/integrations/sales-channels", label: "Sales channels", description: "Deliveroo and Talabat connections, item links and order alerts" },
     ],
   },
   {
@@ -183,6 +184,11 @@ const SETTINGS: SettingEntry[] = [
   { label: "Change password", page: "/settings/security", keywords: "breach" },
   { label: "Two-factor authentication", page: "/settings/security", keywords: "2fa totp authenticator app recovery codes" },
   { label: "Require two-factor for all staff", page: "/settings/security", keywords: "2fa mandatory enforce" },
+  // Sales channels
+  { label: "Deliveroo", page: "/settings/integrations/sales-channels", keywords: "marketplace aggregator orders connection" },
+  { label: "Talabat", page: "/settings/integrations/sales-channels", keywords: "marketplace aggregator orders connection" },
+  { label: "Unmapped marketplace items", page: "/settings/integrations/sales-channels", keywords: "link product item mapping marketplace" },
+  { label: "Marketplace order alerts", page: "/settings/integrations/sales-channels", keywords: "whatsapp accept new order alert" },
   // Diagnostics
   { label: "Webhook activity", page: "/settings/diagnostics", keywords: "log delivery payment did it arrive" },
   { label: "Failed jobs", page: "/settings/diagnostics", keywords: "retry dismiss background queue" },

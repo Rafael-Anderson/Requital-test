@@ -36,6 +36,9 @@ import Modal from "@/components/ui/Modal";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Tooltip from "@/components/ui/Tooltip";
 import { formatMoney } from "@/lib/money";
+import Link from "next/link";
+import { isMarketplaceChannel } from "@/lib/channels";
+import { ChannelSourceBadge } from "@/components/channels/ChannelBadges";
 
 const EXTERNAL_DELIVERY_STATUSES: ExternalDelivery["status"][] = ["pending", "picked_up", "delivered", "failed"];
 // Mirrors the backend's own @Roles on the Slider dispatch/cancel routes —
@@ -220,8 +223,13 @@ export default function OrderDetailModal({
     }
   }
 
-  const nextAction = order ? getNextAction(order.status) : null;
-  const canCancel = order && order.status !== "delivered" && order.status !== "cancelled";
+  // The marketplace has to be told about an accept or a cancel, so a marketplace
+  // order is accepted, rejected and cancelled on the Marketplace desk (the generic
+  // routes answer 409). The kitchen steps after acceptance stay here.
+  const marketplace = isMarketplaceChannel(order?.channel);
+  const pendingMarketplace = marketplace && order?.status === "pending";
+  const nextAction = order && !pendingMarketplace ? getNextAction(order.status) : null;
+  const canCancel = order && !marketplace && order.status !== "delivered" && order.status !== "cancelled";
   // Same fulfillment cutoff as cancellation — matches the backend guard.
   const canEditFee = order && order.status !== "delivered" && order.status !== "cancelled";
   const latestTxn = order?.paymenttransaction?.[0];
@@ -247,9 +255,20 @@ export default function OrderDetailModal({
         )
       }
       footer={
-        order && (nextAction || canCancel)
+        order && (nextAction || canCancel || pendingMarketplace)
           ? () => (
               <div className="flex items-center gap-3 flex-wrap justify-end">
+                {pendingMarketplace && (
+                  <>
+                    <p className="text-xs text-text-faint">The marketplace is waiting for you to accept or reject this order.</p>
+                    <Link
+                      href="/orders/marketplace"
+                      className="rounded-[10px] bg-accent px-3 py-1.5 text-sm font-semibold text-white hover:bg-accent-hover"
+                    >
+                      Open Marketplace desk
+                    </Link>
+                  </>
+                )}
                 {advanceBlockedByCash && (
                   <p className="text-xs text-text-faint">Mark cash collected before completing this order.</p>
                 )}
@@ -514,7 +533,11 @@ export default function OrderDetailModal({
                     {order.channel && (
                       <div className="flex justify-between text-sm">
                         <span className="text-text-muted">Channel</span>
-                        <span className="font-medium">{order.channel}</span>
+                        {isMarketplaceChannel(order.channel) ? (
+                          <ChannelSourceBadge channel={order.channel} />
+                        ) : (
+                          <span className="font-medium">{order.channel}</span>
+                        )}
                       </div>
                     )}
                     {order.trackingToken && (

@@ -26,6 +26,8 @@ import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
 import { formatMoney } from "@/lib/money";
+import { isMarketplaceChannel } from "@/lib/channels";
+import { ChannelSourceBadge } from "@/components/channels/ChannelBadges";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -297,7 +299,9 @@ export default function OrderHistoryPage() {
                     )}
                   </TD>
                   <TD>{formatMoney(order.total, order.currency)}</TD>
-                  <TD className="text-text-muted">{order.channel ?? "-"}</TD>
+                  <TD className="text-text-muted">
+                    {isMarketplaceChannel(order.channel) ? <ChannelSourceBadge channel={order.channel!} /> : (order.channel ?? "-")}
+                  </TD>
                   <TD className="text-xs text-text-muted">
                     {new Date(order.createdAt).toLocaleString()}
                   </TD>

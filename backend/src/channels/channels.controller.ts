@@ -45,10 +45,24 @@ export class ChannelsController {
 
   @Get('providers')
   providers() {
-    return this.registry.names().map((n) => ({
-      name: n,
-      capabilities: this.registry.find(n)!.capabilities,
-    }));
+    return this.registry.names().map((n) => {
+      const p = this.registry.find(n)!;
+      return {
+        name: n,
+        displayName: p.displayName ?? n,
+        credentialFields: p.credentialFields ?? [],
+        capabilities: p.capabilities,
+      };
+    });
+  }
+
+  // Is the feature on for this shop, and does the shop already have any
+  // connection (flag off does not stop orders from a connection that exists).
+  // Any role that can reach the orders desk may ask: it is two booleans.
+  @Roles('admin', 'branch', 'order_manager')
+  @Get('availability')
+  availability(@CurrentUser() ctx: TenantContext) {
+    return this.connections.availability(ctx);
   }
 
   @Get('connections')

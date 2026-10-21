@@ -158,6 +158,15 @@ import type {
   TodaySnapshot,
   TopProduct,
   UserRole,
+  ChannelAvailability,
+  ChannelConnection,
+  ChannelConnectionInput,
+  ChannelConnectionUpdate,
+  ChannelOrder,
+  ChannelOrderList,
+  ChannelOrderState,
+  ChannelProviderInfo,
+  ChannelUnmappedItem,
 } from "./types";
 
 // Exported so pages can build backend-hosted URLs the merchant needs to see
@@ -2711,4 +2720,69 @@ export function mergeCustomers(primaryId: number, duplicateIds: number[]) {
 
 export function listCustomerMerges(primaryId: number) {
   return apiFetch<CustomerMergeRecord[]>(`/customers/${primaryId}/merges`);
+}
+
+// ---- Marketplace sales channels (E4). Credentials are sent only when the user typed them. ----
+export function getChannelAvailability() {
+  return apiFetch<ChannelAvailability>("/channels/availability");
+}
+
+export function listChannelProviders() {
+  return apiFetch<ChannelProviderInfo[]>("/channels/providers");
+}
+
+export function listChannelConnections() {
+  return apiFetch<ChannelConnection[]>("/channels/connections");
+}
+
+export function createChannelConnection(data: ChannelConnectionInput) {
+  return apiFetch<ChannelConnection>("/channels/connections", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateChannelConnection(id: number, data: ChannelConnectionUpdate) {
+  return apiFetch<ChannelConnection>(`/channels/connections/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function setChannelConnectionEnabled(id: number, enabled: boolean) {
+  return apiFetch<ChannelConnection>(`/channels/connections/${id}/enabled`, {
+    method: "POST",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export function testChannelConnection(id: number) {
+  return apiFetch<{ ok: boolean; message: string | null }>(`/channels/connections/${id}/test`, { method: "POST" });
+}
+
+export function deleteChannelConnection(id: number) {
+  return apiFetch<{ deleted: boolean }>(`/channels/connections/${id}`, { method: "DELETE" });
+}
+
+export function listChannelUnmappedItems() {
+  return apiFetch<ChannelUnmappedItem[]>("/channels/unmapped-items");
+}
+
+export function resolveChannelUnmappedItem(id: number, data: { productId: number; variantId?: number }) {
+  return apiFetch<{ ordersCreated: number }>(`/channels/unmapped-items/${id}/resolve`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function listChannelOrders(params: { state?: ChannelOrderState; outletId?: number; page?: number; pageSize?: number } = {}) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined) q.set(k, String(v));
+  const qs = q.toString();
+  return apiFetch<ChannelOrderList>(`/channels/orders${qs ? `?${qs}` : ""}`);
+}
+
+export function acceptChannelOrder(id: number) {
+  return apiFetch<ChannelOrder>(`/channels/orders/${id}/accept`, { method: "POST" });
+}
+
+export function rejectChannelOrder(id: number, reason?: string) {
+  return apiFetch<ChannelOrder>(`/channels/orders/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
 }

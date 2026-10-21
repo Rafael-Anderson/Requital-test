@@ -2,6 +2,7 @@
 
 import Tabs, { type TabItem } from "@/components/ui/Tabs";
 import { useAuth } from "@/lib/auth-context";
+import { marketplaceDeskVisible, useChannelAvailability } from "@/lib/useChannelAvailability";
 import type { UserRole } from "@/lib/types";
 
 const ALL_TABS: (TabItem & { roles: UserRole[] | null })[] = [
@@ -23,9 +24,17 @@ const ALL_TABS: (TabItem & { roles: UserRole[] | null })[] = [
   { href: "/orders/runs", label: "Delivery Runs", roles: ["admin", "branch"] },
 ];
 
+// Mirrors GET /channels/orders (admin, branch, order_manager). Shown only for a
+// shop that has the feature or any connection, so every other shop sees no tab.
+const MARKETPLACE_TAB: TabItem & { roles: UserRole[] | null } = { href: "/orders/marketplace", label: "Marketplace", roles: null };
+const MARKETPLACE_ROLES: UserRole[] = ["admin", "branch", "order_manager"];
+
 export default function OrdersTabs() {
   const { user } = useAuth();
+  const canDesk = !!user && MARKETPLACE_ROLES.includes(user.role);
+  const availability = useChannelAvailability(canDesk);
   const tabs = ALL_TABS.filter((tab) => !tab.roles || (user && tab.roles.includes(user.role)));
+  if (canDesk && marketplaceDeskVisible(availability)) tabs.splice(2, 0, MARKETPLACE_TAB);
 
   return <Tabs tabs={tabs} />;
 }
