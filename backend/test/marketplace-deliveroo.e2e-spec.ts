@@ -421,6 +421,13 @@ describe('Deliveroo marketplace channel (E2)', () => {
     provider.api.now = () => Date.now();
   });
   afterAll(async () => {
+    // Leave no overdue open orders behind: ChannelSweepService.staleOrders works
+    // oldest first in batches of 50 across ALL shops, so a backlog from this
+    // spec would starve other specs' stale-order tests on a re-run.
+    await db.execute(
+      `UPDATE channelorder SET staleAlertedAt = ? WHERE shopId IN (?, ?) AND staleAlertedAt IS NULL`,
+      [new Date(), a.shopId, b.shopId],
+    );
     for (const k of ENV_KEYS) {
       if (savedEnv[k] === undefined) delete process.env[k];
       else process.env[k] = savedEnv[k];
