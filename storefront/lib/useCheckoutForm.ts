@@ -198,7 +198,7 @@ export function useCheckoutForm() {
 
   function useMyLocation() {
     if (!navigator.geolocation) {
-      setError("Geolocation isn't available in this browser — search your address instead.");
+      setError("Geolocation isn't available in this browser. Search your address instead.");
       return;
     }
     setLocating(true);
@@ -208,7 +208,7 @@ export function useCheckoutForm() {
         setLocating(false);
       },
       () => {
-        setError("Couldn't get your location — search your address instead, or enter it manually.");
+        setError("Couldn't get your location. Search your address instead, or enter it manually.");
         setLocating(false);
       },
     );

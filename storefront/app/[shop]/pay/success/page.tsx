@@ -74,7 +74,7 @@ function PaySuccessContent() {
               // Not an error: gateways redirect before their webhook lands, so
               // "not yet confirmed" is the normal first state here.
               <p className="text-sm text-zinc-500">
-                Your payment is being confirmed. This can take a moment — the
+                Your payment is being confirmed. This can take a moment. The
                 shop will see it as soon as it clears.
               </p>
             )}

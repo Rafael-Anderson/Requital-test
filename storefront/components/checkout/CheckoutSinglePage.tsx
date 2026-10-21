@@ -100,7 +100,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
             </p>
           ) : (
             dateIsToday &&
-            todayFullyBooked && <p className="text-xs text-red-600 mt-1">No time slots left today — pick another date.</p>
+            todayFullyBooked && <p className="text-xs text-red-600 mt-1">No time slots left today. Pick another date.</p>
           )}
         </div>
         {deliveryDate && (
