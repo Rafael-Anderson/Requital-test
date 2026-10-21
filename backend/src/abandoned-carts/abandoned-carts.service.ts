@@ -152,8 +152,11 @@ export class AbandonedCartsService {
 
   async findAllForShop(ctx: TenantContext) {
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT id, customerName, customerPhone, customerEmail, cartValue, capturedAt, recoveryEmailSentAt, recoveredOrderId
-       FROM abandonedcart WHERE shopId = ? ORDER BY capturedAt DESC`,
+      `SELECT ac.id, ac.customerName, ac.customerPhone, ac.customerEmail, ac.cartValue, ac.capturedAt, ac.recoveryEmailSentAt, ac.recoveredOrderId,
+              o.shopOrderNumber AS recoveredOrderNumber
+       FROM abandonedcart ac
+       LEFT JOIN \`order\` o ON o.id = ac.recoveredOrderId AND o.shopId = ac.shopId
+       WHERE ac.shopId = ? ORDER BY ac.capturedAt DESC`,
       [ctx.shopId],
     );
     return rows.map((r) => ({
@@ -165,6 +168,8 @@ export class AbandonedCartsService {
       capturedAt: r.capturedAt as Date,
       recoveryEmailSentAt: r.recoveryEmailSentAt as Date | null,
       recoveredOrderId: r.recoveredOrderId as number | null,
+      // What the merchant sees as the order's number.
+      recoveredOrderNumber: (r.recoveredOrderNumber as number | null) ?? null,
     }));
   }
 

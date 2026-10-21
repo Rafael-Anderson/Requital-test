@@ -144,7 +144,7 @@ export class OrdersService {
       const orParts = ['o.customerName LIKE ?', 'o.customerPhone LIKE ?'];
       const orParams: QueryParam[] = [`%${searchTerm}%`, `%${searchTerm}%`];
       if (searchAsId !== undefined) {
-        orParts.push('o.id = ?');
+        orParts.push('o.shopOrderNumber = ?');
         orParams.push(searchAsId);
       }
       conditions.push(`(${orParts.join(' OR ')})`);

@@ -338,7 +338,7 @@ export class AffiliateService {
 
     const [rows, totalRows] = await Promise.all([
       this.db.query<RowDataPacket[]>(
-        `SELECT ao.*, o.id AS orderPk, o.customerName AS orderCustomerName, o.total AS orderTotal,
+        `SELECT ao.*, o.id AS orderPk, o.shopOrderNumber AS orderNumber, o.currency AS orderCurrency, o.customerName AS orderCustomerName, o.total AS orderTotal,
                 ac.code AS codeValue, af.name AS affiliateName
          FROM affiliateorder ao
          JOIN \`order\` o ON o.id = ao.orderId
@@ -359,6 +359,10 @@ export class AffiliateService {
       data: rows.map((r) => ({
         id: r.id as number,
         orderId: r.orderPk as number,
+        // What the merchant sees; orderId stays the identity.
+        shopOrderNumber: r.orderNumber as number,
+        // The order's own captured currency: commission is a share of its total.
+        currency: r.orderCurrency as string,
         customerName: r.orderCustomerName as string,
         orderTotal: Number(r.orderTotal),
         code: r.codeValue as string,

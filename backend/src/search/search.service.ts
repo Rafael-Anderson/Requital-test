@@ -83,7 +83,7 @@ export class SearchService {
     const orClauses = ['customerName LIKE ?', 'customerPhone LIKE ?'];
     params.push(like, like);
     if (searchAsId !== undefined) {
-      orClauses.push('id = ?');
+      orClauses.push('shopOrderNumber = ?');
       params.push(searchAsId);
     }
     conditions.push(`(${orClauses.join(' OR ')})`);

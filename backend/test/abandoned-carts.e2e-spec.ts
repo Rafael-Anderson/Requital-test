@@ -29,9 +29,10 @@ interface AbandonedCartRow {
   cartValue: string;
   recoveryEmailSentAt: string | null;
   recoveredOrderId: number | null;
+  recoveredOrderNumber: number | null;
 }
 interface OrderCreateResponse {
-  order: { id: number };
+  order: { id: number; shopOrderNumber: number };
 }
 
 function body<T>(res: Response): T {
@@ -238,7 +239,8 @@ describe('Abandoned Cart Recovery (e2e)', () => {
   });
 
   it('an order completing for the same phone marks the cart recovered', async () => {
-    const { shopSlug, outletId, productId } = await setupShop('ac-recover');
+    const { shopSlug, outletId, productId, adminToken } =
+      await setupShop('ac-recover');
     const phone = '0513333333';
     await captureCart(shopSlug, phone, productId).expect(201);
 
@@ -253,6 +255,16 @@ describe('Abandoned Cart Recovery (e2e)', () => {
     const shop = await getShopBySubdomain(shopSlug);
     const cart = await getCartByShopAndPhone(shop.id, phone);
     expect(cart.recoveredOrderId).toBe(orderId);
+
+    // The admin list names the recovered order by its per-shop number.
+    const list = await request(app.getHttpServer())
+      .get('/abandoned-carts')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(
+      body<AbandonedCartRow[]>(list).find((r) => r.customerPhone === phone)
+        ?.recoveredOrderNumber,
+    ).toBe(body<OrderCreateResponse>(order).order.shopOrderNumber);
   });
 
   it("recovery email fires exactly once per cart and respects the shop's opt-in toggle", async () => {

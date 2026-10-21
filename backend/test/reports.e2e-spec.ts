@@ -28,6 +28,7 @@ interface GeneralSummary {
 }
 interface GeneralOrderRow {
   id: number;
+  shopOrderNumber: number;
   outletName: string;
   orderType: string | null;
   channel: string | null;
@@ -339,17 +340,58 @@ describe('Reports (e2e)', () => {
       expect(body<GeneralSummary>(unfilteredAfterCancel).totalOrders).toBe(3);
       expect(body<GeneralSummary>(unfilteredAfterCancel).grandTotal).toBe(120);
 
-      // Order list: search by order id, and confirm the row shape/fields.
+      // Order list: the search box finds an order by the number the merchant
+      // SEES (shopOrderNumber), not by the global id.
+      const o1Row = await db.query<RowDataPacket[]>(
+        `SELECT shopOrderNumber FROM \`order\` WHERE id = ?`,
+        [body<IdRow>(o1).id],
+      );
+      const o1Number = o1Row[0].shopOrderNumber as number;
       const list = await request(app.getHttpServer())
-        .get(`/reports/general/orders?search=${body<IdRow>(o1).id}`)
+        .get(`/reports/general/orders?search=${o1Number}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
       const listBody = body<GeneralOrdersBody>(list);
-      // Exactly one, and it can only have come from the `o.id = ?` branch:
+      // Only the `o.shopOrderNumber = ?` branch can have produced this row:
       // searchSafePhone has no digits for the LIKE branch to match.
       expect(listBody.total).toBe(1);
       expect(listBody.data[0].id).toBe(body<IdRow>(o1).id);
+      expect(listBody.data[0].shopOrderNumber).toBe(o1Number);
       expect(listBody.data[0].outletName).toBeTruthy();
+
+      // The global id is not a number the merchant has ever seen: it finds nothing.
+      expect(body<IdRow>(o1).id).toBeGreaterThan(3);
+      const byGlobalId = await request(app.getHttpServer())
+        .get(`/reports/general/orders?search=${body<IdRow>(o1).id}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(body<GeneralOrdersBody>(byGlobalId).total).toBe(0);
+
+      // The orders list and the global search box follow the same rule.
+      const ordersByNumber = await request(app.getHttpServer())
+        .get(`/orders?search=${o1Number}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(
+        body<{ data: IdRow[] }>(ordersByNumber).data.map((r) => r.id),
+      ).toContain(body<IdRow>(o1).id);
+      const ordersByGlobalId = await request(app.getHttpServer())
+        .get(`/orders?search=${body<IdRow>(o1).id}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(body<{ data: IdRow[] }>(ordersByGlobalId).data).toHaveLength(0);
+      const globalSearch = await request(app.getHttpServer())
+        .get(`/search?q=${o1Number}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(
+        body<{ orders: IdRow[] }>(globalSearch).orders.map((r) => r.id),
+      ).toContain(body<IdRow>(o1).id);
+      const globalByGlobalId = await request(app.getHttpServer())
+        .get(`/search?q=${body<IdRow>(o1).id}`)
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      expect(body<{ orders: IdRow[] }>(globalByGlobalId).orders).toHaveLength(0);
 
       void o3;
     });
