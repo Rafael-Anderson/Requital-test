@@ -18,6 +18,8 @@ export default function Toggle({
   onChange,
   disabled,
   tooltip,
+  label,
+  describedBy,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -26,12 +28,18 @@ export default function Toggle({
   // label (e.g. switching off Recipe deletes the ingredient list) — a plain
   // status toggle like "Active" needs none.
   tooltip?: string;
+  // Accessible name and description, for a switch with no visible <label> of its
+  // own (e.g. one whose reason for being disabled is written beside it).
+  label?: string;
+  describedBy?: string;
 }) {
   const button = (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label}
+      aria-describedby={describedBy}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-150 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-900 focus-visible:ring-accent/50 disabled:opacity-40 disabled:cursor-not-allowed ${

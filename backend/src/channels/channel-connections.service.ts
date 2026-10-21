@@ -114,6 +114,19 @@ export class ChannelConnectionsService {
     return rows[0];
   }
 
+  async availability(
+    ctx: TenantContext,
+  ): Promise<{ enabled: boolean; hasConnections: boolean }> {
+    const [enabled, rows] = await Promise.all([
+      this.features.isEnabled(ctx.shopId, 'marketplace_channels'),
+      this.db.query<RowDataPacket[]>(
+        `SELECT 1 FROM channelconnection WHERE shopId = ? LIMIT 1`,
+        [ctx.shopId],
+      ),
+    ]);
+    return { enabled, hasConnections: rows.length > 0 };
+  }
+
   async list(ctx: TenantContext): Promise<ChannelConnectionView[]> {
     const rows = await this.db.query<(ChannelconnectionRow & RowDataPacket)[]>(
       `SELECT * FROM channelconnection WHERE shopId = ? ORDER BY id`,
@@ -447,6 +460,8 @@ export class ChannelConnectionsService {
   }
 
   async testConnection(ctx: TenantContext, id: number) {
+    // Flag off means no outbound marketplace call, not even a test.
+    await this.assertFlag(ctx.shopId);
     const row = await this.load(ctx, id);
     const provider = this.registry.find(row.provider);
     if (!provider?.testConnection) {

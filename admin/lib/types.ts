@@ -3801,3 +3801,117 @@ export interface CustomerMergeRecord {
   actorName: string | null;
   createdAt: string;
 }
+
+// ---- Marketplace sales channels (E4). Mirrors backend/src/channels. ----
+// Secrets are write-only: the API says only whether they are set.
+
+export interface ChannelAvailability {
+  // The platform flag for this shop (it gates creating and enabling only).
+  enabled: boolean;
+  // A connection that exists keeps receiving orders even when the flag is off.
+  hasConnections: boolean;
+}
+
+export interface ChannelProviderInfo {
+  name: string;
+  displayName: string;
+  credentialFields: { key: string; label: string }[];
+  capabilities: {
+    acceptReject: boolean;
+    platformWebhookSecret: boolean;
+    provesLocationOwnership: boolean;
+  } & Record<string, boolean>;
+}
+
+export interface ChannelConnection {
+  id: number;
+  outletId: number;
+  provider: string;
+  externalLocationId: string | null;
+  externalBrandId: string | null;
+  externalSiteId: string | null;
+  hasCredentials: boolean;
+  hasWebhookSecret: boolean;
+  enabled: boolean;
+  lastSyncAt: string | null;
+  lastSyncStatus: string | null;
+  // Already redacted by the API.
+  lastError: string | null;
+  // Set only by Requital staff; read-only for merchants.
+  locationVerified: boolean;
+  createdAt: string;
+}
+
+export interface ChannelConnectionInput {
+  outletId: number;
+  provider: string;
+  externalLocationId?: string;
+  externalBrandId?: string;
+  externalSiteId?: string;
+  credentials?: Record<string, string>;
+  webhookSecret?: string;
+}
+
+export interface ChannelConnectionUpdate {
+  externalLocationId?: string | null;
+  externalBrandId?: string | null;
+  externalSiteId?: string | null;
+  credentials?: Record<string, string>;
+  webhookSecret?: string;
+}
+
+export type ChannelOrderState =
+  | "needs_mapping"
+  | "pending_acceptance"
+  | "accepted"
+  | "rejected"
+  | "cancelled_upstream";
+
+export interface ChannelOrder {
+  id: number;
+  outletId: number;
+  provider: string;
+  externalOrderId: string;
+  displayId: string | null;
+  state: ChannelOrderState;
+  externalStatus: string;
+  acceptBy: string | null;
+  scheduledFor: string | null;
+  orderId: number | null;
+  shopOrderNumber: number | null;
+  orderStatus: string | null;
+  currency: string;
+  total: string | null;
+  // Admins only; null for everyone else and when the marketplace did not say.
+  commissionAmount: string | null;
+  priceMismatch: { externalItemId?: string; payloadMinor: number; catalogMinor: number }[] | null;
+  // Only while the order waits for item mappings. No customer details.
+  waitingItems: { externalItemId: string; name: string; quantity: number }[] | null;
+  lastError: string | null;
+  alerted: boolean;
+  receivedAt: string;
+}
+
+export interface ChannelOrderList {
+  data: ChannelOrder[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface ChannelUnmappedItem {
+  id: number;
+  provider: string;
+  externalItemId: string;
+  externalName: string | null;
+  occurrences: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  resolvedAt: string | null;
+  waitingOrders: {
+    channelOrderId: number;
+    displayId: string | null;
+    externalOrderId: string;
+    acceptBy: string | null;
+  }[];
+}

@@ -116,6 +116,8 @@ export class ChannelOrdersService {
           }))
         : null,
       lastError: r.lastError as string | null,
+      // Whether the new-order WhatsApp alert was queued for this order.
+      alerted: !!r.alertedAt,
       receivedAt: r.receivedAt as Date,
     };
   }

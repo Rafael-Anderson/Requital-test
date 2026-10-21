@@ -107,4 +107,13 @@ describe("searchSettings", () => {
       expect(labels.some((l) => l.includes(dead)), dead).toBe(false);
     }
   });
+
+  it("registers Sales channels under Integrations as an in-app page, and finds it by marketplace name", () => {
+    const group = SETTINGS_GROUPS.find((g) => g.id === "integrations");
+    const page = group?.pages.find((p) => p.href === "/settings/integrations/sales-channels");
+    expect(page).toMatchObject({ label: "Sales channels" });
+    expect(page?.external).toBeFalsy();
+    expect(top("deliveroo")?.href).toBe("/settings/integrations/sales-channels");
+    expect(top("talabat")?.location).toBe("Integrations > Sales channels");
+  });
 });

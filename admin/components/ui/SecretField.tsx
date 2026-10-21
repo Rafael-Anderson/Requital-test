@@ -21,12 +21,16 @@ export default function SecretField({
   value,
   onChange,
   placeholder,
+  onReplace,
 }: {
   label: string;
   masked: string | null;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  // Called when Replace is clicked, for a form whose secrets only make sense
+  // replaced together (a credential set): it can open them all at once.
+  onReplace?: () => void;
 }) {
   const [editing, setEditing] = useState(!masked);
 
@@ -44,7 +48,10 @@ export default function SecretField({
           <span className="flex h-9 flex-1 items-center rounded-[10px] border border-border bg-black/[0.02] px-3 text-sm text-text-muted dark:border-white/15 dark:bg-white/[0.03]">
             {masked}
           </span>
-          <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+          <Button type="button" variant="secondary" size="sm" onClick={() => {
+              setEditing(true);
+              onReplace?.();
+            }}>
             Replace
           </Button>
         </div>
@@ -56,7 +63,7 @@ export default function SecretField({
     <Input
       label={label}
       type="password"
-      autoComplete="off"
+      autoComplete="new-password"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}

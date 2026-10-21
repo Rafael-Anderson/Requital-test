@@ -21,6 +21,9 @@ import SimpleOrderDetailModal from "@/components/SimpleOrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
 import ScrollFade from "@/components/ui/ScrollFade";
 import { formatMoney } from "@/lib/money";
+import { isMarketplaceChannel } from "@/lib/channels";
+import { ChannelSourceBadge } from "@/components/channels/ChannelBadges";
+import Link from "next/link";
 
 const POLL_INTERVAL_MS = 20_000;
 
@@ -187,8 +190,12 @@ function OrdersPageContent() {
                     <p className="text-[13px] text-text-faint text-center py-8">No orders</p>
                   )}
                   {col.orders.map((order) => {
+                    // A marketplace order is accepted or rejected on the Marketplace
+                    // desk (the marketplace has to be told), so a still-pending one has
+                    // no Advance here and none can be cancelled from the board.
+                    const marketplace = isMarketplaceChannel(order.channel);
                     const nextAction = getNextAction(order.status);
-                    const showAdvance = !!nextAction;
+                    const showAdvance = !!nextAction && !(marketplace && order.status === "pending");
                     const isCod = order.paymentMethod === "cash_on_delivery";
                     return (
                       <div
@@ -200,6 +207,11 @@ function OrdersPageContent() {
                           <span className="text-[13.5px] font-bold text-text-primary dark:text-zinc-50">#{order.shopOrderNumber}</span>
                           <StatusBadge status={order.status} />
                         </div>
+                        {marketplace && (
+                          <div className="mb-1">
+                            <ChannelSourceBadge channel={order.channel!} />
+                          </div>
+                        )}
                         <div className="text-[13.5px] text-text-secondary dark:text-zinc-300">{order.customerName}</div>
                         <div className="text-sm font-bold text-text-primary dark:text-zinc-50">{formatMoney(order.total, order.currency)}</div>
                         {order.deliveryDate && (
@@ -244,9 +256,19 @@ function OrdersPageContent() {
                               Mark cash collected
                             </Button>
                           )}
-                          <Button size="sm" variant="danger" onClick={() => handleCancel(order)}>
-                            Cancel
-                          </Button>
+                          {marketplace && order.status === "pending" && (
+                            <Link
+                              href="/orders/marketplace"
+                              className="flex-1 rounded-[10px] bg-accent px-3 py-1.5 text-center text-sm font-semibold text-white hover:bg-accent-hover"
+                            >
+                              Accept or reject
+                            </Link>
+                          )}
+                          {!marketplace && (
+                            <Button size="sm" variant="danger" onClick={() => handleCancel(order)}>
+                              Cancel
+                            </Button>
+                          )}
                         </div>
                       </div>
                     );

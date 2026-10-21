@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as api from "./api";
 import type { AuthUser } from "./types";
+import { resetChannelAvailabilityCache } from "./useChannelAvailability";
 import { forgetImpersonatingShop, rememberImpersonatingShop } from "./impersonation";
 
 interface AuthContextValue {
@@ -40,7 +41,14 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUserState] = useState<AuthUser | null>(null);
+  // Every identity change (login, logout, expiry, impersonation) also drops the
+  // shared marketplace-availability answer, so one shop's "feature on" is never
+  // shown to the next session in this tab.
+  const setUser = useCallback((u: AuthUser | null) => {
+    resetChannelAvailabilityCache();
+    setUserState(u);
+  }, []);
   // Starts true so RequireAuth doesn't redirect to /login before the
   // httpOnly session cookie (if any) has had a chance to be validated
   // against /auth/me.

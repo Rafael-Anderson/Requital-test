@@ -189,8 +189,19 @@ export interface ProviderCallResult {
   message?: string;
 }
 
+// One write-only field of a provider's credential form, so the merchant UI draws
+// the form the provider really needs instead of guessing key names. Labels are
+// merchant-facing copy; `key` is what the provider reads out of `credentials`.
+export interface ChannelCredentialField {
+  key: string;
+  label: string;
+}
+
 export interface ChannelProvider {
   readonly name: string;
+  // Merchant-facing name ('Deliveroo'); the admin falls back to `name`.
+  readonly displayName?: string;
+  readonly credentialFields?: ChannelCredentialField[];
   readonly capabilities: ChannelCapabilities;
 
   // --- inbound -------------------------------------------------------------

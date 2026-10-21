@@ -53,6 +53,11 @@ export interface StubCall {
 
 export class StubChannelProvider implements ChannelProvider {
   readonly name = STUB_PROVIDER;
+  readonly displayName = 'Test marketplace';
+  readonly credentialFields = [
+    { key: 'clientId', label: 'Client ID' },
+    { key: 'clientSecret', label: 'Client secret' },
+  ];
   // Whether testConnection() gives a merchant-bound location proof. FALSE by
   // default, so the stub exercises the real path (platform staff verify the
   // location); tests flip it to cover the merchant-bound branch.
