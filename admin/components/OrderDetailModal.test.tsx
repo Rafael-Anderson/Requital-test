@@ -120,3 +120,26 @@ describe("OrderDetailModal — order identifier", () => {
     confirmSpy.mockRestore();
   });
 });
+
+describe("OrderDetailModal: marketplace orders", () => {
+  it("a pending marketplace order shows its source and points to the desk, with no Cancel or Accept here", async () => {
+    vi.mocked(getOrder).mockResolvedValue({ ...fakeOrder(), channel: "deliveroo", status: "pending" } as Order);
+    vi.mocked(getShop).mockResolvedValue({ taxDisplayText: null } as never);
+    render(<ToastProvider><OrderDetailModal orderId={42} onClose={vi.fn()} /></ToastProvider>);
+
+    const link = await screen.findByRole("link", { name: "Open Marketplace desk" });
+    expect(link).toHaveAttribute("href", "/orders/marketplace");
+    expect(screen.getByText("Deliveroo")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /cancel order/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Accept" })).not.toBeInTheDocument();
+  });
+
+  it("after acceptance the kitchen steps stay available but a generic cancel does not", async () => {
+    vi.mocked(getOrder).mockResolvedValue({ ...fakeOrder(), channel: "deliveroo", status: "confirmed" } as Order);
+    vi.mocked(getShop).mockResolvedValue({ taxDisplayText: null } as never);
+    render(<ToastProvider><OrderDetailModal orderId={42} onClose={vi.fn()} /></ToastProvider>);
+
+    expect(await screen.findByRole("button", { name: "Start preparing" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /cancel order/i })).not.toBeInTheDocument();
+  });
+});

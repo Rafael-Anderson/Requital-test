@@ -32,7 +32,7 @@ const MARKETPLACE_ROLES: UserRole[] = ["admin", "branch", "order_manager"];
 export default function OrdersTabs() {
   const { user } = useAuth();
   const canDesk = !!user && MARKETPLACE_ROLES.includes(user.role);
-  const availability = useChannelAvailability(canDesk);
+  const { data: availability } = useChannelAvailability(canDesk);
   const tabs = ALL_TABS.filter((tab) => !tab.roles || (user && tab.roles.includes(user.role)));
   if (canDesk && marketplaceDeskVisible(availability)) tabs.splice(2, 0, MARKETPLACE_TAB);
 

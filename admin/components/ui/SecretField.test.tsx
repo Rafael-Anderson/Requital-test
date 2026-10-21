@@ -54,4 +54,19 @@ describe("SecretField", () => {
     expect(screen.getByText("••••alue")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("sk_new_value");
   });
+
+  // Replace sits inside forms (the sales-channel connection modal); a default
+  // type=submit button would submit, and so close, the form on click.
+  it("Replace does not submit an enclosing form, and reports the click", async () => {
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    const onReplace = vi.fn();
+    render(
+      <form onSubmit={onSubmit}>
+        <SecretField label="API Key" masked="••••1234" value="" onChange={vi.fn()} onReplace={onReplace} />
+      </form>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Replace" }));
+    expect(onReplace).toHaveBeenCalledTimes(1);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });

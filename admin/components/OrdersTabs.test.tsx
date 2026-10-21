@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import OrdersTabs from "./OrdersTabs";
+import { resetChannelAvailabilityCache } from "@/lib/useChannelAvailability";
 import type { UserRole } from "@/lib/types";
+
+const channels = vi.hoisted(() => ({ getChannelAvailability: vi.fn() }));
+vi.mock("@/lib/api", () => channels);
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/orders",
@@ -61,5 +65,48 @@ describe("OrdersTabs — role-gated Draft Orders / Abandoned Carts tabs", () => 
     expect(screen.getByText("External Delivery")).toBeInTheDocument();
     expect(screen.queryByText("Draft Orders")).not.toBeInTheDocument();
     expect(screen.queryByText("Abandoned Carts")).not.toBeInTheDocument();
+  });
+});
+
+describe("OrdersTabs: the Marketplace tab", () => {
+  beforeEach(() => {
+    resetChannelAvailabilityCache();
+    channels.getChannelAvailability.mockReset();
+  });
+
+  it("is absent for a shop with neither the feature nor a connection", async () => {
+    role = "admin";
+    channels.getChannelAvailability.mockResolvedValue({ enabled: false, hasConnections: false });
+    render(<OrdersTabs />);
+    await waitFor(() => expect(channels.getChannelAvailability).toHaveBeenCalled());
+    expect(screen.queryByText("Marketplace")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["flag on", { enabled: true, hasConnections: false }],
+    ["an existing connection with the flag off", { enabled: false, hasConnections: true }],
+  ])("is present for %s", async (_n, a) => {
+    role = "order_manager";
+    channels.getChannelAvailability.mockResolvedValue(a);
+    render(<OrdersTabs />);
+    expect(await screen.findByText("Marketplace")).toHaveAttribute("href", "/orders/marketplace");
+  });
+
+  it("is never requested, nor shown, for a viewer (the desk is not theirs)", async () => {
+    role = "viewer";
+    channels.getChannelAvailability.mockResolvedValue({ enabled: true, hasConnections: true });
+    render(<OrdersTabs />);
+    expect(screen.getByText("Live Orders")).toBeInTheDocument();
+    expect(channels.getChannelAvailability).not.toHaveBeenCalled();
+    expect(screen.queryByText("Marketplace")).not.toBeInTheDocument();
+  });
+
+  it("an unreadable answer shows no tab and breaks nothing", async () => {
+    role = "admin";
+    channels.getChannelAvailability.mockRejectedValue(new Error("boom"));
+    render(<OrdersTabs />);
+    await waitFor(() => expect(channels.getChannelAvailability).toHaveBeenCalled());
+    expect(screen.getByText("Live Orders")).toBeInTheDocument();
+    expect(screen.queryByText("Marketplace")).not.toBeInTheDocument();
   });
 });

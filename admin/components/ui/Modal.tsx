@@ -17,7 +17,7 @@
 // splitting the footer into a separate DOM region outside it (which would
 // break `type="submit"`). The `footer` prop is only for non-form modals
 // (confirm dialogs) that don't need that.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import Tooltip from "./Tooltip";
@@ -53,6 +53,7 @@ export default function Modal({
   panelClassName?: string;
 }) {
   const [closing, setClosing] = useState(false);
+  const titleId = useId();
 
   function requestClose() {
     setClosing(true);
@@ -82,6 +83,9 @@ export default function Modal({
       className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 ${closing ? "" : "backdrop-in"}`}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title !== undefined ? titleId : undefined}
         onClick={(e) => e.stopPropagation()}
         className={`flex w-full flex-col rounded-2xl bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 max-h-[90vh] ${
           closing ? "modal-out" : "modal-in"
@@ -89,7 +93,7 @@ export default function Modal({
       >
         {title !== undefined && (
           <div className="flex items-center justify-between gap-4 p-6 pb-4 shrink-0">
-            <h2 className="text-lg font-semibold">{title}</h2>
+            <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
             <Tooltip label="Close" align="end">
               <button
                 type="button"

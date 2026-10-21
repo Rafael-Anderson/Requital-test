@@ -26,6 +26,7 @@ export default function Combobox({
   searchPlaceholder = "Search…",
   emptyText = "No results",
   className = "",
+  ariaLabel,
 }: {
   label?: string;
   value: string;
@@ -35,6 +36,9 @@ export default function Combobox({
   searchPlaceholder?: string;
   emptyText?: string;
   className?: string;
+  // Accessible name for the trigger when the visible `label` is not associated
+  // with it (the label is a plain element). Opt-in so existing label queries hold.
+  ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -84,6 +88,7 @@ export default function Combobox({
           type="button"
           onClick={() => setOpen((o) => !o)}
           role="combobox"
+          aria-label={ariaLabel}
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-controls={listboxId}

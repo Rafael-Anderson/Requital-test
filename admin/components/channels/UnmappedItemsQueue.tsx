@@ -92,6 +92,7 @@ function Row({
       <div className="mt-3 grid grid-cols-1 items-end gap-3 md:grid-cols-[1fr_1fr_auto]">
         <Combobox
           label="Your product"
+          ariaLabel="Your product"
           value={productId}
           onChange={(v) => {
             setProductId(v);
@@ -105,6 +106,7 @@ function Row({
         {needsVariant ? (
           <Combobox
             label="Variant"
+            ariaLabel="Variant"
             value={variantId}
             onChange={setVariantId}
             options={(product?.variants ?? []).map((v) => ({ value: String(v.id), label: v.label ?? v.sku ?? `Variant ${v.id}` }))}

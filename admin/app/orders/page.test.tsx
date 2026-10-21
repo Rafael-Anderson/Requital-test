@@ -165,3 +165,26 @@ describe("OrdersPage kanban on a phone", () => {
     }
   });
 });
+
+describe("OrdersPage: marketplace orders on the board", () => {
+  it("a pending marketplace order shows its source and sends you to the desk instead of Advance/Cancel", async () => {
+    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
+    vi.mocked(listOrders).mockResolvedValue({ data: [{ ...order, channel: "deliveroo", status: "pending" }], total: 1 } as never);
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
+    expect(screen.getByText("Deliveroo")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Accept or reject" })).toHaveAttribute("href", "/orders/marketplace");
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Accept" })).not.toBeInTheDocument();
+  });
+
+  it("a storefront order keeps Advance and Cancel", async () => {
+    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
+    vi.mocked(listOrders).mockResolvedValue({ data: [{ ...order, channel: "storefront" }], total: 1 } as never);
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Accept" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Accept or reject" })).not.toBeInTheDocument();
+  });
+});

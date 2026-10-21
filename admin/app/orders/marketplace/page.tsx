@@ -27,7 +27,7 @@ const POLL_INTERVAL_MS = 15_000;
 
 export default function MarketplaceOrdersPage() {
   const { user } = useAuth();
-  const availability = useChannelAvailability();
+  const { data: availability, failed: availabilityFailed, retry: retryAvailability } = useChannelAvailability();
   const { selectedOutletId, outlets } = useOutletFilter();
   const toast = useToast();
   const [orders, setOrders] = useState<ChannelOrder[] | null>(null);
@@ -110,7 +110,9 @@ export default function MarketplaceOrdersPage() {
       <h1 className="mb-[18px] text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Orders</h1>
       <OrdersTabs />
 
-      {availability === undefined ? (
+      {availabilityFailed ? (
+        <LoadFailed what="marketplace orders" onRetry={retryAvailability} />
+      ) : availability === undefined ? (
         <div aria-busy="true" aria-label="Loading marketplace orders" className="grid gap-3 md:grid-cols-2">
           <CardSkeleton />
           <CardSkeleton />
