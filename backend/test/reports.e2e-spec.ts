@@ -342,11 +342,14 @@ describe('Reports (e2e)', () => {
 
       // Order list: the search box finds an order by the number the merchant
       // SEES (shopOrderNumber), not by the global id.
-      const o1Row = await db.query<RowDataPacket[]>(
-        `SELECT shopOrderNumber FROM \`order\` WHERE id = ?`,
-        [body<IdRow>(o1).id],
+      // Make the global id and the per-shop number DIFFER on any database (on a
+      // fresh one both are tiny and can coincide): give o1 a number no other
+      // order in this shop has and that cannot equal any global id.
+      const o1Number = 900001;
+      await db.execute(
+        `UPDATE \`order\` SET shopOrderNumber = ? WHERE id = ?`,
+        [o1Number, body<IdRow>(o1).id],
       );
-      const o1Number = o1Row[0].shopOrderNumber as number;
       const list = await request(app.getHttpServer())
         .get(`/reports/general/orders?search=${o1Number}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
@@ -359,13 +362,16 @@ describe('Reports (e2e)', () => {
       expect(listBody.data[0].shopOrderNumber).toBe(o1Number);
       expect(listBody.data[0].outletName).toBeTruthy();
 
-      // The global id is not a number the merchant has ever seen: it finds nothing.
-      expect(body<IdRow>(o1).id).toBeGreaterThan(3);
+      // The global id is not a number the merchant has ever seen: it does not find
+      // o1 (another order may legitimately own that number, so assert on o1 only).
+      expect(body<IdRow>(o1).id).not.toBe(o1Number);
       const byGlobalId = await request(app.getHttpServer())
         .get(`/reports/general/orders?search=${body<IdRow>(o1).id}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      expect(body<GeneralOrdersBody>(byGlobalId).total).toBe(0);
+      expect(
+        body<GeneralOrdersBody>(byGlobalId).data.map((r) => r.id),
+      ).not.toContain(body<IdRow>(o1).id);
 
       // The orders list and the global search box follow the same rule.
       const ordersByNumber = await request(app.getHttpServer())
@@ -379,7 +385,9 @@ describe('Reports (e2e)', () => {
         .get(`/orders?search=${body<IdRow>(o1).id}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      expect(body<{ data: IdRow[] }>(ordersByGlobalId).data).toHaveLength(0);
+      expect(
+        body<{ data: IdRow[] }>(ordersByGlobalId).data.map((r) => r.id),
+      ).not.toContain(body<IdRow>(o1).id);
       const globalSearch = await request(app.getHttpServer())
         .get(`/search?q=${o1Number}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
@@ -391,7 +399,9 @@ describe('Reports (e2e)', () => {
         .get(`/search?q=${body<IdRow>(o1).id}`)
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .expect(200);
-      expect(body<{ orders: IdRow[] }>(globalByGlobalId).orders).toHaveLength(0);
+      expect(
+        body<{ orders: IdRow[] }>(globalByGlobalId).orders.map((r) => r.id),
+      ).not.toContain(body<IdRow>(o1).id);
 
       void o3;
     });

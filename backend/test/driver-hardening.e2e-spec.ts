@@ -577,7 +577,9 @@ describe('W5 driver hardening', () => {
         .post(`/delivery-runs/${run.id}/dispatch`)
         .set(fx.h(a.adminToken))
         .expect(409);
-      expect(JSON.stringify(res.body)).toContain(`#${orders[1].id}`);
+      // Named by the per-shop number the merchant sees, never the global id.
+      const shown = (await fx.f.orderRow(orders[1].id)).shopOrderNumber as number;
+      expect(JSON.stringify(res.body)).toContain(`#${shown}`);
       expect(body<{ details: { orderId: number }[] }>(res).details).toEqual([
         expect.objectContaining({ orderId: orders[1].id }),
       ]);
