@@ -67,3 +67,21 @@ async function claimNext(
   );
   return Number(rows[0].n);
 }
+
+// "Order #12", the number a person is shown, for a message about an order known only by
+// its global id. Runs on the caller's own connection (a transaction must not
+// reach back into the pool) and is scoped by shop. An order that cannot be
+// found has no number to show.
+export async function shopOrderNumberLabel(
+  conn: PoolConnection,
+  shopId: number,
+  orderId: number,
+): Promise<string> {
+  const [rows] = await conn.query<RowDataPacket[]>(
+    `SELECT shopOrderNumber FROM \`order\` WHERE id = ? AND shopId = ?`,
+    [orderId, shopId],
+  );
+  return rows.length > 0
+    ? `Order #${rows[0].shopOrderNumber as number}`
+    : 'This order';
+}

@@ -149,7 +149,7 @@ export default function StoreCreditCard({ customerId, canEdit }: { customerId: n
                   <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
                     <span className="min-w-0">
                       <span className="font-medium text-text-secondary">{TYPE_LABEL[e.type]}</span>
-                      {e.orderId ? ` · order ${e.orderId}` : ""}
+                      {e.orderNumber ? ` · order #${e.orderNumber}` : ""}
                       {e.reason ? ` · ${e.reason}` : ""}
                       {e.actorName ? ` · ${e.actorName}` : ""}
                       <span className="text-text-faint"> · {new Date(e.createdAt).toLocaleString()}</span>

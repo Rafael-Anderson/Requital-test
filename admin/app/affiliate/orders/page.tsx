@@ -12,6 +12,7 @@ import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
+import { formatMoney } from "@/lib/money";
 
 const PAGE_SIZE = 20;
 
@@ -75,7 +76,7 @@ export default function AffiliateOrdersPage() {
           {orders.map((o) => (
             <CardListItem
               key={o.id}
-              openLabel={`Order #${o.orderId}`}
+              openLabel={`Order #${o.shopOrderNumber}`}
               actions={
                 <div className="flex flex-col items-end gap-1.5">
                   <span className={`text-xs capitalize font-medium ${STATUS_CLASS[o.status] ?? ""}`}>{o.status}</span>
@@ -93,13 +94,13 @@ export default function AffiliateOrdersPage() {
               }
             >
               <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">
-                #{o.orderId} {o.customerName}
+                #{o.shopOrderNumber} {o.customerName}
               </div>
               <div className="truncate text-xs text-text-muted">
                 {o.affiliateName} ({o.code})
               </div>
               <div className="mt-0.5 text-xs text-text-muted">
-                Order {o.orderTotal.toFixed(2)} · commission {o.commissionAmount.toFixed(2)}
+                Order {formatMoney(o.orderTotal, o.currency)} · commission {formatMoney(o.commissionAmount, o.currency)}
               </div>
             </CardListItem>
           ))}
@@ -145,13 +146,13 @@ export default function AffiliateOrdersPage() {
             orders.map((o) => (
               <TR key={o.id}>
                 <TD className="font-medium">
-                  #{o.orderId} <span className="text-text-muted font-normal">{o.customerName}</span>
+                  #{o.shopOrderNumber} <span className="text-text-muted font-normal">{o.customerName}</span>
                 </TD>
                 <TD className="text-text-muted">
                   {o.affiliateName} <span className="text-xs">({o.code})</span>
                 </TD>
-                <TD>{o.orderTotal.toFixed(2)}</TD>
-                <TD className="font-medium">{o.commissionAmount.toFixed(2)}</TD>
+                <TD>{formatMoney(o.orderTotal, o.currency)}</TD>
+                <TD className="font-medium">{formatMoney(o.commissionAmount, o.currency)}</TD>
                 <TD className={`capitalize font-medium ${STATUS_CLASS[o.status] ?? ""}`}>{o.status}</TD>
                 <TD>
                   {o.status === "pending" ? (

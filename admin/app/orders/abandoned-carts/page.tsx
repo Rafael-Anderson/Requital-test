@@ -114,7 +114,7 @@ export default function AbandonedCartsPage() {
                 <TD>
                   {c.recoveredOrderId ? (
                     <span className="text-xs rounded px-2 py-1 border border-green-400 text-green-700 dark:text-green-400">
-                      Yes (#{c.recoveredOrderId})
+                      Yes{c.recoveredOrderNumber ? ` (#${c.recoveredOrderNumber})` : ""}
                     </span>
                   ) : (
                     <span className="text-xs text-text-faint">No</span>

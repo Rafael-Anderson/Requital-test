@@ -2560,6 +2560,10 @@ export interface AffiliateCodeListItem {
 export interface AffiliateOrderListItem {
   id: number;
   orderId: number;
+  // The per-shop number the merchant sees. Never show orderId.
+  shopOrderNumber: number;
+  // The order's own captured currency.
+  currency: string;
   customerName: string;
   orderTotal: number;
   code: string;
@@ -3031,6 +3035,8 @@ export interface AbandonedCart {
   capturedAt: string;
   recoveryEmailSentAt: string | null;
   recoveredOrderId: number | null;
+  // The per-shop number the merchant sees. Never show recoveredOrderId.
+  recoveredOrderNumber: number | null;
 }
 
 export type GiftCardStatus = "active" | "redeemed" | "expired" | "disabled";
@@ -3766,6 +3772,8 @@ export interface StoreCreditEntry {
     | "return_refund";
   reason: string | null;
   orderId: number | null;
+  // The per-shop number the merchant sees. Never show orderId.
+  orderNumber: number | null;
   returnId: number | null;
   actorName: string | null;
   createdAt: string;
