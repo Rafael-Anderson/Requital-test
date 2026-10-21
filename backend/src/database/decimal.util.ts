@@ -36,6 +36,7 @@ export function trimOrderRow<
     orderitem?: {
       priceAtPurchase?: unknown;
       autoDiscountAmount?: unknown;
+      marketplaceDiscountAmount?: unknown;
       unitCost?: unknown;
     }[];
   },
@@ -57,6 +58,9 @@ export function trimOrderRow<
       // was silently uncovered — a 30-decimal unitCost would reach any response
       // that starts exposing it untrimmed.
       unitCost: trimDecimal(i.unitCost as string | null),
+      marketplaceDiscountAmount: trimDecimal(
+        i.marketplaceDiscountAmount as string | null,
+      ),
     })),
   };
 }

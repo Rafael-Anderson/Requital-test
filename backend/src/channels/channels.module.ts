@@ -15,6 +15,8 @@ import { ChannelSweepService } from './channel-sweep.service';
 import { ChannelsController } from './channels.controller';
 import { PlatformAuditLogService } from '../platform-admin/platform-audit-log.service';
 import { StubChannelProvider } from './providers/stub-channel.provider';
+import { TalabatChannelProvider } from './providers/talabat/talabat-channel.provider';
+import { TalabatSimulator } from './providers/talabat/talabat-simulator';
 
 // E2 (Deliveroo) and E3 (Talabat) register their providers on
 // ChannelProviderRegistry from their own modules and call
@@ -47,6 +49,8 @@ export function stubAllowed(): boolean {
     ChannelOrdersService,
     ChannelSweepService,
     StubChannelProvider,
+    TalabatSimulator,
+    TalabatChannelProvider,
     PlatformAuditLogService,
   ],
   exports: [
@@ -59,6 +63,7 @@ export class ChannelsModule implements OnModuleInit {
   constructor(
     private readonly registry: ChannelProviderRegistry,
     private readonly stub: StubChannelProvider,
+    private readonly talabat: TalabatChannelProvider,
   ) {}
 
   onModuleInit(): void {
@@ -67,6 +72,10 @@ export class ChannelsModule implements OnModuleInit {
     // deny-list.
     if (stubAllowed()) {
       this.registry.register(this.stub);
+      // Talabat exists only as a simulator: same gate as the stub, so it is
+      // never registered (and a connection to it can never be created) in
+      // production unless ENABLE_STUB_CHANNEL=1 is set on purpose.
+      this.registry.register(this.talabat);
     }
   }
 }

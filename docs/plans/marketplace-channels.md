@@ -1,6 +1,6 @@
 # Marketplace channels (Deliveroo, Talabat): facts, design, hand-off
 
-Status: E0 (facts) and E1 (framework) are built on branch `feat/marketplace-framework`. E2 (Deliveroo provider and webhook endpoint), E3 (Talabat provider, behind the stub until credentials exist) and E4 (admin UI) build on the interface described here. Everything ships **disabled**: no provider is registered in production by E1, `channelconnection.enabled` defaults to 0, and the feature flag `marketplace_channels` defaults to false.
+Status: E0 (facts) and E1 (framework) are built on branch `feat/marketplace-framework`. E2 (Deliveroo provider and webhook endpoint), E3 (Talabat provider, behind an in-repo simulator until a contract, credentials and a sandbox exist; built on branch `feat/marketplace-talabat`) and E4 (admin UI) build on the interface described here. Everything ships **disabled**: no provider is registered in production by E1, `channelconnection.enabled` defaults to 0, and the feature flag `marketplace_channels` defaults to false.
 
 Rule used throughout: **VERIFIED** means read on a public documentation page (URL and date given). **INFERRED** means reasoned from those pages or from this codebase and not confirmed by the vendor. No date or commitment is promised to or on behalf of either marketplace.
 
@@ -84,7 +84,7 @@ The public Talabat documentation is the Delivery Hero partner API, written aroun
 | Standard | Where it lives in the design |
 |---|---|
 | Signed commercial contract | Outside the code. Gate for E3 production. |
-| Menu push | `ChannelProvider.pushCatalogue` (capability `catalogueSync`). Not implemented by the stub. |
+| Menu push | `ChannelProvider.pushCatalogue` (capability `catalogueSync`). Implemented by the Talabat simulator provider (section 12); not by the stub. |
 | Item availability | `setItemAvailability` (capability `itemAvailability`); the stub implements it. |
 | Order endpoint | `ChannelIngestionService.receive()`: the shared, provider-neutral inbox function. The HTTP controller is E2/E3. |
 | Branch availability status | `setBranchStatus` (capability `branchStatus`). |
@@ -302,6 +302,75 @@ E2 and E3 are not mergeable unless all of these hold:
 ## 11. Hand-off for E2, E3, E4
 
 - **E2 (Deliveroo):** implement `ChannelProvider` (HMAC `X-Deliveroo-Hmac-Sha256` over `guid + " " + raw body`, `extractRoutingKey` = `body.location_id`, `parseEvent`, `acceptOrder`/`rejectOrder` with the 204/409/503 rules and the 5-per-minute limit, `testConnection` that **proves** the location is visible to the credentials, `fetchOrderStatus`, `listOpenOrders`, `platformWebhookSecrets()` from `DELIVEROO_*_WEBHOOK_SECRET` if the secret is platform-wide). Add the public controller `POST /channels/deliveroo/webhook` that reads the raw body, calls `ChannelIngestionService.receive({ provider, rawBody, headers })` (no `processInline`), returns 200 only when it resolves, and lets `ChannelWebhookRejectedException` through unchanged. Throttle it by IP, never by connection id. Derive `acceptBy` from `status_log.placed.at` plus the market window. Fill section 8.
-- **E3 (Talabat):** the webhook credential is a shared string or Basic auth header, not an HMAC: `verifyWebhook` compares it in constant time; the routing key is `client.store_id` / `client.external_partner_config_id`; delivery ids are not documented (the core falls back to the body hash, so a changed redelivery of the same order is a new inbox row but the same `channelorder`).
+- **E3 (Talabat):** built behind a simulator, see section 12. The webhook credential is a shared string or Basic auth header, not an HMAC: `verifyWebhook` compares it in constant time; the routing key is `client.store_id` / `client.external_partner_config_id`; delivery ids are not documented (the core falls back to the body hash, so a changed redelivery of the same order is a new inbox row but the same `channelorder`).
 - **E4 (admin UI):** every field comes from the `/channels` endpoints above; credentials are write-only; show `acceptBy` as a countdown, `priceMismatch`, the unmapped queue with waiting orders, `lastError`, and `GET /channels/stats`.
 - Production steps for E1: none. Deploy migrate then backend; nothing is registered in production, so nothing can be enabled.
+
+## 12. Talabat behind a simulator (E3)
+
+**Nothing here talks to Talabat.** No request was made to Talabat, no credential exists, and no date or commitment is implied. `backend/src/channels/providers/talabat/` holds a provider (`talabat-channel.provider.ts`), a payload parser (`talabat-payload.ts`) and an in-memory fake of the Partner API (`talabat-simulator.ts`). The provider's only transport is that fake: there is **no HTTP client in the folder** (a unit test scans for `fetch`, `http(s)`, `axios`, `undici`, `XMLHttpRequest`, WebSocket and the Talabat hostnames, and fails if one appears). It is registered only where the stub channel is (`NODE_ENV` test or development, or `ENABLE_STUB_CHANNEL=1`), so in production `talabat` is an unknown provider and a connection cannot even be created.
+
+**Real connection is impossible by construction, in three layers:** (1) not registered in production; (2) credentials carry an optional `apiBase`, and anything other than the literal `simulator` makes `testConnection` (and every other call) refuse before a single request, so enabling answers 400 and the connection stays disabled; (3) even the simulator refuses an account without a signed contract (the VERIFIED prerequisite), wrong credentials, or a store that is not part of the chain. A real transport would be a new, separately reviewed change.
+
+### 12.1 What is modelled, VERIFIED versus INFERRED
+
+| Item | Label | Source / note |
+|---|---|---|
+| Host, OAuth token path, 2-hour token, one token per chain | VERIFIED | Section 3. The simulator mints a 2h token and refuses another chain's. The provider caches and refreshes 5 minutes early. |
+| Webhook is a shared secret or a Basic value, not an HMAC | VERIFIED | `verifyWebhook` compares in constant time over fixed-size digests, so the secret's length does not leak. |
+| The secret arrives in the `Authorization` header (raw or `Basic <value>`) | **INFERRED** | The docs say the secret is "sent with the request" but not in which header. Accepted: the value itself or `Basic <value>`. |
+| Retries (10 s, 5 times) and duplicate delivery | VERIFIED | Delivery ids are undocumented, so the core's body-hash fallback makes an identical retry a duplicate; a changed redelivery of one order is a new inbox row but never a second order (tested). |
+| Order events `RECEIVED`, `READY_FOR_PICKUP`, `DISPATCHED`, `CANCELLED` | VERIFIED | That the event is carried in a top-level `status` field is **INFERRED**. Any other value is processed as "ignored", visible in the inbox, and does not count against ingestion success. |
+| Field names: `order_id`, `external_order_id`, `order_code`, `client.store_id`, `items[].sku`, `pricing`, `original_pricing`, `payment.sub_total/order_total/delivery_fee/discount/total_taxes/type`, `customer`, `cancellation`, `sys`, `promised_for`, `isPreorder` | VERIFIED (names) | Section 3. |
+| `pricing.discount` is the TOTAL discount on the line; `original_pricing.unit_price` is the price before a promotion; money as decimal numbers in major units | **INFERRED** | Read as exact decimal strings (never floats). `original_pricing` absent: the stated `pricing.unit_price` is the unit price. |
+| A top-level `currency` (or `payment.currency`) | **INFERRED** | The documented field list names no currency. Without one the order is dead-lettered visibly (`currency is missing from the order`) rather than guessed. Q15. |
+| `delivery_type` = `PLATFORM_DELIVERY` / `VENDOR_DELIVERY` / `PICKUP` | **INFERRED** | The docs distinguish READY_FOR_PICKUP (platform delivery) from DISPATCHED (vendor delivery) but name no payload field. Unknown or absent maps to the marketplace courier, the safe answer (never reaches the driver-dispatch lists). |
+| Cash payment: `payment.type` containing "cash" means cash due = order total | **INFERRED** | Anything else leaves cash due NULL. |
+| Routing key | VERIFIED field | `client.store_id` only. `external_partner_config_id` is deliberately not read (one location id per request, review rule 5). |
+| `PUT /orders/{id}` with `UPDATE_CART`, `READY_FOR_PICKUP`, `DISPATCHED`, cancel with `CLOSED`/`ITEM_UNAVAILABLE`/`TOO_BUSY`; 60 requests per minute for GET and PUT together | VERIFIED | The simulator enforces the 60-per-minute window and the platform/vendor delivery split. |
+| "Accept" as `UPDATE_CART` confirming the cart | **INFERRED** | Talabat documents no separate accept call. Reject = a cancel with the closest documented reason. If Talabat has no accept step the capability should become local-only. Q16. |
+| Outage fallback `GET .../vendors/{vendor_id}` and `GET .../orders/{order_id}` | VERIFIED | Polling ids are `poll:<order_id>:<status>`, deterministic. |
+| Outlet status `OPEN`, `CLOSED_TODAY`, `CLOSED_UNTIL`, `CHECKIN` and `closed_reason` | VERIFIED | `setBranchStatus`: open, closed (today, or until a time), busy (`TOO_BUSY_KITCHEN`). |
+| Catalog push, asynchronous, keyed by `sku` | VERIFIED | The sku sent is the mapping's `externalItemId`: the same product is always the same sku across renames and price changes (stable ids, tested). Availability is a partial catalog update (`active` only), which the simulator allows for an existing sku. That partial updates are accepted is **INFERRED**. |
+| Dynamic prep-time adjustment | **INFERRED** | Owner supplied; no public endpoint. The simulator takes whole minutes 1 to 240 (an arbitrary sane bound, not a Talabat rule). |
+| Food is ready | VERIFIED statuses, INFERRED mapping | A person's action, never automatic: platform delivery sends READY_FOR_PICKUP, vendor delivery sends DISPATCHED. |
+| Signed contract before any credential | Owner supplied (INFERRED to be enforced by Talabat) | The simulator refuses a token without one. |
+| Item-level discounts in the order payload | Owner supplied; the docs show per-item discount and promotion fields | Captured: see 12.2. |
+| Failure rate <= 2.5% and ingestion success >= 98.9% | Owner supplied (INFERRED), definitions unknown (Q9) | See 12.3. |
+| Acceptance deadline | **Not documented** | `acceptBy` is always NULL (never invented); the core's 15-minute stale alert covers it. |
+| Commission | **Not in the order payload** | Always NULL. |
+
+### 12.2 Rules the provider keeps
+
+- **Item-level discounts are captured, never invented.** The line's stated discount goes into the new nullable `orderitem.marketplaceDiscountAmount` (migration `20261112100000`, additive, no backfill; NULL means the payload did not say, never zero). `priceAtPurchase` stays the price before the discount and the order total is what Talabat says the customer paid. The E1 core used to drop the line discount when it cleared the canonical snapshot; this is the one change to core. The line tax stays NULL (a VAT percent is a rate, not an amount); the order tax is `payment.total_taxes` when stated.
+- **Minimal customer data:** name and the customer's comment are kept; a phone and address only when the merchant delivers the order itself (`VENDOR_DELIVERY`). For a marketplace courier or pickup they are never stored.
+- `provesLocationOwnership` is **false** and stays false: one token covers every store of a chain (VERIFIED), so working credentials say nothing about who owns a store. Requital staff verify the store id with Talabat before it can be enabled; the platform-wide one-enabled-owner-per-store index still applies.
+- No gateway charge, no marketing (conversion events), per-shop order numbers, idempotency, and unmapped items visible are all the E1 core's behaviour and are re-asserted for Talabat's shape in `test/marketplace-talabat.e2e-spec.ts`.
+- Messages returned to the merchant never contain a credential (tested with a wrong secret).
+- **Only three things are fatal when parsing an order:** the unit price of a line, `payment.order_total` and the currency. Every informational figure (line discount, sub-total, delivery fee, order discount, tax) that cannot be read (negative, "5%", exponent form, text) becomes NULL, so an order Talabat has already sent is never dead-lettered over a figure we only display. A line discount larger than unit price x quantity cannot be true and is stored NULL (no flag column exists; the order is still created and the stated order total stays authoritative).
+- A token is cached per credentials (hash of client id, secret and chain id), not per connection row, so changed credentials never reuse an old token. A polling event id hashes an order id longer than 100 characters so the 191-character inbox cut can never remove the status suffix.
+- **Excess precision is rounded silently.** `decimalToMinor` rounds half up past the currency's decimals (a 2-decimal amount like `10.505` in AED becomes 1051). That is the shared helper's documented behaviour; no marketplace amount is rejected for it and nothing records that rounding happened.
+- **Invoices (Q12):** an invoice or packing slip generated for a Talabat order is arithmetic over `priceAtPurchase` (the price BEFORE the line discount) and the order's own totals. With item-level discounts and no order-level discount stated, the printed lines can add up to more than the order total, because `marketplaceDiscountAmount` is not read by the invoice renderer. Block invoices for marketplace orders (Q12) or teach the renderer the line discount before a merchant relies on one.
+- **Retention:** the inbox payload (including a vendor-delivery customer's phone and address) is kept until the 30-day purge (section 5.10); the minimal-data rule above governs what is written to the order, not to the inbox payload.
+
+### 12.3 Ingestion success and failure rate
+
+`GET /channels/stats/connections?sinceMinutes=` (admin, shop-scoped on both tables) returns one row per connection of the shop, with traffic or not: `received`, `processed`, `failed` (retrying plus dead), `dead`, `inFlight`, `ingestionSuccessPct`, `failurePct` (one decimal), and `meetsIngestionTarget` (>= 98.9) and `meetsFailureTarget` (<= 2.5), each NULL when nothing has finished (no data is not a pass). `GET /channels/stats?connectionId=` gives the same numbers for one connection of the shop (a foreign id matches no rows). Both come from `channelinboundevent` only; a retrying `failed` row counts as a failure until it is processed, which is the conservative reading. Note the two targets are not complements (success >= 98.9 means failure <= 1.1 under this definition), so both are reported. What Talabat itself counts as a vendor failure (for example rejections or auto-cancels, which are order outcomes and not inbox outcomes) is theirs to define (Q9); no order-outcome metric is built until it is.
+
+### 12.4 What to request from Talabat (no dates implied)
+
+1. A **signed commercial contract** (the prerequisite for everything below).
+2. **Partner API credentials** (client id and secret per chain) and the exact OAuth call (method, grant type; Q4 style ambiguity applies here too).
+3. A **sandbox**: sandbox credentials and vendor ids, a way to create test orders that reach a webhook URL we give them, and a way to test item replacement (the public docs say it cannot be tested in the sandbox).
+4. The **webhook specification**: the exact header that carries the shared secret, the payload schema per event (including the status field name, the currency field, the delivery-type field, the exact `pricing.discount` semantics), whether a delivery id exists, and the retry and ordering guarantees.
+5. The **acceptance model**: is there an accept step, a deadline, an auto-cancel rule; the meaning of "warning status".
+6. The **restaurant-style endpoints** the owner listed (menu push, food is ready, branch availability, dynamic prep time): paths, bodies, limits. The public docs describe grocery picking only.
+7. How a **store id is bound to a merchant**, so staff verification can be done (or replaced by a per-merchant credential, which is the only thing that could make `provesLocationOwnership` true).
+8. The **definition and window** of the 2.5% failure and 98.9% ingestion targets.
+
+### 12.5 Open questions added by E3
+
+- **Q15** Where does a Talabat order state its currency? Until answered the simulator carries `currency` and a real payload without it would dead-letter.
+- **Q16** Does Talabat have an accept step? If not, accepting should become a local state change and the capability `acceptReject` should only cover the reject (cancel) call.
+- **Q17** The E1 core never calls `markReady`, `setItemAvailability`, `setBranchStatus`, `pushCatalogue` or `adjustPrepTime`; E3 implements them on the provider (tested against the simulator) but no admin endpoint invokes them yet. They need E4 endpoints (with audit logging, `orders.manage`, and "food is ready" as a deliberate human action) before a merchant can use them.
+- **Q18** `ENABLE_STUB_CHANNEL=1` also registers the Talabat simulator. It is harmless (simulator only) but should not be set in production.
