@@ -66,10 +66,11 @@ export default function SalesChannelsPage() {
     return (
       <PageShell>
         <Card>
-          <EmptyState
-            title="Sales channels are not available for your shop yet"
-            description="Taking Deliveroo and Talabat orders in Requital is being rolled out shop by shop. Nothing changes for your store until it is switched on for you."
-          />
+          <h3 className="mb-1 text-[15px] font-bold text-text-primary dark:text-zinc-50">Sales channels are not available for your shop yet</h3>
+          <p className="text-[13px] text-text-secondary dark:text-zinc-300">
+            Taking Deliveroo and Talabat orders in Requital is being rolled out shop by shop. Nothing changes for your store until it
+            is switched on for you.
+          </p>
         </Card>
       </PageShell>
     );
