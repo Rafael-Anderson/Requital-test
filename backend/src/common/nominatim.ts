@@ -26,10 +26,10 @@ export async function geocodeAddress(query?: string): Promise<GeocodeResult> {
   try {
     res = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT } });
   } catch {
-    throw new BadRequestException('Geocoding lookup failed — try again');
+    throw new BadRequestException('Geocoding lookup failed. Try again');
   }
   if (!res.ok) {
-    throw new BadRequestException('Geocoding lookup failed — try again');
+    throw new BadRequestException('Geocoding lookup failed. Try again');
   }
   const results = (await res.json()) as {
     lat: string;
@@ -72,12 +72,12 @@ export async function reverseGeocodeAddress(
     res = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT } });
   } catch {
     throw new BadRequestException(
-      'Reverse geocoding lookup failed — try again',
+      'Reverse geocoding lookup failed. Try again',
     );
   }
   if (!res.ok) {
     throw new BadRequestException(
-      'Reverse geocoding lookup failed — try again',
+      'Reverse geocoding lookup failed. Try again',
     );
   }
   const result = (await res.json()) as {

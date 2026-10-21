@@ -223,7 +223,7 @@ export class CustomerAccountService {
         customer.lastDataExportAt.getTime() + EXPORT_RATE_LIMIT_MS,
       );
       throw new BadRequestException(
-        `You can request your data once every 24 hours — try again after ${retryAt.toISOString()}`,
+        `You can request your data once every 24 hours. Try again after ${retryAt.toISOString()}`,
       );
     }
 

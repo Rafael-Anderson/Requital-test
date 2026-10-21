@@ -20,7 +20,7 @@ describe('ResendEmailProvider', () => {
     const provider = new ResendEmailProvider();
     const result = await provider.sendEmail({
       to: 'customer@example.com',
-      subject: 'Order confirmation — #42',
+      subject: 'Order confirmation #42',
       text: 'Thanks for your order.',
       html: '<p>Thanks for your order.</p>',
       fromName: 'Test Shop',
@@ -37,7 +37,7 @@ describe('ResendEmailProvider', () => {
     const sentBody = JSON.parse(init.body);
     expect(sentBody.from).toBe('Requital <noreply@requital.io>');
     expect(sentBody.to).toBe('customer@example.com');
-    expect(sentBody.subject).toBe('Order confirmation — #42');
+    expect(sentBody.subject).toBe('Order confirmation #42');
     expect(sentBody.text).toBe('Thanks for your order.');
     expect(sentBody.html).toBe('<p>Thanks for your order.</p>');
 

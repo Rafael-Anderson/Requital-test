@@ -164,7 +164,7 @@ export class GiftCardsService {
     );
     if ((result as { affectedRows: number }).affectedRows === 0) {
       throw new ConflictException(
-        "This gift card's balance just changed — please try again",
+        "This gift card's balance just changed. Please try again",
       );
     }
     await conn.query(
@@ -239,7 +239,7 @@ export class GiftCardsService {
       const bodyLines = [
         `Thanks for your purchase from ${shopName}! Here ${issued.length === 1 ? 'is your gift card code' : 'are your gift card codes'}:`,
         '',
-        ...issued.map((g) => `${g.code} — ${g.initialValue}`),
+        ...issued.map((g) => `${g.code}: ${g.initialValue}`),
       ];
       const codeRows = issued
         .map(
@@ -317,7 +317,7 @@ export class GiftCardsService {
       if (rows.length === 0) return code;
     }
     throw new ConflictException(
-      'Could not generate a unique gift card code — please try again',
+      'Could not generate a unique gift card code. Please try again',
     );
   }
 

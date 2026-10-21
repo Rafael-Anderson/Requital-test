@@ -345,7 +345,7 @@ export class AuthService {
         [new Date(), stored.familyId],
       );
       throw new UnauthorizedException(
-        'Refresh token reuse detected — all sessions revoked, please log in again',
+        'Refresh token reuse detected. All sessions revoked, please log in again',
       );
     }
     return rotated;
@@ -977,7 +977,7 @@ export class AuthService {
 <tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
 <tr><td style="padding:40px;">
 <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(user.name)},</p>
-<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">You've been invited to a Requital staff account. Set your password to activate it — this link expires in ${INVITE_TOKEN_LIFETIME_DAYS} days.</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#111111;">You've been invited to a Requital staff account. Set your password to activate it. This link expires in ${INVITE_TOKEN_LIFETIME_DAYS} days.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;"><tr><td style="border-radius:6px;background-color:#0d9488;"><a href="${link}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px;">Set password</a></td></tr></table>
 <p style="margin:0 0 4px;font-size:13px;color:#666666;">Or copy this link into your browser:</p>
 <p style="margin:0;font-size:12px;color:#999999;font-family:monospace;word-break:break-all;">${link}</p>

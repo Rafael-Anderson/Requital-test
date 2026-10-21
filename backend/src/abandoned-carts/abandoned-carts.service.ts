@@ -261,7 +261,7 @@ export class AbandonedCartsService {
         '',
         ...items.map(
           (i) =>
-            `- ${i.quantity}x ${i.name}${i.variantLabel ? ` (${i.variantLabel})` : ''} — ${i.price}`,
+            `- ${i.quantity}x ${i.name}${i.variantLabel ? ` (${i.variantLabel})` : ''}: ${i.price}`,
         ),
         '',
         `Pick up where you left off: ${storefrontUrl(
