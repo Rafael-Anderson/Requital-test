@@ -8,7 +8,10 @@ import {
   type BoundChannelConnection,
 } from '../../channel.types';
 import { parseTalabatEvent, routingKeyOf } from './talabat-payload';
-import { TalabatChannelProvider } from './talabat-channel.provider';
+import {
+  TalabatChannelProvider,
+  pollEventId,
+} from './talabat-channel.provider';
 import { TalabatSimulator } from './talabat-simulator';
 
 const CHAIN = 'chain-1';
@@ -44,6 +47,12 @@ function setup(contractSigned = true) {
     ...over,
   });
   return { sim, provider, conn };
+}
+
+// The simulator's body is loosely typed; the setters below poke into it.
+interface Body {
+  items: { pricing: Record<string, unknown> }[];
+  payment: Record<string, unknown>;
 }
 
 describe('Talabat payload parsing', () => {
@@ -206,6 +215,56 @@ describe('Talabat payload parsing', () => {
         ...over.payment,
       };
     expect(() => parseTalabatEvent(body)).toThrow(ChannelParseError);
+  });
+
+  it.each([
+    [
+      'pricing.discount',
+      (b: Body, v: unknown) => (b.items[0].pricing.discount = v),
+    ],
+    ['payment.sub_total', (b: Body, v: unknown) => (b.payment.sub_total = v)],
+    [
+      'payment.delivery_fee',
+      (b: Body, v: unknown) => (b.payment.delivery_fee = v),
+    ],
+    ['payment.discount', (b: Body, v: unknown) => (b.payment.discount = v)],
+    [
+      'payment.total_taxes',
+      (b: Body, v: unknown) => (b.payment.total_taxes = v),
+    ],
+  ])(
+    'an unreadable optional figure (%s) is NULL and never loses the order',
+    (_n, set) => {
+      for (const bad of ['-5', '5%', '1e3', 'abc', {}, -3, '1,5']) {
+        const body = received({ items: [{ sku: 'A', unitPrice: 5 }] });
+        set(body as unknown as Body, bad);
+        const e = parseTalabatEvent(body);
+        if (e.kind !== 'order_new') throw new Error('expected order_new');
+        const t = e.order.totals;
+        expect([
+          e.order.lines[0].discountMinor,
+          t.subtotalMinor,
+          t.deliveryFeeMinor,
+          t.discountMinor,
+          t.taxMinor,
+        ]).toContain(null);
+        expect(t.totalMinor).toBe(500);
+      }
+    },
+  );
+
+  it('a line discount larger than the line is not stored', () => {
+    const at = (d: number) => {
+      const e = parseTalabatEvent(
+        received({
+          items: [{ sku: 'A', unitPrice: 5, quantity: 2, discount: d }],
+        }),
+      );
+      return e.kind === 'order_new' ? e.order.lines[0].discountMinor : 'x';
+    };
+    expect(at(10)).toBe(1000); // exactly the line: kept
+    expect(at(10.01)).toBeNull();
+    expect(at(0)).toBe(0);
   });
 
   it('turns status events into canonical statuses, and ignores the unmodelled', () => {
@@ -473,6 +532,44 @@ describe('Talabat provider against the simulator', () => {
     expect(b.map((x) => x.eventId)).toEqual(a.map((x) => x.eventId));
     await provider.rejectOrder(c, o.order_id, 'x');
     expect(await provider.listOpenOrders(c)).toEqual([]);
+  });
+
+  it('a token belongs to its credentials: changed credentials never reuse it', async () => {
+    const { sim, provider, conn } = setup();
+    sim.registerAccount({
+      clientId: 'cid2',
+      clientSecret: 'secret-two-value',
+      chainId: CHAIN,
+      contractSigned: true,
+      vendorIds: [STORE],
+    });
+    const tokens = () => sim.log.filter((l) => l.op === 'token').length;
+    await provider.adjustPrepTime(conn(), 10);
+    await provider.adjustPrepTime(conn(), 10);
+    expect(tokens()).toBe(1);
+    const swapped = conn({
+      credentials: {
+        clientId: 'cid2',
+        clientSecret: 'secret-two-value',
+        chainId: CHAIN,
+      },
+    });
+    await provider.adjustPrepTime(swapped, 10); // same connection id, new credentials
+    expect(tokens()).toBe(2);
+    await provider.adjustPrepTime(conn(), 10); // back to the first: its own token
+    expect(tokens()).toBe(2);
+  });
+
+  it('a long order id keeps the status in the polling event id', () => {
+    const long = 'o'.repeat(300);
+    const id = pollEventId(long, 'READY_FOR_PICKUP');
+    expect(id.length).toBeLessThanOrEqual(191);
+    expect(id.endsWith(':READY_FOR_PICKUP')).toBe(true);
+    expect(pollEventId(long, 'RECEIVED')).not.toBe(id);
+    expect(pollEventId(`${'o'.repeat(299)}p`, 'RECEIVED')).not.toBe(
+      pollEventId(long, 'RECEIVED'),
+    );
+    expect(pollEventId('abc', 'RECEIVED')).toBe('poll:abc:RECEIVED');
   });
 
   it('caches the token, refreshes before expiry, and honours the 60/min limit', async () => {

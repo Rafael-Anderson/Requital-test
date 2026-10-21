@@ -521,6 +521,24 @@ describe('Marketplace channels: Talabat simulator (E3)', () => {
       expect((await link(ta, o.order_id)).state).toBe('pending_acceptance');
     });
 
+    it('garbage in an optional figure leaves it NULL and still creates the order', async () => {
+      const p = await product(a, 5);
+      await mapItem(a, 'sku-garbage', p.id);
+      const o = place(ta, {
+        items: [{ sku: 'sku-garbage', unitPrice: 25, discount: '5%' }],
+        payment: { total_taxes: '-1', discount: 'abc', delivery_fee: '1e2' },
+      });
+      await deliver(ta, o);
+      const co = await link(ta, o.order_id);
+      expect(co.state).toBe('pending_acceptance');
+      const order = await f.orderRow(co.orderId);
+      expect(order.taxAmount).toBeNull();
+      expect(order.discountAmount).toBeNull();
+      expect(
+        (await f.orderItems(co.orderId))[0].marketplaceDiscountAmount,
+      ).toBeNull();
+    });
+
     it('a delivery the merchant makes keeps the phone and address', async () => {
       const p = await product(a, 5);
       await mapItem(a, 'sku-own', p.id);

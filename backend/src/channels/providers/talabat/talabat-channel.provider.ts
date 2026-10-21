@@ -43,6 +43,24 @@ function sameSecret(a: string, b: string): boolean {
   return timingSafeEqual(d(a), d(b));
 }
 
+// A token belongs to the credentials that minted it, not to a connection row:
+// changed credentials can never reuse an old token.
+function tokenKey(c: Creds): string {
+  return createHash('sha256')
+    .update(`${c.clientId}\0${c.clientSecret}\0${c.chainId}`)
+    .digest('hex');
+}
+
+// The inbox keeps 191 characters of an event id: hash a long order id so the
+// status suffix is never the part that gets cut.
+export function pollEventId(orderId: string, status: string): string {
+  const id =
+    orderId.length > 100
+      ? createHash('sha256').update(orderId).digest('hex')
+      : orderId;
+  return `poll:${id}:${status}`;
+}
+
 interface Creds {
   clientId: string;
   clientSecret: string;
@@ -70,7 +88,7 @@ export class TalabatChannelProvider implements ChannelProvider {
   };
 
   private readonly tokens = new Map<
-    number,
+    string,
     { token: string; expiresAt: number }
   >();
 
@@ -132,11 +150,12 @@ export class TalabatChannelProvider implements ChannelProvider {
   }
 
   private token(conn: BoundChannelConnection, c: Creds): string {
-    const hit = this.tokens.get(conn.id);
+    const key = tokenKey(c);
+    const hit = this.tokens.get(key);
     if (hit && hit.expiresAt > this.sim.now()) return hit.token;
     const t = this.sim.token(c.clientId, c.clientSecret);
     // Refresh five minutes early.
-    this.tokens.set(conn.id, {
+    this.tokens.set(key, {
       token: t.access_token,
       expiresAt: this.sim.now() + (t.expires_in - 300) * 1000,
     });
@@ -160,7 +179,7 @@ export class TalabatChannelProvider implements ChannelProvider {
     } catch (e) {
       // A rejected token must not stick.
       if (e instanceof TalabatSimulatorError && e.status === 401)
-        this.tokens.delete(conn.id);
+        this.tokens.delete(tokenKey(c));
       return SAFE(e);
     }
   }
@@ -325,7 +344,7 @@ export class TalabatChannelProvider implements ChannelProvider {
       conn.externalLocationId,
     );
     return orders.map((payload) => ({
-      eventId: `poll:${payload.order_id}:${payload.status}`,
+      eventId: pollEventId(payload.order_id, payload.status),
       payload,
     }));
   }

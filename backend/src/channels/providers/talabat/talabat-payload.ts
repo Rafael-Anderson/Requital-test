@@ -35,6 +35,28 @@ function money(v: unknown, currency: string, field: string): number | null {
   return minor;
 }
 
+// For an informational figure (a discount, a sub-total, a fee, a tax): one that
+// cannot be read is NULL (unknown), never a reason to dead-letter an order the
+// marketplace has already sent. Only the unit price, the order total and the
+// currency are fatal, because the order cannot be created without them.
+function optMoney(v: unknown, currency: string): number | null {
+  try {
+    return money(v, currency, 'optional amount');
+  } catch {
+    return null;
+  }
+}
+
+function lineDiscount(
+  v: unknown,
+  currency: string,
+  unitMinor: number,
+  qty: number,
+): number | null {
+  const d = optMoney(v, currency);
+  return d !== null && d <= unitMinor * qty ? d : null;
+}
+
 function text(v: unknown): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null;
 }
@@ -91,11 +113,8 @@ function buildOrder(b: Obj): CanonicalChannelOrder {
       quantity: qty,
       unitPriceMinor: unit,
       // Item-level discount: captured only when stated. NULL = unknown.
-      discountMinor: money(
-        pricing.discount,
-        currency,
-        `items[${i}].pricing.discount`,
-      ),
+      // A discount larger than the line itself cannot be true: NULL, not stored.
+      discountMinor: lineDiscount(pricing.discount, currency, unit, qty),
       // vat_percent is a rate, not an amount: the line tax stays unknown.
       taxMinor: null,
       note: null,
@@ -131,14 +150,10 @@ function buildOrder(b: Obj): CanonicalChannelOrder {
     handover,
     lines,
     totals: {
-      subtotalMinor: money(pay.sub_total, currency, 'payment.sub_total'),
-      deliveryFeeMinor: money(
-        pay.delivery_fee,
-        currency,
-        'payment.delivery_fee',
-      ),
-      discountMinor: money(pay.discount, currency, 'payment.discount'),
-      taxMinor: money(pay.total_taxes, currency, 'payment.total_taxes'),
+      subtotalMinor: optMoney(pay.sub_total, currency),
+      deliveryFeeMinor: optMoney(pay.delivery_fee, currency),
+      discountMinor: optMoney(pay.discount, currency),
+      taxMinor: optMoney(pay.total_taxes, currency),
       commissionMinor: null,
       totalMinor: total,
       // INFERRED: a cash payment type means the customer owes the whole total.
