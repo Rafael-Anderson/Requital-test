@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/unbound-method -- fixtures are untyped JSON and jest.fn() mocks */
 import {
   FAKE_CLIENT_ID,
   FAKE_CLIENT_SECRET,
@@ -30,7 +29,12 @@ function fakeHttp(
 ) {
   const calls: Call[] = [];
   const fn = jest.fn((input: string | URL | Request, init?: RequestInit) => {
-    const url = String(input);
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
     const headers = (init?.headers ?? {}) as Record<string, string>;
     const call: Call = {
       url,
@@ -96,9 +100,11 @@ describe('Deliveroo webhook verification', () => {
     expect(verify({ ...good(), 'x-deliveroo-hmac-sha256': 'abc' }).valid).toBe(
       false,
     );
-    const { 'x-deliveroo-hmac-sha256': _s, ...noSig } = good();
+    const noSig: Record<string, string> = { ...good() };
+    delete noSig['x-deliveroo-hmac-sha256'];
     expect(verify(noSig).valid).toBe(false);
-    const { 'x-deliveroo-sequence-guid': _g, ...noGuid } = good();
+    const noGuid: Record<string, string> = { ...good() };
+    delete noGuid['x-deliveroo-sequence-guid'];
     expect(verify(noGuid).valid).toBe(false);
   });
   it('rejects a guid that contains whitespace (it would let one signed pair pose as another)', () => {
@@ -630,10 +636,8 @@ describe('Deliveroo API client', () => {
   });
   it('never puts a credential or token in an error message', async () => {
     const c = new DeliverooApiClient();
-    c.fetchImpl = (() =>
-      Promise.reject(
-        new Error(`boom ${FAKE_CLIENT_SECRET} tok-fake`),
-      )) as unknown as typeof fetch;
+    c.fetchImpl = () =>
+      Promise.reject(new Error(`boom ${FAKE_CLIENT_SECRET} tok-fake`));
     const err = await c
       .request(creds, 'GET', `${DELIVEROO_SANDBOX.orderBase}/v2/orders/a`)
       .catch((e: Error) => e);
@@ -641,12 +645,12 @@ describe('Deliveroo API client', () => {
     expect((err as Error).message).not.toContain(FAKE_CLIENT_SECRET);
     expect((err as Error).message).not.toContain('tok-fake');
     const bad = new DeliverooApiClient();
-    bad.fetchImpl = (() =>
+    bad.fetchImpl = () =>
       Promise.resolve(
         new Response(JSON.stringify({ error: FAKE_CLIENT_SECRET }), {
           status: 401,
         }),
-      )) as unknown as typeof fetch;
+      );
     const e2 = await bad.token(creds).catch((e: Error) => e);
     expect((e2 as Error).message).not.toContain(FAKE_CLIENT_SECRET);
   });
@@ -883,12 +887,12 @@ describe('Deliveroo outbound calls', () => {
     setup(() => ({ status: 404 }));
     const bad = await p.testConnection(conn());
     expect(bad.ok).toBe(false);
-    p.api.fetchImpl = (() =>
+    p.api.fetchImpl = () =>
       Promise.resolve(
         new Response(JSON.stringify({ error: FAKE_CLIENT_SECRET }), {
           status: 401,
         }),
-      )) as unknown as typeof fetch;
+      );
     const denied = await p.testConnection(conn());
     expect(denied.ok).toBe(false);
     expect(JSON.stringify(denied)).not.toContain(FAKE_CLIENT_SECRET);

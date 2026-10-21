@@ -85,7 +85,10 @@ const REQUEST_TIMEOUT_MS = 10_000;
 
 export class DeliverooApiClient {
   // Overridable seams for tests.
-  fetchImpl: typeof fetch = (input, init) => fetch(input, init);
+  fetchImpl: typeof fetch = (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) => globalThis.fetch(input, init);
   now: () => number = () => Date.now();
 
   private readonly tokens = new Map<string, CachedToken>();

@@ -75,8 +75,13 @@ describe('Deliveroo marketplace channel (E2)', () => {
     json?: unknown;
   } = () => ({ status: 200, json: { orders: [] } });
   let tokenCalls = 0;
-  const fakeFetch = ((input: string | URL | Request, init?: RequestInit) => {
-    const url = String(input);
+  const fakeFetch = (input: string | URL | Request, init?: RequestInit) => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
     const parsed =
       typeof init?.body === 'string' && init.body.startsWith('{')
         ? JSON.parse(init.body)
@@ -109,7 +114,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
           : {},
       }),
     );
-  }) as unknown as typeof fetch;
+  };
   const patches = () => calls.filter((c) => c.method === 'PATCH');
 
   // ---- fixtures ----------------------------------------------------------------
@@ -126,7 +131,6 @@ describe('Deliveroo marketplace channel (E2)', () => {
   let ca: Conn;
   let cb: Conn;
   let gseq = 0;
-  let oseq = 0;
 
   async function grantFlag(shop: W5Shop) {
     await db.execute(
@@ -224,7 +228,6 @@ describe('Deliveroo marketplace channel (E2)', () => {
 
   // A signed order for a connection. `items` default to one mapped line.
   function ord(c: Conn, over: Record<string, unknown> = {}) {
-    oseq += 1;
     return fakeOrder({
       location_id: c.locationId,
       brand_id: 'FAKE-BRAND-1',
@@ -251,7 +254,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
   function post(raw: string | Buffer, headers: Record<string, string>) {
     let req = r().post('/channels/deliveroo/webhook');
     for (const [k, v] of Object.entries(headers)) req = req.set(k, v);
-    return req.send(raw as string);
+    return req.send(raw);
   }
 
   async function inboxRows(connId: number) {
@@ -525,7 +528,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
       }
       expect(new Set(bodies).size).toBe(1);
       expect(await countInbox(ca.id, cb.id)).toBe(before);
-      expect(await link(ca, o.id as string)).toBeUndefined();
+      expect(await link(ca, o.id)).toBeUndefined();
     });
 
     it('S13 an unknown location id is the same 401, with no hint', async () => {
@@ -554,9 +557,9 @@ describe('Deliveroo marketplace channel (E2)', () => {
       expect(refused.status).toBe(401);
       const stock = await fresh(cb);
       expect((await newOrder(cb, stock.o)).res.status).toBe(200);
-      expect(await link(cb, stock.o.id as string)).toBeDefined();
-      expect(await link(ca, stock.o.id as string)).toBeUndefined();
-      const row = await link(cb, stock.o.id as string);
+      expect(await link(cb, stock.o.id)).toBeDefined();
+      expect(await link(ca, stock.o.id)).toBeUndefined();
+      const row = await link(cb, stock.o.id);
       expect(row.shopId).toBe(b.shopId);
     });
 
@@ -571,8 +574,8 @@ describe('Deliveroo marketplace channel (E2)', () => {
       const res = await post(raw, deliverooHeaders(ca.secret, guid, raw));
       expect(res.status).toBe(200);
       await settle(ca.id, guid);
-      expect(await link(ca, o.id as string)).toBeDefined();
-      expect(await link(cb, o.id as string)).toBeUndefined();
+      expect(await link(ca, o.id)).toBeDefined();
+      expect(await link(cb, o.id)).toBeUndefined();
     });
 
     it('a disabled connection is refused with the same 401', async () => {
@@ -587,7 +590,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
       const raw = webhookBody('order.new', o);
       const res = await post(raw, deliverooHeaders(c.secret, 'g-dis-1', raw));
       expect(res.status).toBe(401);
-      expect(await link(c, o.id as string)).toBeUndefined();
+      expect(await link(c, o.id)).toBeUndefined();
     });
 
     it('a delivery whose signed status time is stale is refused (replay of an old capture), nothing written', async () => {
@@ -659,7 +662,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
       });
       const { o } = await fresh(c);
       expect((await newOrder(c, o)).res.status).toBe(200);
-      expect(await link(c, o.id as string)).toBeDefined();
+      expect(await link(c, o.id)).toBeDefined();
       const o2 = ord(c);
       const raw = webhookBody('order.new', o2);
       expect(
@@ -682,7 +685,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
       );
       expect(res.status).toBe(401);
       expect(await countInbox(ca.id)).toBe(before);
-      expect(await link(ca, o.id as string)).toBeUndefined();
+      expect(await link(ca, o.id)).toBeUndefined();
     });
 
     it('M1 the platform secret is accepted for a connection without its own secret only outside production, and in production only with the explicit flag', async () => {
@@ -859,7 +862,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
       const { res } = await newOrder(ca, o);
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ received: true });
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       expect(co.state).toBe('pending_acceptance');
       const order = await f.orderRow(co.orderId);
       expect(order.channel).toBe('deliveroo');
@@ -879,13 +882,13 @@ describe('Deliveroo marketplace channel (E2)', () => {
     it('S02 accept sends PATCH accepted, and order.status_update accepted confirms the order once', async () => {
       const { p, o } = await fresh(ca);
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       await r().post(`/channels/orders/${co.id}/accept`).set(h(a)).expect(201);
       expect(patches()).toHaveLength(1);
-      expect(patches()[0].url).toContain(`/v1/orders/${o.id as string}`);
+      expect(patches()[0].url).toContain(`/v1/orders/${o.id}`);
       expect(patches()[0].body).toEqual({ status: 'accepted' });
       await statusEvent(ca, o, 'accepted');
-      expect((await link(ca, o.id as string)).state).toBe('accepted');
+      expect((await link(ca, o.id)).state).toBe('accepted');
       expect((await f.orderRow(co.orderId)).status).toBe('confirmed');
       expect(await f.productStock(ca.shop.outletId, p.id)).toBe(8);
     });
@@ -899,7 +902,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
       ]) {
         const { p, o } = await fresh(ca);
         await newOrder(ca, o);
-        const co = await link(ca, o.id as string);
+        const co = await link(ca, o.id);
         calls.length = 0;
         await r()
           .post(`/channels/orders/${co.id}/reject`)
@@ -921,14 +924,14 @@ describe('Deliveroo marketplace channel (E2)', () => {
         status_log: [{ status: 'placed', at: placed.toISOString() }],
       });
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       expect(
         Math.abs(
           new Date(co.acceptBy).getTime() - (placed.getTime() + 7 * 60_000),
         ),
       ).toBeLessThan(1000);
       await statusEvent(ca, o, 'rejected');
-      expect((await link(ca, o.id as string)).state).toBe('rejected');
+      expect((await link(ca, o.id)).state).toBe('rejected');
       expect((await f.orderRow(co.orderId)).status).toBe('cancelled');
       expect(await f.productStock(ca.shop.outletId, p.id)).toBe(10);
     });
@@ -936,9 +939,9 @@ describe('Deliveroo marketplace channel (E2)', () => {
     it('S05 customer cancel before accept cancels the order and restocks', async () => {
       const { p, o } = await fresh(ca);
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       await statusEvent(ca, o, 'canceled');
-      expect((await link(ca, o.id as string)).state).toBe('cancelled_upstream');
+      expect((await link(ca, o.id)).state).toBe('cancelled_upstream');
       expect((await f.orderRow(co.orderId)).status).toBe('cancelled');
       expect(await f.productStock(ca.shop.outletId, p.id)).toBe(10);
     });
@@ -946,7 +949,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
     it('S06 cancel after accept is acknowledged with 200 and cancels through the normal path', async () => {
       const { p, o } = await fresh(ca);
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       await r().post(`/channels/orders/${co.id}/accept`).set(h(a)).expect(201);
       const { res } = await statusEvent(ca, o, 'canceled');
       expect(res.status).toBe(200);
@@ -962,7 +965,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
         start_preparing_at: at,
       });
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       expect(co.acceptBy).toBeNull();
       expect(new Date(co.scheduledFor).toISOString()).toBe(
         new Date(at).toISOString(),
@@ -984,14 +987,14 @@ describe('Deliveroo marketplace channel (E2)', () => {
         String(x.eventId).startsWith(`${first.guid}:`),
       );
       expect(rows).toHaveLength(1);
-      expect(await countLinks(ca, o.id as string)).toBe(1);
+      expect(await countLinks(ca, o.id)).toBe(1);
     });
 
     it('S09 a redelivery with a new GUID is accepted and still one order', async () => {
       const { p, o } = await fresh(ca);
       await newOrder(ca, o);
       expect((await newOrder(ca, o)).res.status).toBe(200);
-      expect(await countLinks(ca, o.id as string)).toBe(1);
+      expect(await countLinks(ca, o.id)).toBe(1);
       expect(await f.productStock(ca.shop.outletId, p.id)).toBe(8);
     });
 
@@ -1008,14 +1011,10 @@ describe('Deliveroo marketplace channel (E2)', () => {
         ),
       );
       expect(out.every((x) => x.status === 200)).toBe(true);
-      for (
-        let i = 0;
-        i < 60 && (await countLinks(ca, o.id as string)) === 0;
-        i++
-      )
+      for (let i = 0; i < 60 && (await countLinks(ca, o.id)) === 0; i++)
         await new Promise((res) => setTimeout(res, 50));
       await new Promise((res) => setTimeout(res, 400));
-      expect(await countLinks(ca, o.id as string)).toBe(1);
+      expect(await countLinks(ca, o.id)).toBe(1);
       expect(await f.productStock(ca.shop.outletId, p.id)).toBe(8);
     });
 
@@ -1042,7 +1041,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
         [new Date(Date.now() - 1000), row!.id],
       );
       await sweep.replayDue();
-      expect((await link(ca, o.id as string)).state).toBe('cancelled_upstream');
+      expect((await link(ca, o.id)).state).toBe('cancelled_upstream');
       expect(await f.productStock(ca.shop.outletId, p.id)).toBe(10);
     });
 
@@ -1063,7 +1062,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
         subtotal: aed(1500),
       });
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       expect(co.state).toBe('needs_mapping');
       expect(co.orderId).toBeNull();
       const list = await r().get('/channels/orders').set(h(a)).expect(200);
@@ -1100,7 +1099,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
       });
       (o.items as Record<string, unknown>[])[0].discount_amount = aed(200);
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       const order = await f.orderRow(co.orderId);
       expect(Number(order.total)).toBe(45);
       expect(Number(order.discountAmount)).toBe(5);
@@ -1135,7 +1134,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
         subtotal: aed(6000),
       });
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       const item = (await f.orderItems(co.orderId))[0];
       expect(Number(item.priceAtPurchase)).toBe(30);
       expect(item.note).toBe('+ Vase, Ribbon x2');
@@ -1163,7 +1162,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
             : {}),
         });
         await newOrder(ca, o);
-        const co = await link(ca, o.id as string);
+        const co = await link(ca, o.id);
         expect((await f.orderRow(co.orderId)).orderType).toBe(orderType);
       }
     });
@@ -1189,7 +1188,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
         cash_due: kwd(0),
       });
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       const order = await f.orderRow(co.orderId);
       expect(order.currency).toBe('KWD');
       expect(Number(order.total)).toBe(31.515);
@@ -1209,11 +1208,11 @@ describe('Deliveroo marketplace channel (E2)', () => {
       const first = await post(raw, deliverooHeaders(ca.secret, guid, raw));
       spy.mockRestore();
       expect(first.status).toBe(500);
-      expect(await link(ca, o.id as string)).toBeUndefined();
+      expect(await link(ca, o.id)).toBeUndefined();
       const retry = await post(raw, deliverooHeaders(ca.secret, guid, raw));
       expect(retry.status).toBe(200);
       await settle(ca.id, guid);
-      expect(await countLinks(ca, o.id as string)).toBe(1);
+      expect(await countLinks(ca, o.id)).toBe(1);
       expect(await f.productStock(ca.shop.outletId, p.id)).toBe(8);
     });
 
@@ -1229,10 +1228,10 @@ describe('Deliveroo marketplace channel (E2)', () => {
       expect(
         calls.find((x) => x.url.includes('/orders?live_orders=true'))?.url,
       ).toContain('/v2/brand/FAKE-BRAND-1/restaurant/');
-      expect((await link(c, o.id as string)).state).toBe('pending_acceptance');
+      expect((await link(c, o.id)).state).toBe('pending_acceptance');
       const inbox = await inboxRows(c.id);
-      expect(inbox.map((x) => x.eventId)).toEqual([
-        `poll:${o.id as string}:placed`,
+      expect(inbox.map((x) => String(x.eventId))).toEqual([
+        `poll:${o.id}:placed`,
       ]);
       await db.execute(
         `UPDATE channelconnection SET lastSyncAt = NULL WHERE id = ?`,
@@ -1240,26 +1239,26 @@ describe('Deliveroo marketplace channel (E2)', () => {
       );
       await sweep.pollConnections();
       expect(await inboxRows(c.id)).toHaveLength(1);
-      expect(await countLinks(c, o.id as string)).toBe(1);
+      expect(await countLinks(c, o.id)).toBe(1);
     });
 
     it('S22 409 invalid_status_transition on accept counts as success when Deliveroo already has it accepted', async () => {
       const { o } = await fresh(ca);
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       patchHandler = () => ({
         status: 409,
         json: { error: { code: 'invalid_status_transition' } },
       });
-      orderStatus.set(o.id as string, 'accepted');
+      orderStatus.set(o.id, 'accepted');
       await r().post(`/channels/orders/${co.id}/accept`).set(h(a)).expect(201);
-      expect((await link(ca, o.id as string)).state).toBe('accepted');
+      expect((await link(ca, o.id)).state).toBe('accepted');
     });
 
     it('S23 503 order_not_ready on accept is retried after Retry-After', async () => {
       const { o } = await fresh(ca);
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       let n = 0;
       patchHandler = () =>
         ++n < 3
@@ -1276,7 +1275,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
     it('S24 the 5-per-minute-per-order limit stops the 6th status update without calling Deliveroo', async () => {
       const { o } = await fresh(ca);
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       patchHandler = () => ({ status: 500 });
       for (let i = 0; i < 5; i++)
         await r()
@@ -1286,7 +1285,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
       expect(patches()).toHaveLength(5);
       await r().post(`/channels/orders/${co.id}/accept`).set(h(a)).expect(502);
       expect(patches()).toHaveLength(5);
-      expect((await link(ca, o.id as string)).state).toBe('pending_acceptance');
+      expect((await link(ca, o.id)).state).toBe('pending_acceptance');
     });
 
     it('S25 the token is cached, refreshed after its 300 s lifetime, and the platform credentials are used when the connection has none', async () => {
@@ -1299,7 +1298,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
       const accept = async () => {
         const { o } = await fresh(c);
         await newOrder(c, o);
-        const co = await link(c, o.id as string);
+        const co = await link(c, o.id);
         await r()
           .post(`/channels/orders/${co.id}/accept`)
           .set(h(a))
@@ -1322,7 +1321,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
         },
       });
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       expect((await f.orderRow(co.orderId)).deliveryNotes).toContain(
         'Remake of order ae:fake-parent',
       );
@@ -1346,14 +1345,14 @@ describe('Deliveroo marketplace channel (E2)', () => {
         subtotal: aed(2500),
       });
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       expect((await f.orderItems(co.orderId))[0].note).toBe('Weight 1.2 kg');
     });
 
     it('S28 ready_for_collection is a human action: accepting and processing never send it, and the method posts the documented body', async () => {
       const { o } = await fresh(ca);
       await newOrder(ca, o);
-      const co = await link(ca, o.id as string);
+      const co = await link(ca, o.id);
       await r().post(`/channels/orders/${co.id}/accept`).set(h(a)).expect(201);
       await statusEvent(ca, o, 'accepted');
       expect(calls.some((c) => c.url.includes('prep_stage'))).toBe(false);
@@ -1371,7 +1370,7 @@ describe('Deliveroo marketplace channel (E2)', () => {
         },
         webhookSecret: null,
       };
-      expect((await provider.markReady(bound, o.id as string)).ok).toBe(true);
+      expect((await provider.markReady(bound, o.id)).ok).toBe(true);
       const c = calls.find((x) => x.url.includes('prep_stage'))!;
       expect(c.body).toMatchObject({ stage: 'ready_for_collection' });
     });
@@ -1379,11 +1378,11 @@ describe('Deliveroo marketplace channel (E2)', () => {
     it('S29 cash due on delivery leaves the order unpaid; a prepaid order is paid; no gateway is ever charged', async () => {
       const x = await fresh(ca, 10, { cash_due: aed(5000) });
       await newOrder(ca, x.o);
-      const cx = await link(ca, x.o.id as string);
+      const cx = await link(ca, x.o.id);
       expect((await f.orderRow(cx.orderId)).paymentStatus).toBe('unpaid');
       const y = await fresh(ca);
       await newOrder(ca, y.o);
-      const cy = await link(ca, y.o.id as string);
+      const cy = await link(ca, y.o.id);
       expect((await f.orderRow(cy.orderId)).paymentStatus).toBe('paid');
       const tx = await db.query<RowDataPacket[]>(
         `SELECT id FROM paymenttransaction WHERE orderId IN (?, ?)`,

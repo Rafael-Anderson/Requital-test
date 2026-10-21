@@ -57,8 +57,8 @@ export function mapStatus(status: unknown): CanonicalOrderStatus {
   switch (status) {
     case 'placed':
       return 'placed';
-    case 'accepted':
     // `confirmed` is the scheduled-order step AFTER acceptance: still accepted.
+    case 'accepted':
     case 'confirmed':
       return 'accepted';
     case 'rejected':

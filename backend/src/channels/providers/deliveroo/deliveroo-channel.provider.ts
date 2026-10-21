@@ -4,6 +4,7 @@ import {
   ChannelParseError,
   NO_CAPABILITIES,
   type BoundChannelConnection,
+  type CanonicalChannelOrder,
   type CanonicalOrderStatus,
   type ChannelCapabilities,
   type ChannelProvider,
@@ -242,7 +243,7 @@ export class DeliverooChannelProvider implements ChannelProvider {
     // still create the order. A body that does not map (for example an empty
     // item list on a cancellation) must NOT stop the status itself from being
     // applied, so the order is attached only when it maps.
-    let order;
+    let order: CanonicalChannelOrder | undefined;
     try {
       order = mapDeliverooOrder(raw);
     } catch {
@@ -430,7 +431,7 @@ export class DeliverooChannelProvider implements ChannelProvider {
     );
     if (res.status === 404) return null;
     if (res.status !== 200)
-      throw new DeliverooCallError(this.fail(res).message!);
+      throw new DeliverooCallError(this.fail(res).message);
     const s = (res.json as { status?: unknown } | null)?.status;
     if (typeof s !== 'string') return null;
     return { status: mapStatus(s), externalStatus: s.slice(0, 32) };
@@ -604,7 +605,7 @@ export class DeliverooChannelProvider implements ChannelProvider {
         this.ordersListUrl(conn, true, cursor),
       );
       if (res.status !== 200)
-        throw new DeliverooCallError(this.fail(res).message!);
+        throw new DeliverooCallError(this.fail(res).message);
       const j = res.json as { orders?: unknown; next?: unknown } | null;
       for (const o of Array.isArray(j?.orders) ? (j.orders as unknown[]) : []) {
         const order = o as { id?: unknown; status?: unknown };
