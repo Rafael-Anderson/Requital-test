@@ -740,6 +740,8 @@ export interface CustomerOrderSummary {
   // Per-shop display number. `id` remains the identity used for URLs and every
   // API call - this is only what the customer is shown.
   shopOrderNumber: number;
+  // The order's own captured currency.
+  currency: string;
   status: string;
   orderType: string | null;
   paymentStatus: string;

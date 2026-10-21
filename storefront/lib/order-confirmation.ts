@@ -62,6 +62,31 @@ export function paymentMethodLabel(method: string | null): string | null {
   return METHOD_LABELS[method] ?? method.replace(/_/g, " ");
 }
 
+// A status a customer reads. The raw values are enums (out_for_delivery,
+// pending); they are never printed as is. Unknown ones fall back to a
+// readable form rather than leaking the underscore.
+export function orderStatusLabel(status: string, orderType: string | null): string {
+  const pickup = orderType === "pickup";
+  const known: Record<string, string> = {
+    pending: "Order placed",
+    confirmed: "Confirmed",
+    preparing: "Preparing",
+    out_for_delivery: pickup ? "Ready for pickup" : "Out for delivery",
+    delivered: pickup ? "Collected" : "Delivered",
+    cancelled: "Cancelled",
+  };
+  if (known[status]) return known[status];
+  const words = status.replace(/_/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export function paymentStatusLabel(status: string): string {
+  const known: Record<string, string> = { unpaid: "Unpaid", paid: "Paid", refunded: "Refunded", failed: "Payment failed" };
+  if (known[status]) return known[status];
+  const words = status.replace(/_/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export interface TimelineStep {
   key: string;
   label: string;

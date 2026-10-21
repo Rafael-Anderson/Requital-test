@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatPriceAmount } from "@/lib/currency";
 import { hasAmount } from "@/lib/order-money-rows";
+import { orderStatusLabel, paymentMethodLabel, paymentStatusLabel } from "@/lib/order-confirmation";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
@@ -14,7 +15,7 @@ import CurrencySymbol from "@/components/CurrencySymbol";
 
 export default function OrderDetailPage() {
   const router = useRouter();
-  const { shopSlug, shopBasePath, shop } = useShop();
+  const { shopSlug, shopBasePath } = useShop();
   const { customer, loading: authLoading } = useAuth();
   const params = useParams<{ id: string }>();
   const orderId = Number(params.id);
@@ -71,7 +72,7 @@ export default function OrderDetailPage() {
         <div className="rounded-lg border border-black/10 p-4 space-y-3">
           <div className="flex justify-between">
             <span className="text-zinc-500">Status</span>
-            <span className="capitalize font-medium">{order.status}</span>
+            <span className="font-medium">{orderStatusLabel(order.status, order.orderType)}</span>
           </div>
           <div className="text-sm space-y-1">
             <div className="flex justify-between">
@@ -94,8 +95,8 @@ export default function OrderDetailPage() {
             )}
             <div className="flex justify-between">
               <span className="text-zinc-500">Payment</span>
-              <span className="capitalize">
-                {order.paymentMethod?.replace(/_/g, " ") ?? "-"} · {order.paymentStatus}
+              <span>
+                {paymentMethodLabel(order.paymentMethod) ?? "-"} · {paymentStatusLabel(order.paymentStatus)}
               </span>
             </div>
             <div className="flex justify-between">
@@ -114,7 +115,7 @@ export default function OrderDetailPage() {
                   {item.variantLabel && <p className="text-xs text-zinc-500">{item.variantLabel}</p>}
                 </div>
                 <span>
-                  {item.priceAtPurchase} <CurrencySymbol code={shop?.currency} />
+                  {formatPriceAmount(item.priceAtPurchase, order.currency)} <CurrencySymbol code={order.currency} />
                 </span>
               </div>
             ))}
@@ -125,7 +126,7 @@ export default function OrderDetailPage() {
               <div className="flex justify-between text-zinc-500">
                 <span>Delivery fee</span>
                 <span>
-                  {order.deliveryFee} <CurrencySymbol code={shop?.currency} />
+                  {formatPriceAmount(order.deliveryFee, order.currency)} <CurrencySymbol code={order.currency} />
                 </span>
               </div>
             )}
@@ -133,8 +134,8 @@ export default function OrderDetailPage() {
               <div className="flex justify-between text-green-600">
                 <span>Discount</span>
                 <span>
-                  -{formatPriceAmount(order.discountAmount!, shop?.currency)}{" "}
-                  <CurrencySymbol code={shop?.currency} />
+                  -{formatPriceAmount(order.discountAmount!, order.currency)}{" "}
+                  <CurrencySymbol code={order.currency} />
                 </span>
               </div>
             )}
@@ -145,15 +146,15 @@ export default function OrderDetailPage() {
               <div className="flex justify-between text-zinc-500">
                 <span>Tax</span>
                 <span>
-                  {formatPriceAmount(order.taxAmount!, shop?.currency)}{" "}
-                  <CurrencySymbol code={shop?.currency} />
+                  {formatPriceAmount(order.taxAmount!, order.currency)}{" "}
+                  <CurrencySymbol code={order.currency} />
                 </span>
               </div>
             )}
             <div className="flex justify-between font-medium pt-1">
               <span>Total</span>
               <span>
-                {order.total} <CurrencySymbol code={shop?.currency} />
+                {formatPriceAmount(order.total, order.currency)} <CurrencySymbol code={order.currency} />
               </span>
             </div>
           </div>

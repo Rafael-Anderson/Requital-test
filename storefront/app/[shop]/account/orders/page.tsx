@@ -6,13 +6,15 @@ import { useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import { useAuth } from "@/lib/auth";
 import { getMyOrders } from "@/lib/api";
+import { formatPriceAmount } from "@/lib/currency";
+import { orderStatusLabel } from "@/lib/order-confirmation";
 import type { CustomerOrderSummary } from "@/lib/types";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import CurrencySymbol from "@/components/CurrencySymbol";
 
 export default function OrderHistoryPage() {
   const router = useRouter();
-  const { shopSlug, shopBasePath, shop } = useShop();
+  const { shopSlug, shopBasePath } = useShop();
   const { customer, loading: authLoading } = useAuth();
 
   const [orders, setOrders] = useState<CustomerOrderSummary[] | null>(null);
@@ -58,9 +60,9 @@ export default function OrderHistoryPage() {
                 <p className="text-xs text-zinc-500">{new Date(order.createdAt).toLocaleDateString()}</p>
               </div>
               <div className="text-end">
-                <p className="text-sm capitalize">{order.status}</p>
+                <p className="text-sm">{orderStatusLabel(order.status, order.orderType)}</p>
                 <p className="font-medium">
-                  {order.total} <CurrencySymbol code={shop?.currency} />
+                  {formatPriceAmount(order.total, order.currency)} <CurrencySymbol code={order.currency} />
                 </p>
               </div>
             </div>

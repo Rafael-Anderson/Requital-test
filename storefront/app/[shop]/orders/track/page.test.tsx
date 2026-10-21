@@ -43,3 +43,28 @@ describe("track order page token shapes", () => {
     await waitFor(() => expect(lookupOrder).toHaveBeenCalledWith(token));
   });
 });
+
+describe("track order page result", () => {
+  it("shows a readable status and the total in the order's own currency decimals", async () => {
+    lookupOrder.mockResolvedValue({
+      id: 9,
+      shopOrderNumber: 12,
+      shopName: "Rose Shop",
+      outletName: "Main",
+      status: "out_for_delivery",
+      orderType: "delivery",
+      currency: "KWD",
+      total: "10.5",
+      items: [],
+      deliveryTimeSlot: null,
+      estimatedTime: null,
+      hasAccount: false,
+    });
+    tokenInUrl.value = NEW_TOKEN;
+    render(<TrackOrderPage />);
+    expect(await screen.findByText("Out for delivery")).toBeTruthy();
+    expect(screen.queryByText("out_for_delivery")).toBeNull();
+    expect(screen.getByText(/10\.500/)).toBeTruthy();
+    expect(screen.getByLabelText("Tracking code")).toBeTruthy();
+  });
+});

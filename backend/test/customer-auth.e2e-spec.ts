@@ -31,7 +31,7 @@ interface CustomerResponseBody {
   };
 }
 interface OrderCreateResponse {
-  order: { id: number; trackingToken: string | null };
+  order: { id: number; shopOrderNumber: number; trackingToken: string | null };
 }
 interface OrderLookupResponse {
   id: number;
@@ -39,6 +39,8 @@ interface OrderLookupResponse {
 }
 interface OrderSummary {
   id: number;
+  shopOrderNumber: number;
+  currency: string;
   status: string;
   total: string;
 }
@@ -365,6 +367,12 @@ describe('Customer storefront accounts (e2e)', () => {
       .set('Cookie', sessionA.cookieHeaderStr)
       .expect(200);
     expect(body<OrderSummary>(detailOwn).id).toBe(orderAId);
+    // The account pages print "Order #<shopOrderNumber>" and format money in the
+    // order's own captured currency; both used to be missing from this payload.
+    expect(body<OrderSummary>(detailOwn).shopOrderNumber).toBe(
+      body<OrderCreateResponse>(orderA).order.shopOrderNumber,
+    );
+    expect(body<OrderSummary>(detailOwn).currency).toBe('AED');
   });
 
   it('the same phone number registered in two different shops is two entirely separate accounts — [shopId, phone] uniqueness makes cross-shop identity a non-issue', async () => {

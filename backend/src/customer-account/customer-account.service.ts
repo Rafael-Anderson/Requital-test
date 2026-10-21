@@ -801,6 +801,10 @@ export class CustomerAccountService {
   private toOrderSummary(order: OrderWithItems, hasInvoice: boolean) {
     return {
       id: order.id,
+      // What the customer is shown ("Order #12"); `id` stays the identity.
+      shopOrderNumber: order.shopOrderNumber,
+      // The order's own captured currency, not whatever the shop is set to today.
+      currency: order.currency,
       status: order.status,
       orderType: order.orderType,
       paymentStatus: order.paymentStatus,
