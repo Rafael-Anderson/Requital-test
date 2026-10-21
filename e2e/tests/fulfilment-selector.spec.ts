@@ -67,7 +67,7 @@ test('pickup only: no toggle, pickup details, no address fields, and the order i
   await fieldByLabel(page, 'Phone').fill(seed.customerPhone);
   await page.getByRole('button', { name: 'Cash on pickup' }).click();
   await page.getByRole('button', { name: 'Place order' }).click();
-  await page.waitForURL(/\/orders\/\d+/, { timeout: 30_000 });
+  await page.waitForURL(/\/orders\/[0-9A-Fa-f]{32}$/, { timeout: 30_000 });
 });
 
 test('both: the toggle appears and switches the fields', async ({ page }) => {

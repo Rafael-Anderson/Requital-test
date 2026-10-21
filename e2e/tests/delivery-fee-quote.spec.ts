@@ -159,7 +159,7 @@ test('the delivery fee and the total shown at checkout are what the order is cre
   const body = (await (await created).json()) as { order: { total: string; deliveryFee: string } };
   expect(Number(body.order.total)).toBe(displayedTotal);
   expect(Number(body.order.deliveryFee)).toBe(ZONE_FEE);
-  await page.waitForURL(/\/orders\/\d+/, { timeout: 20_000 });
+  await page.waitForURL(/\/orders\/[0-9A-Fa-f]{32}$/, { timeout: 20_000 });
   await context.close();
 });
 
