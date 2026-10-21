@@ -1,6 +1,6 @@
 # Marketplace channels (Deliveroo, Talabat): facts, design, hand-off
 
-Status: E0 (facts) and E1 (framework) are built on branch `feat/marketplace-framework`. E2 (Deliveroo provider and webhook endpoint), E3 (Talabat provider, behind an in-repo simulator until a contract, credentials and a sandbox exist; built on branch `feat/marketplace-talabat`) and E4 (admin UI) build on the interface described here. Everything ships **disabled**: no provider is registered in production by E1, `channelconnection.enabled` defaults to 0, and the feature flag `marketplace_channels` defaults to false.
+Status: E0 (facts) and E1 (framework) are merged (#260). E2 (Deliveroo provider and webhook endpoint, SANDBOX ONLY, built on branch `feat/marketplace-deliveroo`, section 13), E3 (Talabat provider, behind an in-repo simulator until a contract, credentials and a sandbox exist; built on branch `feat/marketplace-talabat`) and E4 (admin UI) build on the interface described here. Everything ships **disabled**: no provider is registered in production by E1, `channelconnection.enabled` defaults to 0, and the feature flag `marketplace_channels` defaults to false.
 
 Rule used throughout: **VERIFIED** means read on a public documentation page (URL and date given). **INFERRED** means reasoned from those pages or from this codebase and not confirmed by the vendor. No date or commitment is promised to or on behalf of either marketplace.
 
@@ -209,40 +209,40 @@ Injection proofs (revert, see the named test fail, restore): signature check rem
 
 ## 8. Deliveroo go-live scenario checklist
 
-Deliveroo publishes no go-live list in its public docs, so this is **our own** list derived from the documented flows. "E1" is the stub test that covers the equivalent behaviour in the framework; "E2" is filled in by the Deliveroo workstream with the real-provider test.
+Deliveroo publishes no go-live list in its public docs, so this is **our own** list derived from the documented flows. "E1" is the stub test that covers the equivalent behaviour in the framework; "E2" is the test in `backend/test/marketplace-deliveroo.e2e-spec.ts` (signed fixtures, fake sandbox), named after the scenario.
 
 | # | Scenario | E1 stub test | E2 test |
 |---|---|---|---|
-| 1 | `order.new` (placed, ASAP) creates the order and alerts the merchant | creation; unmapped alert | |
-| 2 | Accept → 204; `order.status_update accepted` confirms the order | accepting confirms; tablet acceptance | |
-| 3 | Reject with each `reject_reason` | rejecting tells the marketplace | |
-| 4 | No answer within 7 minutes (UAE) → `rejected` arrives; order cancelled, stock released | auto-reject | |
-| 5 | Customer cancel before accept | cancellation while pending | |
-| 6 | Cancel after accept; `200` acknowledged | upstream cancel after accept | |
-| 7 | Scheduled order: accept, then `confirmed` before `start_preparing_at`; `confirm_at` deadline | not covered (no scheduled-confirm path in E1) | |
-| 8 | Same delivery twice (same GUID) | same delivery twice | |
-| 9 | Redelivery with a new GUID | NEW delivery id | |
-| 10 | Concurrent duplicates | concurrent duplicate | |
-| 11 | Status before `order.new` | out-of-order | |
-| 12 | Bad HMAC, missing headers, wrong secret | SAME response | |
-| 13 | Unknown `location_id` | SAME response | |
-| 14 | Another tenant's location / secret | tenant isolation block | |
-| 15 | Null or unknown `pos_item_id` | unmapped items | |
-| 16 | Item-level and basket-level promotions | not covered (discount mapping is provider-side) | |
-| 17 | Nested modifiers folded into the line price | not covered (provider-side) | |
-| 18 | Each `fulfillment_type` → handover | handover to order type | |
-| 19 | Two currencies (AED, KWD) exact | KWD exact | |
-| 20 | Our server returns 5xx → Deliveroo retries (6 min ASAP / 30 min scheduled) with no duplicate | durable inbox; concurrent duplicates | |
-| 21 | Total outage of our webhook, recovery by polling `Get Orders` | polling dedupe | |
-| 22 | `409 invalid_status_transition` on accept is treated as success | not covered (stub has no 409) | |
-| 23 | `503 order_not_ready` with `Retry-After` on accept is retried | not covered | |
-| 24 | Rate limit 5/min per order on accept/reject | not covered | |
-| 25 | Token expiry (300 s) and refresh | not covered | |
-| 26 | Remake orders (`remake_details`) | not covered | |
-| 27 | Variable-weight items | not covered | |
-| 28 | `ready_for_collection` signal is a human action | markReady capability only | |
-| 29 | Cash due on delivery | cash due stays unpaid | |
-| 30 | Refund webhook (idempotent on `refund_id`) | not covered (E1 has no refund handling) | |
+| 1 | `order.new` (placed, ASAP) creates the order and alerts the merchant | creation; unmapped alert | S01 order.new (placed, ASAP) creates the order, holds stock and alerts the merchant |
+| 2 | Accept → 204; `order.status_update accepted` confirms the order | accepting confirms; tablet acceptance | S02 accept sends PATCH accepted, and order.status_update accepted confirms the order once |
+| 3 | Reject with each `reject_reason` | rejecting tells the marketplace | S03 reject sends each documented reject_reason |
+| 4 | No answer within 7 minutes (UAE) → `rejected` arrives; order cancelled, stock released | auto-reject | S04 no answer within the UAE 7-minute window |
+| 5 | Customer cancel before accept | cancellation while pending | S05 customer cancel before accept cancels the order and restocks |
+| 6 | Cancel after accept; `200` acknowledged | upstream cancel after accept | S06 cancel after accept is acknowledged with 200 |
+| 7 | Scheduled order: accept, then `confirmed` before `start_preparing_at`; `confirm_at` deadline | not covered (no scheduled-confirm path in E1) | S07 scheduled order (accept only; the `confirmed` step is NOT built) |
+| 8 | Same delivery twice (same GUID) | same delivery twice | S08 the same delivery twice (same GUID) |
+| 9 | Redelivery with a new GUID | NEW delivery id | S09 a redelivery with a new GUID |
+| 10 | Concurrent duplicates | concurrent duplicate | S10 eight concurrent duplicates |
+| 11 | Status before `order.new` | out-of-order | S11 a status event before order.new is retried, not dropped |
+| 12 | Bad HMAC, missing headers, wrong secret | SAME response | S12 bad HMAC, missing headers and wrong secret (same 401) |
+| 13 | Unknown `location_id` | SAME response | S13 an unknown location id (same 401) |
+| 14 | Another tenant's location / secret | tenant isolation block | S14 another tenant's secret / location |
+| 15 | Null or unknown `pos_item_id` | unmapped items | S15 null or unknown pos_item_id |
+| 16 | Item-level and basket-level promotions | not covered (discount mapping is provider-side) | S16 item and basket discounts |
+| 17 | Nested modifiers folded into the line price | not covered (provider-side) | S17 nested modifiers folded into the unit price |
+| 18 | Each `fulfillment_type` → handover | handover to order type | S18 each fulfillment_type maps to an order type |
+| 19 | Two currencies (AED, KWD) exact | KWD exact | S19 AED and KWD exact |
+| 20 | Our server returns 5xx → Deliveroo retries (6 min ASAP / 30 min scheduled) with no duplicate | durable inbox; concurrent duplicates | S20 our server fails with 5xx, Deliveroo retries |
+| 21 | Total outage of our webhook, recovery by polling `Get Orders` | polling dedupe | S21 total webhook outage recovered by polling Get Orders |
+| 22 | `409 invalid_status_transition` on accept is treated as success | not covered (stub has no 409) | S22 409 invalid_status_transition on accept |
+| 23 | `503 order_not_ready` with `Retry-After` on accept is retried | not covered | S23 503 order_not_ready on accept is retried |
+| 24 | Rate limit 5/min per order on accept/reject | not covered | S24 5-per-minute-per-order limit |
+| 25 | Token expiry (300 s) and refresh | not covered | S25 token cached, refreshed after 300 s |
+| 26 | Remake orders (`remake_details`) | not covered | S26 a remake order |
+| 27 | Variable-weight items | not covered | S27 variable-weight item |
+| 28 | `ready_for_collection` signal is a human action | markReady capability only | S28 ready_for_collection is a human action |
+| 29 | Cash due on delivery | cash due stays unpaid | S29 cash due on delivery |
+| 30 | Refund webhook (idempotent on `refund_id`) | not covered (E1 has no refund handling) | S30 refund webhook: NOT BUILT (a refund delivery is refused and writes nothing) |
 
 ## 9. What to request from Deliveroo's integration team
 
@@ -259,6 +259,12 @@ Deliveroo publishes no go-live list in its public docs, so this is **our own** l
 11. Menu/Catalogue expectations for item availability, and stable `pos_item_id` rules.
 12. Customer-data rules: which customer fields we may store and for how long.
 13. Substitution and remake handling for non-food retail.
+14. (E2) For the sandbox: the **webhook secret binding** (which brand/site/integration a secret signs for, and whether it is one value for all our merchants), the **API scopes** granted to our client, and a way to **simulate an order for a chosen `location_id`** (the test-order request has no location, Q2).
+15. (E2) **Go-live scenario sign-off**: Deliveroo to review section 8 (and section 13's list of what is not built) and say which scenarios they certify.
+16. (E2) Whether `GET /v2/brand/{brand}/restaurant/{restaurant}/orders` takes the order `location_id` as `restaurant_id`, and whether `live_orders` is still experimental.
+17. (E2) Whether scheduled orders need the `confirmed` step before `start_preparing_at`, and what happens if they are not confirmed (auto-reject?).
+18. (E2) Whether the Menu API (`PUT /v1/brands/{brand}/menus/{id}`) accepts an empty `mealtimes`, and what `tax_rate` must be for a UAE florist (we refuse to invent one).
+19. (E2) The meaning of `fulfillment_type` values `autonomous`, `table_service` and `catering` for a gift retailer.
 
 ## 10. Open questions for the owner
 
@@ -301,7 +307,7 @@ E2 and E3 are not mergeable unless all of these hold:
 
 ## 11. Hand-off for E2, E3, E4
 
-- **E2 (Deliveroo):** implement `ChannelProvider` (HMAC `X-Deliveroo-Hmac-Sha256` over `guid + " " + raw body`, `extractRoutingKey` = `body.location_id`, `parseEvent`, `acceptOrder`/`rejectOrder` with the 204/409/503 rules and the 5-per-minute limit, `testConnection` that **proves** the location is visible to the credentials, `fetchOrderStatus`, `listOpenOrders`, `platformWebhookSecrets()` from `DELIVEROO_*_WEBHOOK_SECRET` if the secret is platform-wide). Add the public controller `POST /channels/deliveroo/webhook` that reads the raw body, calls `ChannelIngestionService.receive({ provider, rawBody, headers })` (no `processInline`), returns 200 only when it resolves, and lets `ChannelWebhookRejectedException` through unchanged. Throttle it by IP, never by connection id. Derive `acceptBy` from `status_log.placed.at` plus the market window. Fill section 8.
+- **E2 (Deliveroo): BUILT, see section 13.** The original brief follows for reference: implement `ChannelProvider` (HMAC `X-Deliveroo-Hmac-Sha256` over `guid + " " + raw body`, `extractRoutingKey` = `body.location_id`, `parseEvent`, `acceptOrder`/`rejectOrder` with the 204/409/503 rules and the 5-per-minute limit, `testConnection` that **proves** the location is visible to the credentials, `fetchOrderStatus`, `listOpenOrders`, `platformWebhookSecrets()` from `DELIVEROO_*_WEBHOOK_SECRET` if the secret is platform-wide). Add the public controller `POST /channels/deliveroo/webhook` that reads the raw body, calls `ChannelIngestionService.receive({ provider, rawBody, headers })` (no `processInline`), returns 200 only when it resolves, and lets `ChannelWebhookRejectedException` through unchanged. Throttle it by IP, never by connection id. Derive `acceptBy` from `status_log.placed.at` plus the market window. Fill section 8.
 - **E3 (Talabat):** built behind a simulator, see section 12. The webhook credential is a shared string or Basic auth header, not an HMAC: `verifyWebhook` compares it in constant time; the routing key is `client.store_id` / `client.external_partner_config_id`; delivery ids are not documented (the core falls back to the body hash, so a changed redelivery of the same order is a new inbox row but the same `channelorder`).
 - **E4 (admin UI):** every field comes from the `/channels` endpoints above; credentials are write-only; show `acceptBy` as a countdown, `priceMismatch`, the unmapped queue with waiting orders, `lastError`, and `GET /channels/stats`.
 - Production steps for E1: none. Deploy migrate then backend; nothing is registered in production, so nothing can be enabled.
@@ -374,3 +380,70 @@ E2 and E3 are not mergeable unless all of these hold:
 - **Q16** Does Talabat have an accept step? If not, accepting should become a local state change and the capability `acceptReject` should only cover the reject (cancel) call.
 - **Q17** The E1 core never calls `markReady`, `setItemAvailability`, `setBranchStatus`, `pushCatalogue` or `adjustPrepTime`; E3 implements them on the provider (tested against the simulator) but no admin endpoint invokes them yet. They need E4 endpoints (with audit logging, `orders.manage`, and "food is ready" as a deliberate human action) before a merchant can use them.
 - **Q18** `ENABLE_STUB_CHANNEL=1` also registers the Talabat simulator. It is harmless (simulator only) but should not be set in production.
+
+## 13. E2: what was built (Deliveroo, SANDBOX ONLY)
+
+Branch `feat/marketplace-deliveroo`. Everything ships disabled: the provider is registered, but a shop needs the `marketplace_channels` flag, a connection, staff verification of its location and `enabled = 1`; no production host exists in the code.
+
+### 13.1 Files
+
+- `backend/src/channels/providers/deliveroo/deliveroo-channel.provider.ts`: the `ChannelProvider` (webhook verification, routing key, `parseEvent`, accept/reject, status fetch, mark ready, availability, catalogue push, polling, test connection).
+- `.../deliveroo-order.mapper.ts`: pure Deliveroo order to canonical order.
+- `.../deliveroo-api.client.ts`: OAuth client-credentials client with token cache, hard-coded sandbox hosts and a host allow-list checked before every request.
+- `.../deliveroo-webhook.controller.ts`: `POST /channels/deliveroo/webhook`.
+- `backend/src/channels/channel-sweep.service.ts` (+ migration `20261111100000_channel_poll_failures`, additive `channelconnection.pollFailures`): poll-failure escalation.
+- Tests: `deliveroo.spec.ts` (44 unit), `backend/test/marketplace-deliveroo.e2e-spec.ts` (45), fixtures `backend/test/helpers/deliveroo-fixtures.ts` (a throw-away fake secret; nothing real).
+
+### 13.2 Webhook route
+
+Public (`@Public`), per-source-IP throttle (240/min, never per connection or location), 100 KB body cap (Express answers 413 first; the handler repeats the cap), raw `Buffer` required. It calls `ChannelIngestionService.receive()` with no `processInline`, answers a bare `200 {received:true}` for a new AND a duplicate delivery, and lets the core's identical 401 through for every refusal.
+
+Order of checks: (1) the two headers must be well formed (guid `[A-Za-z0-9._:-]{1,128}`, signature 64 hex), which refuses before any database read; (2) route by `body.order.location_id` only, through the E1 enabled unique `routingKey`; (3) HMAC-SHA256 over `guid + " " + raw bytes` against the connection's own secret and the platform secret `DELIVEROO_SANDBOX_WEBHOOK_SECRET`, every candidate compared in constant time with no early exit; (4) a signed-time check; (5) the durable inbox INSERT; (6) the 200. Processing happens after, through the E1 inbox.
+
+- **VERIFIED:** header names, signing string, single-space separator, raw-bytes requirement (`securing-webhooks.md`); envelope `{event, body:{order}}` (the order sits at `body.order`, so the E1 hand-off line "`extractRoutingKey` = `body.location_id`" was imprecise: the real path is `body.order.location_id`).
+- **Whitespace in the guid is refused**: the guid is joined to the body with a space, so a guid containing a space would let one signed pair pose as another with a different event id.
+- **Event id = `<guid>:<first 32 hex of sha256(body)>`.** Deliveroo does not say whether the sequence guid is unique per delivery, so a guid shared by two different events must never make the second a duplicate; a retry of the same delivery (same guid, same bytes) still collapses on the inbox UNIQUE, and a redelivery under a new guid collapses on the order UNIQUE and the idempotent status CAS.
+- **Replay (INFERRED window).** Deliveroo documents no timestamp in the signature. The newest `status_log.at` inside the signed body must be no older than 2 hours and no more than 10 minutes in the future (Deliveroo retries for at most 30 minutes, VERIFIED), else the delivery is refused with the same 401. This bounds replay of an old capture; it does not stop an immediate replay, which the inbox UNIQUE makes a no-op.
+- `provesLocationOwnership` is **false**. The credentials are probably integrator-level, so enabling needs platform-staff verification (`verify-location`); `testConnection` obtains a token and, when the brand id is set, lists that location's live orders, and always answers `provesLocation: false`. It never echoes a credential.
+- Polling event ids are `poll:<order id>:<status>` (deterministic). A polled order whose own `location_id` differs from the connection's is dropped and logged (this is the "event location vs stored location" mismatch log from the second review).
+
+### 13.3 Outbound calls (sandbox)
+
+Hosts: `https://auth-sandbox.developers.deliveroo.com/oauth2/token`, `https://api-sandbox.developers.deliveroo.com/order`, `.../menu`. Credentials: the connection's own `clientId`/`clientSecret` win; otherwise the platform `DELIVEROO_SANDBOX_CLIENT_ID`/`_SECRET` (never a mix). Token cached until 30 s before `expires_in`, one shared request for concurrent callers, one retry after a 401. Errors shown to a merchant carry only a status and Deliveroo's short error code.
+
+| Call | Endpoint | Status |
+|---|---|---|
+| accept / reject | `PATCH /v1/orders/{id}`; reasons `closing_early|busy|ingredient_unavailable|other` (anything else is `other` with a capped note); 204 ok; 409 is success only if a `GET /v2/orders/{id}` shows the wanted state; 503 `order_not_ready` retried after `Retry-After` (cap 10 s, 3 attempts); 5 per minute per order enforced locally | VERIFIED (`patch-order`) |
+| status | `GET /v2/orders/{id}` | VERIFIED |
+| polling | `GET /v2/brand/{brand}/restaurant/{restaurant}/orders?live_orders=true`, `next` cursor, 3 pages max | path and params VERIFIED; `restaurant_id` = order `location_id` INFERRED; `live_orders` is marked experimental |
+| ready for collection | `POST /v1/orders/{id}/prep_stage {stage, occurred_at}` | body VERIFIED; same order server INFERRED. Human action only: nothing calls it automatically |
+| item availability | `POST /menu/v1/brands/{brand}/menus/{menu}/item_unavailabilities/{site}` `{item_unavailabilities:[{item_id,status}]}` | VERIFIED (menu id `requital-c<connection id>`, stable) |
+| catalogue push | `PUT /menu/v1/brands/{brand}/menus/{menu}` | path and required fields VERIFIED; empty `mealtimes` and the **omitted `tax_rate`** are INFERRED (a tax rate is never invented, so Deliveroo may refuse the push) |
+
+Nothing in the E1 core or an admin route calls `pushCatalogue`, `setItemAvailability` or `markReady` yet (E4/later); they are provider methods with unit tests.
+
+### 13.4 Order mapping (`body.order`)
+
+VERIFIED fields as in section 2. Choices: `totalMinor` = `total_price` (Q5, INFERRED); line unit price = `item.total_price` (per unit including modifiers, before discount, VERIFIED) except that a quantity above 1 whose `total_price` equals the computed unit price times quantity is the documented test-order shape and the computed price is used; modifiers are folded in and listed in the line note; `pos_item_id` null gets a stable `name:<hash>` id so it can be mapped once and never becomes a product; tax and commission are NULL (absent from the schema); delivery fee only from `delivery.delivery_fee`; `acceptBy` = placed time + 7 minutes (AE, KW and unknown markets) or 10 (other markets) for ASAP orders only, derived from the market prefix of the order id (the prefix is VERIFIED as `{market}:{uuid}`; the unknown-market choice is INFERRED); a scheduled order gets no invented deadline. `order.new` that is already `accepted` (tablet flow) creates the order then confirms it. A status event carries the full order only if it maps, so an unmappable cancellation still applies.
+
+### 13.5 NOT built (and why)
+
+- **Item removal and substitution** (`removeItem`, `substituteItems` stay false): documented only in the Picking API (Retail suite, Q1), keyed on order-item ids the Order API webhook does not carry. Not guessed.
+- **Branch status, prep-time adjustment** (Site API not enabled for the owner).
+- **Scheduled `confirmed` step** (`accepted` to `confirmed` before `start_preparing_at`, S07): no scheduler hook exists in the E1 core; a scheduled order that is accepted but never confirmed may be auto-rejected by Deliveroo (Q: request 17).
+- **Refund webhook** (S30).
+- Auto-accept (Q3), unchanged.
+- Poll-failure staff alerting beyond a structured `error` log line (there is no platform notification channel); the merchant gets one WhatsApp alert per streak of 5 failed polls.
+
+### 13.6 Injection proofs (revert, see the named test fail, restore)
+
+- **Signature check removed** (`verifyWebhook` accepting any signature): "S12 bad HMAC, missing headers and wrong secret all get the SAME 401", "S14 another tenant" and "the platform webhook secret works ... and a wrong one does not" fail.
+- **Idempotency** (event id made random per delivery): "S08 the same delivery twice (same GUID)" fails (two inbox rows; the order UNIQUE alone still made one order, which is why the test also counts inbox rows).
+- **Tenant routing** (routing key read from a top-level `location_id` before `body.order.location_id`): "the routing key is body.order.location_id and nothing else" fails (the delivery is routed to B with A's secret and refused).
+
+### 13.7 Residual risks
+
+- The throttle is per source IP and the real Deliveroo egress addresses are unknown; `TRUST_PROXY` must be on in production for `req.ip` to be the client (see CLAUDE.md, N6c) before this route is meaningful.
+- A body between 100 KB and 1 MB is refused by the parser (413) and only recovered by polling.
+- The staleness window (2 h) and the 240/min throttle are INFERRED numbers.
+- Credentials are likely integrator-level: tenant isolation rests entirely on the staff-verified `location_id`; do not set `provesLocationOwnership` without a per-merchant proof.
