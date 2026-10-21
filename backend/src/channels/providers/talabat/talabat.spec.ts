@@ -1,3 +1,4 @@
+import { DeliverooChannelProvider } from '../deliveroo/deliveroo-channel.provider';
 import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { ChannelsModule } from '../../channels.module';
@@ -659,8 +660,11 @@ describe('Talabat is simulator-only', () => {
           registry,
           new StubChannelProvider(),
           new TalabatChannelProvider(sim),
+          new DeliverooChannelProvider(),
         ).onModuleInit();
         expect(registry.has('talabat')).toBe(expected);
+        // Deliveroo is registered everywhere (inert until flag + staff verification).
+        expect(registry.has('deliveroo')).toBe(true);
       }
     } finally {
       (process.env as Record<string, string | undefined>).NODE_ENV = prev.n;

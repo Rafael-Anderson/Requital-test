@@ -450,7 +450,7 @@ describe('Marketplace channels (E1)', () => {
       await r()
         .post('/channels/connections')
         .set(h(a))
-        .send({ outletId: a.outletId, provider: 'deliveroo' })
+        .send({ outletId: a.outletId, provider: 'unregistered_marketplace' })
         .expect(400);
     });
   });
@@ -469,7 +469,7 @@ describe('Marketplace channels (E1)', () => {
 
     it('unknown location, wrong secret, other tenant secret, disabled connection and garbage all get the SAME response and write nothing', async () => {
       const before = await db.query<RowDataPacket[]>(
-        `SELECT COUNT(*) AS n FROM channelinboundevent`,
+        `SELECT COUNT(*) AS n FROM channelinboundevent WHERE provider = 'stub_marketplace'`,
       );
       const order = canon([{ id: 'i', priceMinor: 100 }]);
       const payload = { type: 'order.new', order };
@@ -532,7 +532,7 @@ describe('Marketplace channels (E1)', () => {
       const d = await reject(deliver(dis, payload));
       expect(d).toEqual(results[0]);
       const after = await db.query<RowDataPacket[]>(
-        `SELECT COUNT(*) AS n FROM channelinboundevent`,
+        `SELECT COUNT(*) AS n FROM channelinboundevent WHERE provider = 'stub_marketplace'`,
       );
       expect(Number(after[0].n)).toBe(Number(before[0].n));
     });

@@ -25,6 +25,9 @@ export const DEFAULT_ACCEPT_WINDOW_MINUTES = 15;
 export const CONFIRM_REPAIR_AFTER_MINUTES = 5;
 export const PAYLOAD_RETENTION_DAYS = 30;
 const BATCH = 50;
+// E2: this many failed polls in a row (about 10 minutes at the 2-minute cadence)
+// means the webhook-outage fallback is itself down: tell the merchant once.
+export const POLL_FAILURE_ALERT_AFTER = 5;
 
 // Everything that makes "accepted orders are never lost" true when a webhook did
 // not arrive, arrived and failed, or was processed half-way:
@@ -147,13 +150,13 @@ export class ChannelSweepService {
             await this.ingestion.processInboxEvent(written.inboxId);
         }
         await this.db.execute(
-          `UPDATE channelconnection SET lastSyncAt = ?, lastSyncStatus = 'ok', lastError = NULL WHERE id = ?`,
+          `UPDATE channelconnection SET lastSyncAt = ?, lastSyncStatus = 'ok', lastError = NULL, pollFailures = 0 WHERE id = ?`,
           [new Date(), conn.id],
         );
         polled += 1;
       } catch (err) {
         await this.db.execute(
-          `UPDATE channelconnection SET lastSyncAt = ?, lastSyncStatus = 'failed', lastError = ? WHERE id = ?`,
+          `UPDATE channelconnection SET lastSyncAt = ?, lastSyncStatus = 'failed', lastError = ?, pollFailures = pollFailures + 1 WHERE id = ?`,
           [
             new Date(),
             this.connections.safeMessage(
@@ -163,9 +166,50 @@ export class ChannelSweepService {
             conn.id,
           ],
         );
+        try {
+          await this.escalatePollFailure(conn.id);
+        } catch (e) {
+          // The alert is best effort: it must never abort the polling loop.
+          logger.error('poll-failure escalation failed', {
+            connectionId: conn.id,
+            error: e instanceof Error ? e.message.slice(0, 200) : String(e),
+          });
+        }
       }
     }
     return polled;
+  }
+
+  // Alerts exactly once per streak: the failing poll that reaches the threshold
+  // sends it (the counter only grows until a good poll resets it). The alert text
+  // carries no credential or provider message. Staff see the structured error log.
+  private async escalatePollFailure(connectionId: number): Promise<void> {
+    const rows = await this.db.query<(ChannelconnectionRow & RowDataPacket)[]>(
+      `SELECT * FROM channelconnection WHERE id = ?`,
+      [connectionId],
+    );
+    const conn = rows[0];
+    if (!conn || conn.pollFailures !== POLL_FAILURE_ALERT_AFTER) return;
+    logger.error('marketplace polling keeps failing', {
+      connectionId: conn.id,
+      shopId: conn.shopId,
+      provider: conn.provider,
+      failures: conn.pollFailures,
+    });
+    const to = await this.notifications.resolveMerchantAlertRecipient(
+      conn.shopId,
+      conn.outletId,
+    );
+    if (!to) return;
+    await this.jobs.enqueue(
+      conn.shopId,
+      'send_merchant_whatsapp_alert',
+      {
+        to,
+        body: `Requital cannot check ${conn.provider} for missed orders right now. Orders that reach Requital normally are not affected; check the marketplace tablet as well.`,
+      },
+      `channelconn:${conn.id}:poll-down:${conn.lastSyncAt?.getTime() ?? 0}`,
+    );
   }
 
   async staleOrders(): Promise<{ alerted: number; repaired: number }> {

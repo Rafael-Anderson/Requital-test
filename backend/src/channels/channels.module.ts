@@ -17,6 +17,8 @@ import { PlatformAuditLogService } from '../platform-admin/platform-audit-log.se
 import { StubChannelProvider } from './providers/stub-channel.provider';
 import { TalabatChannelProvider } from './providers/talabat/talabat-channel.provider';
 import { TalabatSimulator } from './providers/talabat/talabat-simulator';
+import { DeliverooChannelProvider } from './providers/deliveroo/deliveroo-channel.provider';
+import { DeliverooWebhookController } from './providers/deliveroo/deliveroo-webhook.controller';
 
 // E2 (Deliveroo) and E3 (Talabat) register their providers on
 // ChannelProviderRegistry from their own modules and call
@@ -40,7 +42,7 @@ export function stubAllowed(): boolean {
     OrdersModule,
     ProductsModule,
   ],
-  controllers: [ChannelsController],
+  controllers: [ChannelsController, DeliverooWebhookController],
   providers: [
     ChannelProviderRegistry,
     ChannelConnectionsService,
@@ -51,6 +53,7 @@ export function stubAllowed(): boolean {
     StubChannelProvider,
     TalabatSimulator,
     TalabatChannelProvider,
+    DeliverooChannelProvider,
     PlatformAuditLogService,
   ],
   exports: [
@@ -64,9 +67,14 @@ export class ChannelsModule implements OnModuleInit {
     private readonly registry: ChannelProviderRegistry,
     private readonly stub: StubChannelProvider,
     private readonly talabat: TalabatChannelProvider,
+    private readonly deliveroo: DeliverooChannelProvider,
   ) {}
 
   onModuleInit(): void {
+    // Deliveroo (SANDBOX hosts only, hard-coded in its client). Registered
+    // everywhere; nothing happens until a shop has the marketplace_channels flag,
+    // a connection, staff verification of its location, and enabled = 1.
+    this.registry.register(this.deliveroo);
     // The stub claims a merchant-bound location proof, so it must never exist
     // in production (or staging with an unset NODE_ENV): allow-list, not
     // deny-list.
