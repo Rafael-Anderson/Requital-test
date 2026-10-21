@@ -1672,3 +1672,103 @@ export interface CustomersegmentRow {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// ---- Marketplace channels (E1, migration 20261110100000) ----
+// credentials / webhookSecret are AES-GCM ciphertext (common/crypto.ts), never
+// returned by any API. See docs/plans/marketplace-channels.md.
+export interface ChannelconnectionRow {
+  id: number;
+  shopId: number;
+  outletId: number;
+  provider: string;
+  externalLocationId: string | null;
+  externalBrandId: string | null;
+  externalSiteId: string | null;
+  credentials: string | null;
+  webhookSecret: string | null;
+  enabled: boolean;
+  lastSyncAt: Date | null;
+  lastSyncStatus: string | null;
+  lastError: string | null;
+  // Platform-staff confirmation of the location (NULL = not verified).
+  locationVerifiedAt: Date | null;
+  locationVerifiedBy: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+  // Generated: non-NULL only while enabled with a location id (UNIQUE).
+  routingKey: string | null;
+}
+
+export interface ChannelinboundeventRow {
+  id: number;
+  shopId: number;
+  connectionId: number;
+  provider: string;
+  eventId: string;
+  source: string;
+  eventType: string | null;
+  externalOrderId: string | null;
+  signatureVerified: boolean;
+  payloadHash: string;
+  // Real JSON column (auto-parsed). NULL once purged (payloadPurgedAt set).
+  payload: unknown;
+  payloadPurgedAt: Date | null;
+  status: string;
+  attempts: number;
+  nextAttemptAt: Date;
+  lockedAt: Date | null;
+  lastError: string | null;
+  receivedAt: Date;
+  processedAt: Date | null;
+}
+
+export interface ChannelorderRow {
+  id: number;
+  shopId: number;
+  connectionId: number;
+  outletId: number;
+  provider: string;
+  externalOrderId: string;
+  displayId: string | null;
+  // NULL while the order waits for item mappings.
+  orderId: number | null;
+  state: string;
+  externalStatus: string;
+  acceptBy: Date | null;
+  scheduledFor: Date | null;
+  currency: string;
+  // NULL = the marketplace payload did not say, never zero.
+  commissionAmount: string | null;
+  cashDueAmount: string | null;
+  priceMismatch: unknown;
+  canonical: unknown;
+  payloadHash: string;
+  alertedAt: Date | null;
+  staleAlertedAt: Date | null;
+  lastError: string | null;
+  receivedAt: Date;
+  updatedAt: Date;
+}
+
+export interface ChannelitemmappingRow {
+  id: number;
+  shopId: number;
+  provider: string;
+  externalItemId: string;
+  productId: number;
+  variantId: number | null;
+  externalName: string | null;
+  createdAt: Date;
+}
+
+export interface ChannelunmappeditemRow {
+  id: number;
+  shopId: number;
+  provider: string;
+  externalItemId: string;
+  externalName: string | null;
+  occurrences: number;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+  resolvedAt: Date | null;
+}

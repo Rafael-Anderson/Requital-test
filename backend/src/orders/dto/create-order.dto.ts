@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  Matches,
+  MaxLength,
   ArrayNotEmpty,
   IsArray,
   IsDateString,
@@ -103,10 +105,16 @@ export class CreateOrderDto {
   discountCode?: string;
 
   // Attribution / source channel, e.g. "Website organic", "Instagram", "Walk-in".
-  // Free text rather than an enum — channel names are marketing-defined and
-  // open-ended, not a fixed set the backend needs to branch on.
+  // Free text rather than an enum, with ONE exception: the marketplace names
+  // (deliveroo, talabat, ...) are reserved for orders the marketplace ingestion
+  // writes, because the backend does branch on them (stock holding, payments,
+  // messaging, editing). OrdersService.create rejects them, case-insensitively.
   @IsOptional()
   @IsString()
+  @MaxLength(191)
+  @Matches(/^(?!\s*(deliveroo|talabat|stub_marketplace)\s*$)/i, {
+    message: 'That channel name is reserved for marketplace orders',
+  })
   channel?: string;
 
   @IsOptional()

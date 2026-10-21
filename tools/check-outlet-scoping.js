@@ -45,6 +45,10 @@ const OWNERSHIP_MARKERS = [
 ];
 
 const ALLOWLIST = [
+  // E1: read-only lookup of an outlet's alert phone; the query is
+  // `WHERE o.id = ? AND o.shopId = ?`, so a foreign outletId matches nothing.
+  // Callers pass an outletId from a verified channelconnection / shop-scoped order.
+  "orders/order-notifications.service.ts:resolveMerchantAlertRecipient",
   // INV-5 read-only helpers: every query joins outlet.shopId = ? (and ingredient.shopId),
   // and both are reached only after readableOutlet()/the createDrafts outlet row lock
   // (outlet WHERE id AND shopId) verified the id. They write nothing.

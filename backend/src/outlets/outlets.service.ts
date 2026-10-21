@@ -282,6 +282,17 @@ export class OutletsService {
         [id],
       ),
     ]);
+    // A marketplace connection also points at the outlet (RESTRICT): disable and
+    // delete it first.
+    const connRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS c FROM channelconnection WHERE outletId = ?`,
+      [id],
+    );
+    if (Number(connRows[0].c) > 0) {
+      throw new ConflictException(
+        'Cannot delete: this outlet has a marketplace connection. Remove it first.',
+      );
+    }
     const orderCount = Number(orderRows[0].c);
     const userCount = Number(userRows[0].c);
     const poCount = Number(poRows[0].c);

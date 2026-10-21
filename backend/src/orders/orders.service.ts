@@ -17,6 +17,10 @@ import type { OrderRow, OrderitemRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { resolveOutletFilter } from '../common/outlet-scope';
 import { withShopOrderNumber } from './order-number';
+import {
+  isMarketplaceChannel,
+  isMarketplaceChannelValue,
+} from '../channels/marketplace-channels';
 import { withTrackingToken } from '../common/token-hash';
 import { CustomersService } from '../customers/customers.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
@@ -255,6 +259,23 @@ export class OrdersService {
     };
   }
 
+  // True only for an order the marketplace ingestion actually created: it has a
+  // channelorder link. The channel string alone is not enough (an order that
+  // predates the reserved-name rule could carry one), and a lock on an order
+  // with no link would have nothing to point the merchant to.
+  private async isChannelLinked(order: {
+    id: number;
+    shopId: number;
+    channel: string | null;
+  }): Promise<boolean> {
+    if (!isMarketplaceChannel(order.channel)) return false;
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT 1 FROM channelorder WHERE orderId = ? AND shopId = ? LIMIT 1`,
+      [order.id, order.shopId],
+    );
+    return rows.length > 0;
+  }
+
   // reserveStock: off by default (admin-entered orders defer stock
   // decrement to the confirm transition — see adjustStockForOrder below),
   // but draft-order completion needs the same immediate atomic reservation
@@ -273,6 +294,14 @@ export class OrdersService {
     const outletId = ctx.role === 'branch' ? ctx.outletId! : dto.outletId;
     if (outletId === undefined) {
       throw new BadRequestException('outletId is required');
+    }
+    // A marketplace channel is written by the marketplace ingestion path only:
+    // it switches stock holding, blocks payment links and messaging and locks
+    // editing, so a hand-typed value would corrupt all four.
+    if (isMarketplaceChannelValue(dto.channel)) {
+      throw new BadRequestException(
+        'That channel name is reserved for marketplace orders',
+      );
     }
     const outletRows = await this.db.query<RowDataPacket[]>(
       `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
@@ -644,6 +673,14 @@ export class OrdersService {
       order.outletId,
       'orders.manage',
     );
+    // A marketplace order's figures are what the marketplace charged. Re-pricing
+    // it here would apply this shop's own tax and delivery rules to money the
+    // aggregator collected, so it is changed on the marketplace, not here.
+    if (await this.isChannelLinked(order)) {
+      throw new ConflictException(
+        'This order came from a marketplace and cannot be edited here',
+      );
+    }
     if (order.status === 'delivered' || order.status === 'cancelled') {
       throw new BadRequestException(
         `Cannot edit delivery fee for an order that is already '${order.status}'`,
@@ -775,6 +812,7 @@ export class OrdersService {
     ctx: TenantContext,
     id: number,
     dto: UpdateOrderStatusDto,
+    options: { channelDesk?: boolean } = {},
   ) {
     // findOne already applies the outlet-override rule — a branch user
     // requesting an order outside their outlet gets a 404 here and never
@@ -790,11 +828,25 @@ export class OrdersService {
         `Cannot move order from '${order.status}' to '${dto.status}'`,
       );
     }
+    // Accepting and refusing a marketplace order must tell the marketplace, and
+    // only the Marketplace desk does. Going through the generic status change
+    // would leave the marketplace (and the channel link) believing something
+    // else, and a later desk "accept" on a cancelled order. Every other step
+    // (preparing, out for delivery, delivered) is the kitchen's and stays open.
+    if (
+      !options.channelDesk &&
+      (dto.status === 'cancelled' || dto.status === 'confirmed') &&
+      (await this.isChannelLinked(order))
+    ) {
+      throw new ConflictException(
+        'Accept or reject marketplace orders from the Marketplace desk, so the marketplace is told',
+      );
+    }
     // 'cancelled' has exactly one implementation: cancel() owns the stock
     // restock, the invoice marker and the discount release. This route used to
     // run its own bare status CAS for it, which restocked nothing and released
     // nothing.
-    if (dto.status === 'cancelled') return this.cancel(ctx, id);
+    if (dto.status === 'cancelled') return this.cancel(ctx, id, options);
     // Plain pre-check, not folded into the CAS WHERE clause below — the CAS
     // failure path throws a generic "refresh and retry" ConflictException,
     // which would be a misleading message for "you forgot to collect cash."
@@ -968,6 +1020,14 @@ export class OrdersService {
       order.outletId,
       'orders.manage',
     );
+    // A marketplace order's figures are what the marketplace charged. Re-pricing
+    // it here would apply this shop's own tax and delivery rules to money the
+    // aggregator collected, so it is changed on the marketplace, not here.
+    if (await this.isChannelLinked(order)) {
+      throw new ConflictException(
+        'This order came from a marketplace and cannot be edited here',
+      );
+    }
     if (!EDITABLE_ORDER_STATUSES.includes(order.status as OrderStatus)) {
       throw new BadRequestException(
         `Order items can only be edited while status is one of: ${EDITABLE_ORDER_STATUSES.join(', ')} (current: '${order.status}')`,
@@ -1526,8 +1586,17 @@ export class OrdersService {
     return negative.map((r) => r.name as string);
   }
 
-  async cancel(ctx: TenantContext, id: number) {
+  async cancel(
+    ctx: TenantContext,
+    id: number,
+    options: { channelDesk?: boolean } = {},
+  ) {
     const order = await this.findOne(ctx, id);
+    if (!options.channelDesk && (await this.isChannelLinked(order))) {
+      throw new ConflictException(
+        'Reject marketplace orders from the Marketplace desk, so the marketplace is told',
+      );
+    }
     await this.branchRolesService.assertPermission(
       ctx,
       order.outletId,

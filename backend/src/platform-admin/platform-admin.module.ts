@@ -7,6 +7,7 @@ import { AuthModule } from '../auth/auth.module';
 import { PlatformAuthModule } from '../platform-auth/platform-auth.module';
 import { WebhookLogModule } from '../webhook-log/webhook-log.module';
 import { JobsModule } from '../jobs/jobs.module';
+import { ChannelsModule } from '../channels/channels.module';
 import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
 
 @Module({
@@ -17,6 +18,7 @@ import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
     WebhookLogModule,
     CurrencyRatesModule,
     JobsModule,
+    ChannelsModule,
   ],
   controllers: [PlatformAdminController],
   providers: [PlatformAdminService, PlatformAuditLogService],

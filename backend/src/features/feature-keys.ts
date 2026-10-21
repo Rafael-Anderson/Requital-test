@@ -97,6 +97,15 @@ export const FEATURE_KEYS = {
     default: true,
     description: 'Storefront collection menu bar',
   },
+  // E1. Gates creating and enabling marketplace (Deliveroo / Talabat) channel
+  // connections, so the platform grants it per shop. Deliberately NOT consulted
+  // when a webhook arrives for an already-enabled connection: switching the flag
+  // off must not make the platform drop orders the marketplace has accepted.
+  marketplace_channels: {
+    source: 'table',
+    default: false,
+    description: 'Marketplace channels (Deliveroo, Talabat) order intake',
+  },
 } as const satisfies Record<string, FeatureDef>;
 
 export type FeatureKey = keyof typeof FEATURE_KEYS;
