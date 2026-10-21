@@ -398,7 +398,7 @@ Branch `feat/marketplace-deliveroo`. Everything ships disabled: the provider is 
 
 Public (`@Public`), per-source-IP throttle (240/min, never per connection or location), 100 KB body cap (Express answers 413 first; the handler repeats the cap), raw `Buffer` required. It calls `ChannelIngestionService.receive()` with no `processInline`, answers a bare `200 {received:true}` for a new AND a duplicate delivery, and lets the core's identical 401 through for every refusal.
 
-Order of checks: (1) the two headers must be well formed (guid `[A-Za-z0-9._:-]{1,128}`, signature 64 hex), which refuses before any database read; (2) route by `body.order.location_id` only, through the E1 enabled unique `routingKey`; (3) HMAC-SHA256 over `guid + " " + raw bytes` against the connection's own secret and the platform secret `DELIVEROO_SANDBOX_WEBHOOK_SECRET`, every candidate compared in constant time with no early exit; (4) a signed-time check; (5) the durable inbox INSERT; (6) the 200. Processing happens after, through the E1 inbox.
+Order of checks: (1) the two headers must be well formed (guid `[A-Za-z0-9._:-]{1,128}`, signature 64 hex), which refuses before any database read; (2) route by `body.order.location_id` only, through the E1 enabled unique `routingKey`; (3) HMAC-SHA256 over `guid + " " + raw bytes` against the connection's own secret, or, ONLY for a connection that has no secret of its own, the platform secret `DELIVEROO_SANDBOX_WEBHOOK_SECRET` (review M1: the core no longer unions them, so a holder of the shared secret cannot sign for a connection that has its own; the platform secret is also OFF in production unless `DELIVEROO_ALLOW_PLATFORM_WEBHOOK_SECRET=1`, and enabling a connection without its own secret is refused while no usable platform secret exists), compared in constant time with no early exit; (4) a signed-time check (review L3: a body with no parseable `status_log` is refused too); (5) the durable inbox INSERT; (6) the 200. Processing happens after, through the E1 inbox.
 
 - **VERIFIED:** header names, signing string, single-space separator, raw-bytes requirement (`securing-webhooks.md`); envelope `{event, body:{order}}` (the order sits at `body.order`, so the E1 hand-off line "`extractRoutingKey` = `body.location_id`" was imprecise: the real path is `body.order.location_id`).
 - **Whitespace in the guid is refused**: the guid is joined to the body with a space, so a guid containing a space would let one signed pair pose as another with a different event id.
@@ -406,6 +406,8 @@ Order of checks: (1) the two headers must be well formed (guid `[A-Za-z0-9._:-]{
 - **Replay (INFERRED window).** Deliveroo documents no timestamp in the signature. The newest `status_log.at` inside the signed body must be no older than 2 hours and no more than 10 minutes in the future (Deliveroo retries for at most 30 minutes, VERIFIED), else the delivery is refused with the same 401. This bounds replay of an old capture; it does not stop an immediate replay, which the inbox UNIQUE makes a no-op.
 - `provesLocationOwnership` is **false**. The credentials are probably integrator-level, so enabling needs platform-staff verification (`verify-location`); `testConnection` obtains a token and, when the brand id is set, lists that location's live orders, and always answers `provesLocation: false`. It never echoes a credential.
 - Polling event ids are `poll:<order id>:<status>` (deterministic). A polled order whose own `location_id` differs from the connection's is dropped and logged (this is the "event location vs stored location" mismatch log from the second review).
+
+Other review fixes: the provider declares `displayName = 'Deliveroo'` and `credentialFields` (`clientId`, `clientSecret`); a connection missing either key fails `testConnection` and is never completed from the platform sandbox credentials (those apply only to a connection with neither key, and never in production); brand, site and location ids must match `^[A-Za-z0-9][A-Za-z0-9._:-]*$` in the connection DTOs and in the provider (L1: `.` and `..` can never become a path segment); an unknown or disabled location runs one dummy HMAC comparison so timing does not say which locations exist (L4, best effort, the decrypt of a real secret is still extra); the poll-failure alert is wrapped so it cannot abort the polling loop (L5).
 
 ### 13.3 Outbound calls (sandbox)
 
@@ -443,12 +445,14 @@ VERIFIED fields as in section 2. Choices: `totalMinor` = `total_price` (Q5, INFE
 
 ### 13.7 Residual risks
 
+- (L2) `testConnection` can be run before staff verification, so a merchant can use the platform's sandbox credentials to list a location's live orders (brand and location they typed) in the sandbox. Recorded only; production credentials are never used by this code. Consider requiring verification before the test.
+
 - The throttle is per source IP and the real Deliveroo egress addresses are unknown; `TRUST_PROXY` must be on in production for `req.ip` to be the client (see CLAUDE.md, N6c) before this route is meaningful.
 - A body between 100 KB and 1 MB is refused by the parser (413) and only recovered by polling.
 - The staleness window (2 h) and the 240/min throttle are INFERRED numbers.
 - Credentials are likely integrator-level: tenant isolation rests entirely on the staff-verified `location_id`; do not set `provesLocationOwnership` without a per-merchant proof.
 
-### 12.8 Live sandbox smoke (2026-10-21, one call, no secret printed)
+### 13.8 Live sandbox smoke (2026-10-21, one call, no secret printed)
 
 One form-encoded client-credentials POST to `https://auth-sandbox.developers.deliveroo.com/oauth2/token` with the owner's sandbox client id and secret (a script that printed only presence booleans and the HTTP status): **HTTP 400, error code `invalid_client`**, no token. Both values were checked for stray whitespace, quotes and newlines (none). So the request shape and host answer, but **these credentials are not accepted by that host**. Most likely candidates, none verified: they belong to the other token URL the docs list (`deliveroo-api.auth.eu-west-1.amazoncognito.com`, Q4; not called because it is not a documented sandbox host), or the sandbox client is not yet enabled for the integration. Request 4 in section 9 is therefore blocking for any outbound sandbox call; inbound (webhook) handling does not depend on it. No order, accept or menu call was made against the real sandbox.
 
