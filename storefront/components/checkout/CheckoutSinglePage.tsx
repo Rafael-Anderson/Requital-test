@@ -59,12 +59,14 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
 
       <div className="grid sm:grid-cols-2 gap-3">
         <div>
-          <label className="text-sm font-medium block mb-1">Name</label>
-          <input required value={customerName} onChange={(e) => setCustomerName(e.target.value)} className={FIELD_CLASS} />
+          <label htmlFor="checkout-name" className="text-sm font-medium block mb-1">Name</label>
+          <input id="checkout-name" autoComplete="name" required value={customerName} onChange={(e) => setCustomerName(e.target.value)} className={FIELD_CLASS} />
         </div>
         <div>
-          <label className="text-sm font-medium block mb-1">Phone</label>
+          <label htmlFor="checkout-phone" className="text-sm font-medium block mb-1">Phone</label>
           <input
+            id="checkout-phone"
+            autoComplete="tel"
             required
             type="tel"
             inputMode="tel"
@@ -77,8 +79,8 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
         </div>
       </div>
       <div>
-        <label className="text-sm font-medium block mb-1">Email (optional)</label>
-        <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} className={FIELD_CLASS} />
+        <label htmlFor="checkout-email" className="text-sm font-medium block mb-1">Email (optional)</label>
+        <input id="checkout-email" autoComplete="email" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} className={FIELD_CLASS} />
       </div>
 
       {orderType === "delivery" && <DeliveryAddressFields state={state} />}
@@ -112,8 +114,8 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
       </div>
 
       <div>
-        <label className="text-sm font-medium block mb-1">Notes (optional)</label>
-        <textarea value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} rows={2} className={TEXTAREA_CLASS} />
+        <label htmlFor="checkout-notes" className="text-sm font-medium block mb-1">Notes (optional)</label>
+        <textarea id="checkout-notes" value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} rows={2} className={TEXTAREA_CLASS} />
       </div>
 
       <div>
@@ -144,11 +146,16 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
 
       <CheckoutSummary state={state} />
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && (
+          <p role="alert" className="text-sm text-red-600">
+            {error}
+          </p>
+        )}
+        {state.blockedReason && <p className="text-sm text-zinc-600">{state.blockedReason}</p>}
 
       <button
         type="submit"
-        disabled={submitting || quoteBlocked || !orderType || !paymentMethod || dateBlocked || (selectedOutlet ? !selectedOutlet.isOpen : true)}
+        disabled={!state.canSubmit}
         className={`w-full h-11 font-medium ${storeButtonClassName(shop)}`}
       >
         {submitting ? "Placing order…" : "Place order"}
