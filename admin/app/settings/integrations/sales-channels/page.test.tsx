@@ -179,6 +179,18 @@ describe("Sales channels settings page", () => {
     const card = await screen.findByRole("article", { name: "Deliveroo at Marina Branch" });
     expect(within(card).getByRole("switch")).toBeDisabled();
     expect(within(card).getByText("Marketplace channels are not available for your shop yet.")).toBeInTheDocument();
+    // flag off means no outbound call, not even a connection test
+    expect(within(card).getByRole("button", { name: "Test connection" })).toBeDisabled();
+  });
+
+  it("with the flag on, Test connection is available and calls the test endpoint", async () => {
+    const user = userEvent.setup();
+    setup({ connections: [conn({ locationVerified: true })] });
+    api.testChannelConnection.mockResolvedValue({ ok: true, message: null });
+    render(<Page />);
+    const card = await screen.findByRole("article", { name: "Deliveroo at Marina Branch" });
+    await user.click(within(card).getByRole("button", { name: "Test connection" }));
+    expect(api.testChannelConnection).toHaveBeenCalledWith(1);
   });
 
   it("delete shows the API's 409 as words and keeps the connection", async () => {

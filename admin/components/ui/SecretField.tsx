@@ -63,7 +63,7 @@ export default function SecretField({
     <Input
       label={label}
       type="password"
-      autoComplete="off"
+      autoComplete="new-password"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}

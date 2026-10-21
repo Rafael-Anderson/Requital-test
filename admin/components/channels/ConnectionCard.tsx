@@ -137,7 +137,8 @@ export default function ConnectionCard({
         <span className="text-sm font-medium text-text-primary dark:text-zinc-100">
           {checking ? `Checking the connection with ${name}...` : c.enabled ? "Receiving orders" : "Not receiving orders"}
         </span>
-        <Button size="sm" variant="secondary" className="ms-auto" onClick={() => onTest(c)} disabled={busy || !c.hasCredentials || !c.externalLocationId}>
+        <Button size="sm" variant="secondary" className="ms-auto" onClick={() => onTest(c)} disabled={busy || !flagOn || !c.hasCredentials || !c.externalLocationId}
+          title={!flagOn ? "Marketplace channels are not available for your shop yet." : undefined}>
           Test connection
         </Button>
       </div>

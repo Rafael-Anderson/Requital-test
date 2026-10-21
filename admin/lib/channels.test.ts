@@ -66,7 +66,11 @@ describe("labels", () => {
 
   it("recognises marketplace channels only", () => {
     expect(isMarketplaceChannel("deliveroo")).toBe(true);
-    expect(isMarketplaceChannel("Talabat")).toBe(true);
+    expect(isMarketplaceChannel("talabat")).toBe(true);
+    // exact match, like the backend: hand-typed spellings are ordinary orders
+    expect(isMarketplaceChannel("Talabat")).toBe(false);
+    expect(isMarketplaceChannel(" deliveroo ")).toBe(false);
+    expect(isMarketplaceChannel("toString")).toBe(false);
     expect(isMarketplaceChannel("storefront")).toBe(false);
     expect(isMarketplaceChannel(null)).toBe(false);
   });

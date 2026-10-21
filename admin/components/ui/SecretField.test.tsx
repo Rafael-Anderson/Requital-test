@@ -69,4 +69,9 @@ describe("SecretField", () => {
     expect(onReplace).toHaveBeenCalledTimes(1);
     expect(onSubmit).not.toHaveBeenCalled();
   });
+
+  it("asks the browser not to autofill a saved password into a secret", async () => {
+    render(<SecretField label="API Key" masked={null} value="" onChange={vi.fn()} />);
+    expect(screen.getByLabelText("API Key")).toHaveAttribute("autocomplete", "new-password");
+  });
 });

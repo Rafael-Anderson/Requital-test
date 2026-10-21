@@ -23,8 +23,11 @@ export function providerLabel(name: string | null | undefined, info?: ChannelPro
 
 // `order.channel` carries the marketplace name for a marketplace order (and
 // 'storefront' or free text otherwise). Only these are drawn as a source badge.
+// EXACT match, the same rule as the backend's isMarketplaceChannel: a legacy
+// hand-typed "Deliveroo " is not a marketplace order there, so it must not lose
+// its Accept and Cancel actions here.
 export function isMarketplaceChannel(channel: string | null | undefined): boolean {
-  return !!channel && Object.prototype.hasOwnProperty.call(PROVIDER_LABELS, channel.trim().toLowerCase());
+  return typeof channel === "string" && Object.prototype.hasOwnProperty.call(PROVIDER_LABELS, channel);
 }
 
 export const CHANNEL_STATE_LABELS: Record<ChannelOrderState, string> = {

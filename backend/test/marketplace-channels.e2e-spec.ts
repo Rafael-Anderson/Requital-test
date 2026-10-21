@@ -304,17 +304,45 @@ describe('Marketplace channels (E1)', () => {
         .set(h(c))
         .expect(200)
         .expect({ enabled: true, hasConnections: false });
-      await r()
-        .post('/channels/connections')
-        .set(h(c))
-        .send({ outletId: c.outletId, provider: STUB_PROVIDER })
-        .expect(201);
+      const created = body<{ id: number }>(
+        await r()
+          .post('/channels/connections')
+          .set(h(c))
+          .send({ outletId: c.outletId, provider: STUB_PROVIDER })
+          .expect(201),
+      );
       // Flag off again: an existing connection is still reported (it keeps
       // receiving orders), and nothing about another shop leaks in.
       await grantFlag(c, false);
       await r()
         .get('/channels/availability')
         .set(h(c))
+        .expect(200)
+        .expect({ enabled: false, hasConnections: true });
+      // Flag off means no outbound marketplace call, not even a test.
+      stub.calls.length = 0;
+      await r()
+        .post(`/channels/connections/${created.id}/test`)
+        .set(h(c))
+        .expect(403);
+      expect(stub.calls).toEqual([]);
+      // Another shop with no connection never inherits this shop's answer.
+      const other = await f.setupShop('mkt-avail2');
+      await r()
+        .get('/channels/availability')
+        .set(h(other))
+        .expect(200)
+        .expect({ enabled: false, hasConnections: false });
+      const branch = await createStaff(
+        app,
+        c.adminToken,
+        'av',
+        'branch',
+        c.outletId,
+      );
+      await r()
+        .get('/channels/availability')
+        .set({ Authorization: `Bearer ${branch.token}` })
         .expect(200)
         .expect({ enabled: false, hasConnections: true });
       const om = await createStaff(app, c.adminToken, 'av', 'order_manager');

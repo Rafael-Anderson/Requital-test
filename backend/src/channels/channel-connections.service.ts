@@ -460,6 +460,8 @@ export class ChannelConnectionsService {
   }
 
   async testConnection(ctx: TenantContext, id: number) {
+    // Flag off means no outbound marketplace call, not even a test.
+    await this.assertFlag(ctx.shopId);
     const row = await this.load(ctx, id);
     const provider = this.registry.find(row.provider);
     if (!provider?.testConnection) {
