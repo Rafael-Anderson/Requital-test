@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import TopBar from "@/components/TopBar";
 import CountryBanner from "@/components/CountryBanner";
+import MapsHealthBanner from "@/components/MapsHealthBanner";
 import EmailVerificationBanner from "@/components/EmailVerificationBanner";
 import ImpersonationBanner from "@/components/ImpersonationBanner";
 import NewOrderBanner from "@/components/NewOrderBanner";
@@ -41,6 +42,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
       <TopBar />
       <EmailVerificationBanner />
       <CountryBanner />
+      <MapsHealthBanner />
       <NewOrderBanner />
       <CommandPalette />
       {/* Side padding is 16px below md (a 390px phone otherwise got a 294px
