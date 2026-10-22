@@ -28,6 +28,16 @@ export class FixedWindowLimiter {
     return w.count <= this.limit;
   }
 
+  // Read-only view of a key's window: how many hits it holds and how long until
+  // it resets. For a limiter that counts only FAILURES, so it must be asked
+  // before the attempt without the ask itself counting.
+  peek(key: string): { count: number; retryAfterMs: number } {
+    const t = this.now();
+    const w = this.windows.get(key);
+    if (!w || w.resetAt <= t) return { count: 0, retryAfterMs: 0 };
+    return { count: w.count, retryAfterMs: w.resetAt - t };
+  }
+
   private prune(t: number) {
     for (const [k, w] of this.windows)
       if (w.resetAt <= t) this.windows.delete(k);

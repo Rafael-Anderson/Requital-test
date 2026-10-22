@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { CodeGuessLimiter } from '../common/code-guess-limiter';
 import { PublicController } from './public.controller';
 import { PublicOrderLookupController } from './public-order-lookup.controller';
 import { PublicSurveyController } from './public-survey.controller';
@@ -61,7 +62,7 @@ import { StoreCreditModule } from '../store-credit/store-credit.module';
     PublicShopsController,
     PublicAbandonedCartRecoveryController,
   ],
-  providers: [PublicService],
+  providers: [PublicService, CodeGuessLimiter],
   // CustomerAccountModule consumes PublicService.getProductsByIds for the
   // wishlist page's product resolution.
   exports: [PublicService],

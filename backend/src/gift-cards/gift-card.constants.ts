@@ -11,3 +11,9 @@ export const GIFT_CARD_REJECTION_MESSAGES = {
   no_balance: 'This gift card has no remaining balance',
 } as const;
 export type GiftCardRejectionReason = keyof typeof GIFT_CARD_REJECTION_MESSAGES;
+
+// Public callers get one answer for every failure: not-found, disabled and
+// expired each confirm that a code exists, and no failure ever carries a
+// balance. Staff-side messages are unchanged.
+export const GENERIC_GIFT_CARD_MESSAGE =
+  'This gift card code is not valid or cannot be applied';

@@ -1,7 +1,6 @@
 import { Type } from 'class-transformer';
 import {
-  Matches,
-  MaxLength,
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsDateString,
@@ -12,9 +11,16 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Matches,
+  Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
+import {
+  MAX_LINE_QUANTITY,
+  MAX_ORDER_LINES,
+} from '../../common/order-limits';
 
 class OrderItemInput {
   @IsInt()
@@ -30,6 +36,7 @@ class OrderItemInput {
 
   @IsInt()
   @IsPositive()
+  @Max(MAX_LINE_QUANTITY)
   quantity: number;
 
   // Admin-only manual price adjustment (phone orders, draft orders) — wins
@@ -139,6 +146,7 @@ export class CreateOrderDto {
 
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(MAX_ORDER_LINES)
   @ValidateNested({ each: true })
   @Type(() => OrderItemInput)
   items: OrderItemInput[];

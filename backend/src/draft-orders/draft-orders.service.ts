@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
+import { assertOrderWithinLimits } from '../common/order-limits';
 import { DatabaseService } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
 import { trimDecimal } from '../database/decimal.util';
@@ -397,6 +398,7 @@ export class DraftOrdersService {
         priceOverride: i.price,
       })),
     );
+    assertOrderWithinLimits(resolved);
     return resolved.map(({ product, variant, quantity, price }) => ({
       productId: product.id as number,
       variantId: variant?.id ?? null,
@@ -427,6 +429,7 @@ export class DraftOrdersService {
         priceOverride: i.priceOverride,
       })),
     );
+    assertOrderWithinLimits(resolved);
     const lines = await this.discountsService.buildLines(
       ctx.shopId,
       resolved.map((r) => ({

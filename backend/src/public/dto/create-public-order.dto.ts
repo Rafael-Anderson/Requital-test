@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   Allow,
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsBoolean,
@@ -15,10 +16,15 @@ import {
   IsPositive,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
+import {
+  MAX_LINE_QUANTITY,
+  MAX_ORDER_LINES,
+} from '../../common/order-limits';
 
 class PublicOrderItemInput {
   @IsInt()
@@ -35,6 +41,7 @@ class PublicOrderItemInput {
 
   @IsInt()
   @IsPositive()
+  @Max(MAX_LINE_QUANTITY)
   quantity: number;
 
   // Only meaningful (and only accepted — see ProductsService.resolveOrderItems)
@@ -196,6 +203,7 @@ export class CreatePublicOrderDto {
 
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(MAX_ORDER_LINES)
   @ValidateNested({ each: true })
   @Type(() => PublicOrderItemInput)
   items: PublicOrderItemInput[];

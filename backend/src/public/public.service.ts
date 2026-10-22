@@ -6,6 +6,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { assertOrderWithinLimits } from '../common/order-limits';
+import { CodeGuessLimiter } from '../common/code-guess-limiter';
+import {
+  isDiscountExistenceOracle,
+  toPublicDiscountResult,
+} from '../discounts/discount-constants';
+import type { EvaluateResult } from '../discounts/discounts.service';
+import { GENERIC_GIFT_CARD_MESSAGE } from '../gift-cards/gift-card.constants';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService, type QueryParam } from '../database/database.service';
 import { trimDecimal } from '../database/decimal.util';
@@ -149,6 +157,7 @@ export class PublicService {
     private readonly shopAnalyticsService: ShopAnalyticsService,
     private readonly conversionEventsService: ConversionEventsService,
     private readonly reviewsService: ReviewsService,
+    private readonly codeGuessLimiter: CodeGuessLimiter,
   ) {}
 
   // Backs the theme builder's live preview for a shop that hasn't published
@@ -233,9 +242,34 @@ export class PublicService {
     return this.abandonedCartsService.resolveByToken(token);
   }
 
-  async validateGiftCard(shopSlug: string, dto: ValidateGiftCardDto) {
+  async validateGiftCard(
+    shopSlug: string,
+    dto: ValidateGiftCardDto,
+    clientIp?: string,
+  ) {
     const shop = await this.resolveShop(shopSlug);
-    return this.giftCardsService.validateCode(shop.id, dto.code);
+    this.codeGuessLimiter.assertAllowed(shop.id, clientIp, dto.code);
+    const result = await this.giftCardsService.validateCode(shop.id, dto.code);
+    if (result.valid) return result;
+    // One answer for every failure, no reason and never a balance.
+    this.codeGuessLimiter.recordFailure(shop.id, clientIp, dto.code);
+    return { valid: false, message: GENERIC_GIFT_CARD_MESSAGE };
+  }
+
+  // Counts a public discount-code answer that confirms or denies existence
+  // against the shared guess budget (CodeGuessLimiter), and collapses those
+  // answers to one message. The other rejections (minimum purchase, limits,
+  // eligibility) are returned as they are.
+  private discountOutcome<T extends EvaluateResult>(
+    shopId: number,
+    clientIp: string | undefined,
+    code: string,
+    result: T,
+  ): T {
+    if (!result.valid && isDiscountExistenceOracle(result.reason)) {
+      this.codeGuessLimiter.recordFailure(shopId, clientIp, code);
+    }
+    return toPublicDiscountResult(result);
   }
 
   // No dedicated module for this — it's a single insert-or-409, not enough
@@ -1381,10 +1415,22 @@ export class PublicService {
     return { success: true };
   }
 
-  async validateDiscount(shopSlug: string, dto: ValidateDiscountDto) {
+  async validateDiscount(
+    shopSlug: string,
+    dto: ValidateDiscountDto,
+    clientIp?: string,
+  ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    if (!dto.items?.length) return this.discountsService.validate(shop.id, dto);
+    this.codeGuessLimiter.assertAllowed(shop.id, clientIp, dto.code);
+    if (!dto.items?.length) {
+      return this.discountOutcome(
+        shop.id,
+        clientIp,
+        dto.code,
+        await this.discountsService.validate(shop.id, dto),
+      );
+    }
     // Priced by the same resolver checkout uses, so what is shown is what is
     // charged. A client price is never honoured on this public route.
     const resolved = await this.productsService.resolveOrderItems(
@@ -1396,6 +1442,7 @@ export class PublicService {
         giftCardAmount: i.giftCardAmount,
       })),
     );
+    assertOrderWithinLimits(resolved);
     // Same rule as createOrder: an unpublished product must not be priced
     // (or even confirmed to exist) through this unauthenticated endpoint.
     for (const { product } of resolved) {
@@ -1413,7 +1460,12 @@ export class PublicService {
         quantity: r.quantity,
       })),
     );
-    return this.discountsService.validate(shop.id, dto, lines);
+    return this.discountOutcome(
+      shop.id,
+      clientIp,
+      dto.code,
+      await this.discountsService.validate(shop.id, dto, lines),
+    );
   }
 
   // Every live auto-apply discount for this shop, for the storefront to
@@ -1441,9 +1493,17 @@ export class PublicService {
     // Set by the controller ONLY when dto.useStoreCredit (an authenticated
     // customer of this shop); null for every guest checkout.
     sessionCustomer: CustomerContext | null = null,
+    clientIp?: string,
   ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
+    // Typed codes spend the same failed-guess budget as the validate routes.
+    if (dto.discountCode) {
+      this.codeGuessLimiter.assertAllowed(shop.id, clientIp, dto.discountCode);
+    }
+    if (dto.giftCardCode) {
+      this.codeGuessLimiter.assertAllowed(shop.id, clientIp, dto.giftCardCode);
+    }
     const outletRows = await this.db.query<(OutletRow & RowDataPacket)[]>(
       `SELECT * FROM outlet WHERE id = ? AND shopId = ? AND active = 1 LIMIT 1`,
       [dto.outletId, shop.id],
@@ -1482,6 +1542,7 @@ export class PublicService {
         giftCardAmount: i.giftCardAmount,
       })),
     );
+    assertOrderWithinLimits(resolvedItems);
     for (const { product } of resolvedItems) {
       if (product.status !== 'Available') {
         throw new BadRequestException(
@@ -1507,7 +1568,9 @@ export class PublicService {
       discountCodeSnapshot,
       totals,
       orderTotal,
-    } = await this.priceCheckout(shop, outlet, dto, resolvedItems, region);
+    } = await this.priceCheckout(shop, outlet, dto, resolvedItems, region, {
+      clientIp,
+    });
     const { taxAmount, total } = totals;
     const itemsData = resolvedItems.map(
       (
@@ -1555,9 +1618,8 @@ export class PublicService {
         dto.giftCardCode,
       );
       if (!evaluated.valid) {
-        throw new BadRequestException(
-          evaluated.message ?? 'This gift card cannot be applied',
-        );
+        this.codeGuessLimiter.recordFailure(shop.id, clientIp, dto.giftCardCode);
+        throw new BadRequestException(GENERIC_GIFT_CARD_MESSAGE);
       }
       giftCard = { id: evaluated.giftCardId!, code: evaluated.code! };
       giftCardAmountApplied = Math.min(evaluated.remainingBalance!, orderTotal);
@@ -2019,7 +2081,7 @@ export class PublicService {
     region: { regionId: number | null; regionName: string | null },
     // A quote is re-asked on every debounced address change: it must not write
     // the "matched no zone" warning createOrder logs once per real order.
-    opts: { quiet?: boolean } = {},
+    opts: { quiet?: boolean; clientIp?: string } = {},
   ) {
     const lines = resolvedItems.map((r) => ({
       productId: r.product.id as number,
@@ -2067,17 +2129,22 @@ export class PublicService {
       );
       // Eligibility and the amount come from the resolved lines (server
       // prices, server collection membership), never from client-supplied ids.
-      const evaluated = await this.discountsService.evaluate(resolved, {
-        lines: await this.discountsService.buildLines(
-          shop.id,
-          lines.map((d) => ({
-            productId: d.productId,
-            price: d.price,
-            quantity: d.quantity,
-          })),
-        ),
-        currency: shop.currency,
-      });
+      const evaluated = this.discountOutcome(
+        shop.id,
+        opts.clientIp,
+        input.discountCode,
+        await this.discountsService.evaluate(resolved, {
+          lines: await this.discountsService.buildLines(
+            shop.id,
+            lines.map((d) => ({
+              productId: d.productId,
+              price: d.price,
+              quantity: d.quantity,
+            })),
+          ),
+          currency: shop.currency,
+        }),
+      );
       if (!evaluated.valid) {
         throw new BadRequestException(
           evaluated.message ?? 'This discount code cannot be applied',
@@ -2131,9 +2198,16 @@ export class PublicService {
   // credit are payment credits applied after the total and are deliberately not
   // part of a quote. A rejection createOrder would answer with a 400 comes back
   // as status 'unavailable' carrying that same message.
-  async quoteDelivery(shopSlug: string, dto: QuoteDeliveryDto) {
+  async quoteDelivery(
+    shopSlug: string,
+    dto: QuoteDeliveryDto,
+    clientIp?: string,
+  ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
+    if (dto.discountCode) {
+      this.codeGuessLimiter.assertAllowed(shop.id, clientIp, dto.discountCode);
+    }
     const outletRows = await this.db.query<(OutletRow & RowDataPacket)[]>(
       `SELECT * FROM outlet WHERE id = ? AND shopId = ? AND active = 1 LIMIT 1`,
       [dto.outletId, shop.id],
@@ -2179,6 +2253,7 @@ export class PublicService {
         giftCardAmount: i.giftCardAmount,
       })),
     );
+    assertOrderWithinLimits(resolvedItems);
     const base = {
       currency: shop.currency,
       orderType: dto.orderType,
@@ -2234,7 +2309,7 @@ export class PublicService {
         dto,
         resolvedItems,
         region,
-        { quiet: true },
+        { quiet: true, clientIp },
       );
       return {
         ...base,

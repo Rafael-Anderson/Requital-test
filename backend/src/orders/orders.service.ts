@@ -9,6 +9,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
+import { assertOrderWithinLimits } from '../common/order-limits';
 import { DatabaseService } from '../database/database.service';
 import type { QueryParam } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
@@ -330,6 +331,7 @@ export class OrdersService {
         priceOverride: item.priceOverride,
       })),
     );
+    assertOrderWithinLimits(resolvedItems);
 
     const itemsData = resolvedItems.map(
       ({
@@ -1044,6 +1046,7 @@ export class OrdersService {
         priceOverride: item.priceOverride,
       })),
     );
+    assertOrderWithinLimits(resolvedItems);
 
     const newItemsData = resolvedItems.map(
       ({

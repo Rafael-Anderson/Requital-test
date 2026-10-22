@@ -8,9 +8,14 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
+import {
+  MAX_LINE_QUANTITY,
+  MAX_ORDER_LINES,
+} from '../../common/order-limits';
 
 // Shared by the admin-authenticated POST /shop/discounts/validate (used by
 // the draft-order builder) and the public POST /public/:shopSlug/discounts/validate
@@ -51,7 +56,7 @@ export class ValidateDiscountDto {
   // derives eligibility and the amount exactly as order creation will.
   @IsOptional()
   @IsArray()
-  @ArrayMaxSize(100)
+  @ArrayMaxSize(MAX_ORDER_LINES)
   @ValidateNested({ each: true })
   @Type(() => ValidateDiscountItemDto)
   items?: ValidateDiscountItemDto[];
@@ -75,6 +80,7 @@ export class ValidateDiscountItemDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(MAX_LINE_QUANTITY)
   quantity: number;
 
   @IsOptional()
