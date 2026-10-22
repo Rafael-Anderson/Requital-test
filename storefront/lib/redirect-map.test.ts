@@ -194,3 +194,20 @@ describe("createRedirectStore", () => {
     expect(store._cacheSize()).toBeLessThanOrEqual(500);
   });
 });
+
+describe("createRedirectStore under a throttled or failing backend", () => {
+  it("treats 429 and 5xx as 'no redirect, serve the page', never as an error", async () => {
+    for (const status of [429, 503]) {
+      const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => new Response(null, { status }));
+      const store = createRedirectStore({ apiUrl: "http://api", fetchImpl });
+      await expect(store.lookup("acme", "/old", "")).resolves.toBeNull();
+    }
+  });
+
+  it("sends the signed header from headersFor on the map fetch", async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => mapResponse([{ from: "/old", to: "/new" }]));
+    const store = createRedirectStore({ apiUrl: "http://api", fetchImpl, headersFor: async () => ({ "X-Internal-Auth": "t=1,sig=ab" }) });
+    await store.lookup("acme", "/old", "");
+    expect((fetchImpl.mock.calls[0][1]?.headers as Record<string, string>)["X-Internal-Auth"]).toBe("t=1,sig=ab");
+  });
+});

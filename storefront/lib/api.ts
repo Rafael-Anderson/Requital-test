@@ -35,6 +35,7 @@ import type {
 } from "./types";
 import type { ThemeConfig } from "./theme-config-types";
 import { resolveInternalApiOrigin } from "./api-origin";
+import { internalAuthHeaders } from "./internal-auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
@@ -79,8 +80,21 @@ export class HttpError extends Error {
   }
 }
 
+// Server-side reads carry the signed internal-auth header (lib/internal-auth.ts)
+// so the backend can bucket them apart from shoppers' own requests. A no-op in
+// the browser and whenever INTERNAL_API_SECRET is unset.
+async function withInternalAuth(url: string, init?: RequestInit): Promise<RequestInit | undefined> {
+  if (typeof window !== "undefined") return init;
+  const extra = await internalAuthHeaders(init?.method ?? "GET", url);
+  if (Object.keys(extra).length === 0) return init;
+  const headers = new Headers(init?.headers);
+  for (const [k, v] of Object.entries(extra)) headers.set(k, v);
+  return { ...init, headers };
+}
+
 async function get<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${apiBase()}${path}`, init);
+  const url = `${apiBase()}${path}`;
+  const res = await fetch(url, await withInternalAuth(url, init));
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new HttpError(body?.message ?? `Request failed (${res.status})`, res.status);
@@ -206,7 +220,8 @@ export async function getThemeConfig(
   if (opts.preview) params.set("preview", "true");
   if (opts.themeId !== undefined) params.set("themeId", String(opts.themeId));
   const qs = params.toString();
-  const res = await fetch(`${apiBase()}/public/${shopSlug}/theme-config${qs ? `?${qs}` : ""}`);
+  const url = `${apiBase()}/public/${shopSlug}/theme-config${qs ? `?${qs}` : ""}`;
+  const res = await fetch(url, await withInternalAuth(url));
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new HttpError(body?.message ?? `Request failed (${res.status})`, res.status);

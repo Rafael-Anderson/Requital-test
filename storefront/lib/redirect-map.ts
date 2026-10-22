@@ -129,6 +129,8 @@ export interface RedirectStoreDeps {
   apiUrl: string;
   fetchImpl?: FetchLike;
   now?: () => number;
+  // Extra request headers (the signed internal-auth header), computed per call.
+  headersFor?: (method: string, url: string) => Promise<Record<string, string>>;
 }
 
 export function createRedirectStore(deps: RedirectStoreDeps) {
@@ -163,12 +165,15 @@ export function createRedirectStore(deps: RedirectStoreDeps) {
     const hits = takeHits(shop);
     if (hits.length === 0) return;
     const url = `${deps.apiUrl}/public/${encodeURIComponent(shop)}/redirects/hits`;
-    fetchImpl(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hits }),
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    }).catch(() => {});
+    (async () => {
+      const extra = deps.headersFor ? await deps.headersFor("POST", url) : {};
+      await fetchImpl(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...extra },
+        body: JSON.stringify({ hits }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    })().catch(() => {});
   }
 
   function recordHit(shop: string, path: string) {
@@ -186,8 +191,9 @@ export function createRedirectStore(deps: RedirectStoreDeps) {
     const t = now();
     const url = `${deps.apiUrl}/public/${encodeURIComponent(shop)}/redirects/map`;
     try {
+      const extra = deps.headersFor ? await deps.headersFor("GET", url) : {};
       const res = await fetchImpl(url, {
-        headers: existing?.etag ? { "If-None-Match": existing.etag } : {},
+        headers: { ...(existing?.etag ? { "If-None-Match": existing.etag } : {}), ...extra },
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       if (res.status === 304 && existing) {
