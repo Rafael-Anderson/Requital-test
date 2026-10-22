@@ -7,6 +7,7 @@ import { relativeTime } from "@/lib/format";
 import { waLink } from "@/lib/validators";
 import { useAuth } from "@/lib/auth-context";
 import StatusBadge from "@/components/StatusBadge";
+import AddressUnverifiedNotice from "@/components/AddressUnverifiedNotice";
 import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import Skeleton from "@/components/ui/Skeleton";
@@ -183,6 +184,7 @@ export default function SimpleOrderDetailModal({
                 {order.customerPhone}
               </a>
             </div>
+            {order.addressUnverified && <AddressUnverifiedNotice />}
             {order.deliveryDate && (
               <div className="mt-1 font-medium text-zinc-700 dark:text-zinc-300">
                 Due {new Date(order.deliveryDate).toLocaleDateString()}
