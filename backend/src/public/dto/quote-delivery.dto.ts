@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsLatitude,
@@ -66,6 +67,12 @@ export class QuoteDeliveryDto {
   @IsOptional()
   @IsLongitude()
   longitude?: number;
+
+  // See CreatePublicOrderDto.addressManual. A quote never geocodes (it is asked
+  // on every debounced change); it only stops demanding a pin.
+  @IsOptional()
+  @IsBoolean()
+  addressManual?: boolean;
 
   @IsOptional()
   @IsString()

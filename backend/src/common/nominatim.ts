@@ -6,6 +6,8 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 // traffic, so both callers proxy through the backend rather than hitting
 // this from the browser directly.
 const NOMINATIM_USER_AGENT = 'Requital/1.0 (address lookup)';
+// A hung lookup must not hold an order or a quote open (F9 server-side fallback).
+const NOMINATIM_TIMEOUT_MS = 4000;
 
 export interface GeocodeResult {
   latitude: number;
@@ -24,7 +26,10 @@ export async function geocodeAddress(query?: string): Promise<GeocodeResult> {
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
   let res: Response;
   try {
-    res = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT } });
+    res = await fetch(url, {
+      headers: { 'User-Agent': NOMINATIM_USER_AGENT },
+      signal: AbortSignal.timeout(NOMINATIM_TIMEOUT_MS),
+    });
   } catch {
     throw new BadRequestException('Geocoding lookup failed. Try again');
   }

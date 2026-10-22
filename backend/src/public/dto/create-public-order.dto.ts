@@ -132,6 +132,14 @@ export class CreatePublicOrderDto {
   @IsLongitude()
   longitude?: number;
 
+  // Set by the storefront only while Google Maps is unavailable to the shopper
+  // and no pin was given. The server then geocodes the typed address (radius
+  // outlets) or accepts it, and flags the order addressUnverified. Ignored when
+  // coordinates are present.
+  @IsOptional()
+  @IsBoolean()
+  addressManual?: boolean;
+
   @IsOptional()
   @IsDateString()
   deliveryDate?: string;
