@@ -109,7 +109,7 @@ async function bootstrap() {
     // common/csrf.ts's own CSRF_RESPONSE_HEADER comment for why a response
     // header, not a readable cookie or the response body, is the
     // distribution channel).
-    exposedHeaders: ['X-CSRF-Token'],
+    exposedHeaders: ['X-CSRF-Token', 'Retry-After'],
   });
   // cookie-parser is registered in AppModule.configure() instead of here —
   // see that file's own comment for why (main.ts's bootstrap() never runs

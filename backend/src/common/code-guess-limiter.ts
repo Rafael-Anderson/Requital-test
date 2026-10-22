@@ -26,23 +26,39 @@ export class CodeGuessLockedException extends HttpException {
   }
 }
 
+// Handed back by reserve(): call refund() once the lookup shows the attempt was
+// NOT an existence-revealing failure (a valid code, a specific post-existence
+// rejection, or an error). Idempotent.
+export interface CodeGuessTicket {
+  refund(): void;
+}
+const NOOP_TICKET: CodeGuessTicket = { refund() {} };
+
 // One failed-attempt limiter for every public surface that confirms or denies
 // a discount or gift-card code (discount validate, delivery quote, order
 // creation, gift-card validate). The per-route @Throttle buckets are per
 // handler, so a guesser could spend 20 + 20 + 40 a minute across them; this one
-// budget is shared by all of them and counts only FAILURES that tell a caller
-// something about whether a code exists, so a shopper who types a real code
-// never meets it.
+// budget is shared by all of them, so a shopper who types a real code never
+// meets it.
+//
+// RESERVE, THEN LOOK UP. The attempt is counted (synchronously, before any
+// await) the moment it starts and refunded when it turns out not to have been a
+// failure that tells the caller whether a code exists. Counting only after the
+// lookup left a gap of several awaited DB round trips in which a parallel burst
+// could all pass the check, so the budget is now a hard bound on how many
+// distinct codes reach the lookup, however the requests are interleaved.
 //
 // Keys: (shop, client IP) and (shop, client IP, code hash). NEVER the code on
 // its own: that would let anyone lock a victim's real code out for everyone by
-// guessing it.
+// guessing it. The client budget counts DISTINCT codes: repeats of one code
+// (retyping, or the debounced delivery quote re-sending a stale code) only
+// spend the per-code allowance.
 //
 // In-memory and per process, the same ceiling as FixedWindowLimiter and the
 // Throttler (one PM2 process per app today): scaling the backend out needs a
 // shared store, and until then the effective budget is N times the numbers
 // above. Clients behind one NAT or proxy share a bucket (client IP is req.ip,
-// i.e. what TRUST_PROXY makes it).
+// i.e. what TRUST_PROXY makes it; production sets TRUST_PROXY=loopback).
 @Injectable()
 export class CodeGuessLimiter {
   // Overridable so a unit test can move the clock.
@@ -67,28 +83,42 @@ export class CodeGuessLimiter {
     return { client, code: `${client}|${hash}` };
   }
 
-  // Throws once the client has used up its budget. Does not count.
-  assertAllowed(shopId: number, ip: string | undefined, code: string): void {
-    if (skipThrottling()) return;
+  // Counts this attempt, or throws 429 when the client's budget is spent. Must
+  // be called before the lookup it guards, with no await in between.
+  reserve(
+    shopId: number,
+    ip: string | undefined,
+    code: string,
+  ): CodeGuessTicket {
+    if (skipThrottling()) return NOOP_TICKET;
     const k = this.keys(shopId, ip, code);
-    const a = this.perClient.peek(k.client);
-    const b = this.perCode.peek(k.code);
+    const code0 = this.perCode.peek(k.code);
+    const client = this.perClient.peek(k.client);
+    const isNewCode = code0.count === 0;
     const lockedMs = Math.max(
-      a.count >= CODE_GUESS_MAX_DISTINCT_FAILURES ? a.retryAfterMs : 0,
-      b.count >= CODE_GUESS_MAX_REPEATS ? b.retryAfterMs : 0,
+      isNewCode && client.count >= CODE_GUESS_MAX_DISTINCT_FAILURES
+        ? client.retryAfterMs
+        : 0,
+      code0.count >= CODE_GUESS_MAX_REPEATS ? code0.retryAfterMs : 0,
     );
     if (lockedMs > 0) {
       throw new CodeGuessLockedException(
         Math.max(1, Math.ceil(lockedMs / 1000)),
       );
     }
-  }
-
-  recordFailure(shopId: number, ip: string | undefined, code: string): void {
-    if (skipThrottling()) return;
-    const k = this.keys(shopId, ip, code);
-    const first = this.perCode.peek(k.code).count === 0;
     this.perCode.hit(k.code);
-    if (first) this.perClient.hit(k.client);
+    if (isNewCode) this.perClient.hit(k.client);
+    let done = false;
+    return {
+      refund: () => {
+        if (done) return;
+        done = true;
+        this.perCode.unhit(k.code);
+        // The client's slot belongs to the code, not to one request: it goes
+        // back only when no other attempt at that code is still counted.
+        if (this.perCode.peek(k.code).count === 0)
+          this.perClient.unhit(k.client);
+      },
+    };
   }
 }

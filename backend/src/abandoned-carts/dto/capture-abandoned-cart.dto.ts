@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsInt,
@@ -8,9 +9,11 @@ import {
   IsPositive,
   IsString,
   Matches,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { MAX_LINE_QUANTITY, MAX_ORDER_LINES } from '../../common/order-limits';
 
 class AbandonedCartItemInput {
   @IsInt()
@@ -35,6 +38,7 @@ class AbandonedCartItemInput {
 
   @IsInt()
   @IsPositive()
+  @Max(MAX_LINE_QUANTITY)
   quantity: number;
 
   @IsString()
@@ -67,6 +71,7 @@ export class CaptureAbandonedCartDto {
 
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(MAX_ORDER_LINES)
   @ValidateNested({ each: true })
   @Type(() => AbandonedCartItemInput)
   cartItems: AbandonedCartItemInput[];

@@ -31,7 +31,7 @@ describe('Code guess limiter (e2e)', () => {
     future: string;
     minPurchase: string;
   };
-  let s1: World, s2: World, s3: World, s4: World, s5: World;
+  let s1: World, s2: World, s3: World, s4: World, s5: World, s6: World;
 
   async function world(prefix: string): Promise<World> {
     const shop = await f.setupShop(prefix);
@@ -58,6 +58,10 @@ describe('Code guess limiter (e2e)', () => {
     s3 = await world('cg3');
     s4 = await world('cg4');
     s5 = await world('cg5');
+    s6 = await world('cg6');
+    // listening once, so 20 parallel supertest calls share one server instead of
+    // each opening (and closing) its own
+    await app.listen(0);
     process.env.THROTTLE_IN_TESTS = '1';
   });
   afterAll(async () => {
@@ -154,6 +158,42 @@ describe('Code guess limiter (e2e)', () => {
     // a 429 does not write an order, and an order with no code is untouched
     const plain = await f.storefrontOrderRaw(s2.shop, items(s2));
     expect(plain.status).toBe(201);
+  });
+
+  it('a parallel burst across four routes cannot overshoot the budget: only 10 distinct codes reach a lookup', async () => {
+    // 20 attempts fired at once, every one at a different wrong code. They all
+    // arrive before any lookup has finished, so a limiter that counts only after
+    // the lookup would let every one of them through.
+    const attempts = [
+      ...Array.from({ length: 4 }, (_, i) => validate(s6, `BURSTV${i}`)),
+      ...Array.from({ length: 6 }, (_, i) => quote(s6, `BURSTQ${i}`)),
+      ...Array.from({ length: 6 }, (_, i) => order(s6, `BURSTO${i}`)),
+      ...Array.from({ length: 4 }, (_, i) => giftValidate(s6, `BURSTG-${i}`)),
+    ];
+    const results = await Promise.all(attempts);
+    const limited = results.filter(
+      (r) =>
+        r.status === 429 &&
+        msg(r) === 'Too many attempts. Please try again later.',
+    );
+    expect(results).toHaveLength(20);
+    expect(limited).toHaveLength(10);
+    for (const r of limited)
+      expect(Number(r.headers['retry-after'])).toBeGreaterThan(0);
+    // and the budget really is spent
+    expect((await validate(s6, s6.valid)).status).toBe(429);
+  });
+
+  it('a valid code gives its slot back: using the real code over and over never builds towards a lock', async () => {
+    for (let i = 0; i < 12; i++) {
+      const q = await quote(s5, s5.valid);
+      expect(body<{ discountCode: string | null }>(q).discountCode).toBe(s5.valid);
+    }
+    // and a rejection that needs the code to exist (minimum purchase) is free too
+    for (let i = 0; i < 12; i++) {
+      expect((await quote(s5, s5.minPurchase)).status).toBe(201);
+    }
+    expect(body<{ valid: boolean }>(await validate(s5, 'STILLFREE')).valid).toBe(false);
   });
 
   it('the lock is per shop: the same client is not locked out of another shop', async () => {

@@ -7,7 +7,10 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { assertOrderWithinLimits } from '../common/order-limits';
-import { CodeGuessLimiter } from '../common/code-guess-limiter';
+import {
+  CodeGuessLimiter,
+  type CodeGuessTicket,
+} from '../common/code-guess-limiter';
 import {
   isDiscountExistenceOracle,
   toPublicDiscountResult,
@@ -248,26 +251,35 @@ export class PublicService {
     clientIp?: string,
   ) {
     const shop = await this.resolveShop(shopSlug);
-    this.codeGuessLimiter.assertAllowed(shop.id, clientIp, dto.code);
-    const result = await this.giftCardsService.validateCode(shop.id, dto.code);
-    if (result.valid) return result;
+    // Reserved before the lookup (see CodeGuessLimiter): every failure of a gift
+    // card code reveals that it exists, so a failure keeps its slot.
+    const ticket = this.codeGuessLimiter.reserve(shop.id, clientIp, dto.code);
+    let result;
+    try {
+      result = await this.giftCardsService.validateCode(shop.id, dto.code);
+    } catch (err) {
+      ticket.refund();
+      throw err;
+    }
+    if (result.valid) {
+      ticket.refund();
+      return result;
+    }
     // One answer for every failure, no reason and never a balance.
-    this.codeGuessLimiter.recordFailure(shop.id, clientIp, dto.code);
     return { valid: false, message: GENERIC_GIFT_CARD_MESSAGE };
   }
 
-  // Counts a public discount-code answer that confirms or denies existence
-  // against the shared guess budget (CodeGuessLimiter), and collapses those
-  // answers to one message. The other rejections (minimum purchase, limits,
-  // eligibility) are returned as they are.
-  private discountOutcome<T extends EvaluateResult>(
-    shopId: number,
-    clientIp: string | undefined,
-    code: string,
+  // Settles a public discount-code attempt reserved with CodeGuessLimiter: an
+  // answer that confirms or denies existence (not found, inactive, not started,
+  // expired) keeps its slot and is collapsed to one message; a valid code or a
+  // rejection that needs the code to exist (minimum purchase, limits,
+  // eligibility) gives the slot back and is returned as it is.
+  private settleDiscount<T extends EvaluateResult>(
+    ticket: CodeGuessTicket,
     result: T,
   ): T {
-    if (!result.valid && isDiscountExistenceOracle(result.reason)) {
-      this.codeGuessLimiter.recordFailure(shopId, clientIp, code);
+    if (result.valid || !isDiscountExistenceOracle(result.reason)) {
+      ticket.refund();
     }
     return toPublicDiscountResult(result);
   }
@@ -1422,19 +1434,24 @@ export class PublicService {
   ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    this.codeGuessLimiter.assertAllowed(shop.id, clientIp, dto.code);
-    if (!dto.items?.length) {
-      return this.discountOutcome(
-        shop.id,
-        clientIp,
-        dto.code,
-        await this.discountsService.validate(shop.id, dto),
+    const ticket = this.codeGuessLimiter.reserve(shop.id, clientIp, dto.code);
+    try {
+      return this.settleDiscount(
+        ticket,
+        await this.validateDiscountResult(shop.id, dto),
       );
+    } catch (err) {
+      ticket.refund();
+      throw err;
     }
+  }
+
+  private async validateDiscountResult(shopId: number, dto: ValidateDiscountDto) {
+    if (!dto.items?.length) return this.discountsService.validate(shopId, dto);
     // Priced by the same resolver checkout uses, so what is shown is what is
     // charged. A client price is never honoured on this public route.
     const resolved = await this.productsService.resolveOrderItems(
-      shop.id,
+      shopId,
       dto.items.map((i) => ({
         productId: i.productId,
         variantId: i.variantId,
@@ -1453,19 +1470,14 @@ export class PublicService {
       }
     }
     const lines = await this.discountsService.buildLines(
-      shop.id,
+      shopId,
       resolved.map((r) => ({
         productId: r.product.id as number,
         price: r.price,
         quantity: r.quantity,
       })),
     );
-    return this.discountOutcome(
-      shop.id,
-      clientIp,
-      dto.code,
-      await this.discountsService.validate(shop.id, dto, lines),
-    );
+    return this.discountsService.validate(shopId, dto, lines);
   }
 
   // Every live auto-apply discount for this shop, for the storefront to
@@ -1497,13 +1509,6 @@ export class PublicService {
   ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    // Typed codes spend the same failed-guess budget as the validate routes.
-    if (dto.discountCode) {
-      this.codeGuessLimiter.assertAllowed(shop.id, clientIp, dto.discountCode);
-    }
-    if (dto.giftCardCode) {
-      this.codeGuessLimiter.assertAllowed(shop.id, clientIp, dto.giftCardCode);
-    }
     const outletRows = await this.db.query<(OutletRow & RowDataPacket)[]>(
       `SELECT * FROM outlet WHERE id = ? AND shopId = ? AND active = 1 LIMIT 1`,
       [dto.outletId, shop.id],
@@ -1613,14 +1618,26 @@ export class PublicService {
     let giftCard: { id: number; code: string } | null = null;
     let giftCardAmountApplied = 0;
     if (dto.giftCardCode) {
-      const evaluated = await this.giftCardsService.validateCode(
+      // Reserved before the lookup (CodeGuessLimiter); a failure keeps its slot.
+      const ticket = this.codeGuessLimiter.reserve(
         shop.id,
+        clientIp,
         dto.giftCardCode,
       );
+      let evaluated;
+      try {
+        evaluated = await this.giftCardsService.validateCode(
+          shop.id,
+          dto.giftCardCode,
+        );
+      } catch (err) {
+        ticket.refund();
+        throw err;
+      }
       if (!evaluated.valid) {
-        this.codeGuessLimiter.recordFailure(shop.id, clientIp, dto.giftCardCode);
         throw new BadRequestException(GENERIC_GIFT_CARD_MESSAGE);
       }
+      ticket.refund();
       giftCard = { id: evaluated.giftCardId!, code: evaluated.code! };
       giftCardAmountApplied = Math.min(evaluated.remainingBalance!, orderTotal);
     }
@@ -2123,28 +2140,39 @@ export class PublicService {
     let discountAmount = 0;
     let discountCodeSnapshot: string | undefined;
     if (input.discountCode) {
-      const resolved = await this.discountsService.resolveByCode(
-        shop.id,
-        input.discountCode,
-      );
-      // Eligibility and the amount come from the resolved lines (server
-      // prices, server collection membership), never from client-supplied ids.
-      const evaluated = this.discountOutcome(
+      // Reserved before the lookup and settled after it (CodeGuessLimiter).
+      const ticket = this.codeGuessLimiter.reserve(
         shop.id,
         opts.clientIp,
         input.discountCode,
-        await this.discountsService.evaluate(resolved, {
-          lines: await this.discountsService.buildLines(
-            shop.id,
-            lines.map((d) => ({
-              productId: d.productId,
-              price: d.price,
-              quantity: d.quantity,
-            })),
-          ),
-          currency: shop.currency,
-        }),
       );
+      let resolved: Awaited<ReturnType<DiscountsService['resolveByCode']>>;
+      let evaluated: EvaluateResult;
+      try {
+        resolved = await this.discountsService.resolveByCode(
+          shop.id,
+          input.discountCode,
+        );
+        // Eligibility and the amount come from the resolved lines (server
+        // prices, server collection membership), never from client-supplied ids.
+        evaluated = this.settleDiscount(
+          ticket,
+          await this.discountsService.evaluate(resolved, {
+            lines: await this.discountsService.buildLines(
+              shop.id,
+              lines.map((d) => ({
+                productId: d.productId,
+                price: d.price,
+                quantity: d.quantity,
+              })),
+            ),
+            currency: shop.currency,
+          }),
+        );
+      } catch (err) {
+        ticket.refund();
+        throw err;
+      }
       if (!evaluated.valid) {
         throw new BadRequestException(
           evaluated.message ?? 'This discount code cannot be applied',
@@ -2205,9 +2233,6 @@ export class PublicService {
   ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    if (dto.discountCode) {
-      this.codeGuessLimiter.assertAllowed(shop.id, clientIp, dto.discountCode);
-    }
     const outletRows = await this.db.query<(OutletRow & RowDataPacket)[]>(
       `SELECT * FROM outlet WHERE id = ? AND shopId = ? AND active = 1 LIMIT 1`,
       [dto.outletId, shop.id],

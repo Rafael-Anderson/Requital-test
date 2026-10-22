@@ -2,7 +2,13 @@ import type { DayHours } from "./types";
 
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
-// Same fallback lib/earliest-delivery.ts uses when a shop carries no timezone.
+// shop.timezone is NOT NULL DEFAULT 'Asia/Dubai' (migration
+// 20260723124502_add_shop_settings_fields) and every backend consumer falls back
+// to the same 'Asia/Dubai' (public.service.ts, dashboard, reports, analytics), so
+// this only fires for an empty value or an older cached payload. It is also what
+// lib/earliest-delivery.ts uses. Not validated as an IANA name when a merchant
+// saves it (UpdateShopDto only checks it is a string), which is why a bad value
+// answers null below and the checkout fails closed.
 const DEFAULT_TIMEZONE = "Asia/Dubai";
 
 // "What day and time is it for the SHOP?" The checkout used the browser clock

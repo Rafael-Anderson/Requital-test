@@ -92,6 +92,28 @@ describe('Order size caps (e2e)', () => {
       expect((await validate(lines101(w.a.id))).status).toBe(400);
     });
 
+    it('abandoned-cart capture holds the same ceilings', async () => {
+      const cap = (cartItems: unknown[]) =>
+        request(f.http()).post(`/public/${w.shop.slug}/abandoned-carts`).send({
+          customerName: 'Cap',
+          customerPhone: '0501234567',
+          outletId: w.shop.outletId,
+          cartItems,
+        });
+      const item = (quantity: number) => ({
+        productId: w.a.id,
+        name: 'x',
+        price: 1,
+        quantity,
+        thumbnail: 'https://example.com/t.jpg',
+      });
+      expect((await cap([item(1000)])).status).toBe(400);
+      expect(
+        (await cap(Array.from({ length: 101 }, () => item(1)))).status,
+      ).toBe(400);
+      expect((await cap([item(999)])).status).toBe(201);
+    });
+
     it('admin order, order item edit, draft create and draft update are 400', async () => {
       const admin = await request(f.http())
         .post('/orders')
@@ -262,6 +284,88 @@ describe('Order size caps (e2e)', () => {
         [w.shop.shopId],
       );
       expect(Number(rows[0].c)).toBe(20);
+    });
+  });
+
+  // An order or draft that predates the limits may already be over one. Editing
+  // it DOWN must still work; only a result that is over a limit AND larger than
+  // what it held is refused.
+  describe('an order that predates the limits can still be edited down', () => {
+    let w: Awaited<ReturnType<typeof world>>;
+    beforeAll(async () => {
+      w = await world('cap-legacy');
+    });
+    const items = (a: number, qa: number, b: number, qb: number) => [
+      { productId: a, quantity: qa },
+      { productId: b, quantity: qb },
+    ];
+
+    it('updateItems: lower is allowed, higher is refused', async () => {
+      const o = await f.adminOrder(w.shop, items(w.a.id, 1, w.b.id, 1));
+      // what an order placed before the limits looked like: 1200 units
+      await db.query(
+        `UPDATE orderitem SET quantity = CASE productId WHEN ? THEN 700 ELSE 500 END WHERE orderId = ?`,
+        [w.a.id, o.id],
+      );
+      const up = await f.editItems(
+        w.shop,
+        o.id,
+        items(w.a.id, 700, w.b.id, 600),
+      );
+      expect(up.status).toBe(400);
+      expect(messageOf(up)).toMatch(/Maximum 1000 items per order/);
+      const same = await f.editItems(
+        w.shop,
+        o.id,
+        items(w.a.id, 700, w.b.id, 500),
+      );
+      expect(same.status).toBe(200); // unchanged size is not an increase
+      const down = await f.editItems(
+        w.shop,
+        o.id,
+        items(w.a.id, 650, w.b.id, 500),
+      );
+      expect(down.status).toBe(200);
+    });
+
+    it('a draft: edit down, and complete as it stands', async () => {
+      const base = {
+        outletId: w.shop.outletId,
+        customerName: 'Cap',
+        customerPhone: '0501234567',
+        customerAddress: 'Pickup',
+        orderType: 'pickup',
+      };
+      const created = await request(f.http())
+        .post('/shop/draft-orders')
+        .set(f.auth(w.shop))
+        .send({ ...base, items: items(w.a.id, 1, w.b.id, 1) })
+        .expect(201);
+      const id = body<{ id: number }>(created).id;
+      await db.query(
+        `UPDATE draftorderitem SET quantity = CASE productId WHEN ? THEN 700 ELSE 500 END WHERE draftOrderId = ?`,
+        [w.a.id, id],
+      );
+      const patch = (qa: number, qb: number) =>
+        request(f.http())
+          .patch(`/shop/draft-orders/${id}`)
+          .set(f.auth(w.shop))
+          .send({ items: items(w.a.id, qa, w.b.id, qb) });
+      expect((await patch(700, 600)).status).toBe(400);
+      expect((await patch(650, 500)).status).toBe(200);
+      // the legacy 1150-unit draft completes into an order of the same size
+      const done = await request(f.http())
+        .post(`/shop/draft-orders/${id}/complete`)
+        .set(f.auth(w.shop));
+      expect(done.status).toBe(201);
+    });
+
+    it('a NEW order of that size is still refused (no baseline, no exemption)', async () => {
+      const res = await f.storefrontOrderRaw(
+        w.shop,
+        items(w.a.id, 650, w.b.id, 500),
+      );
+      expect(res.status).toBe(400);
     });
   });
 });
