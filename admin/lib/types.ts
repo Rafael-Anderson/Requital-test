@@ -73,6 +73,8 @@ export interface Order {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string;
+  // Typed address with no map pin (the shopper's Google Maps was unavailable).
+  addressUnverified?: boolean;
   region?: Region | null;
   area: string | null;
   deliveryDate: string | null;

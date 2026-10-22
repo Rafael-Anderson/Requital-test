@@ -23,6 +23,61 @@ let loaderPromise: Promise<typeof google> | null = null;
 // Patched once here (idempotent) so every current and future error type
 // routes through the same `gm_authFailure` callback every consumer already
 // wires up, instead of requiring each new error class to be special-cased.
+//
+// The parsed error code is also published to subscribers (F9) so the app chrome
+// can tell the MERCHANT that Maps is broken for their store (MapsHealthBanner).
+// Shoppers never see it; the storefront has its own loader and a separate beacon.
+export const MAPS_ERROR_CODES = [
+  "RefererNotAllowedMapError",
+  "BillingNotEnabledMapError",
+  "InvalidKeyMapError",
+  "ApiNotActivatedMapError",
+] as const;
+export type MapsErrorCode = (typeof MAPS_ERROR_CODES)[number];
+// code is null when Maps failed without a named error (the script did not load).
+export interface MapsFailure {
+  code: MapsErrorCode | null;
+}
+
+const ERROR_LINE = /Google Maps JavaScript API error: (\w+)/;
+
+// undefined: not a Maps error line. null: a Maps error with an unrecognised code.
+export function parseMapsErrorCode(text: string): MapsErrorCode | null | undefined {
+  const match = ERROR_LINE.exec(text);
+  if (!match) return undefined;
+  return (MAPS_ERROR_CODES as readonly string[]).includes(match[1]) ? (match[1] as MapsErrorCode) : null;
+}
+
+let failure: MapsFailure | null = null;
+const listeners = new Set<() => void>();
+
+export function getMapsFailure(): MapsFailure | null {
+  return failure;
+}
+
+export function subscribeMapsFailure(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+// Keeps the first RECOGNISED code (the console line and gm_authFailure both fire
+// for one failure, in either order).
+function reportFailure(code: MapsErrorCode | null) {
+  if (failure && (failure.code !== null || code === null)) return;
+  failure = { code };
+  listeners.forEach((l) => l());
+}
+
+// Test seam only.
+export function resetMapsFailureForTests() {
+  failure = null;
+  loaderPromise = null;
+  consoleErrorPatched = false;
+  listeners.clear();
+}
+
 let consoleErrorPatched = false;
 function patchConsoleErrorForMapsFailures() {
   if (consoleErrorPatched) return;
@@ -30,8 +85,12 @@ function patchConsoleErrorForMapsFailures() {
   const originalError = console.error.bind(console);
   console.error = (...args: unknown[]) => {
     const first = args[0];
-    if (typeof first === "string" && first.startsWith("Google Maps JavaScript API error")) {
-      (window as unknown as { gm_authFailure?: () => void }).gm_authFailure?.();
+    if (typeof first === "string") {
+      const code = parseMapsErrorCode(first);
+      if (code !== undefined) {
+        reportFailure(code);
+        (window as unknown as { gm_authFailure?: () => void }).gm_authFailure?.();
+      }
     }
     originalError(...args);
   };
@@ -45,9 +104,12 @@ function patchConsoleErrorForMapsFailures() {
 export function loadGoogleMaps(onAuthFailure?: () => void): Promise<typeof google> {
   if (typeof window === "undefined") return Promise.reject(new Error("Google Maps can only load in the browser"));
   patchConsoleErrorForMapsFailures();
-  if (onAuthFailure) {
-    (window as unknown as { gm_authFailure?: () => void }).gm_authFailure = onAuthFailure;
-  }
+  // gm_authFailure always feeds the shared state; a caller's own callback (the
+  // map pickers' failed state) runs as well, last registered wins as before.
+  (window as unknown as { gm_authFailure?: () => void }).gm_authFailure = () => {
+    reportFailure(null);
+    onAuthFailure?.();
+  };
   if (window.google?.maps) return Promise.resolve(window.google);
   if (loaderPromise) return loaderPromise;
 
@@ -58,6 +120,7 @@ export function loadGoogleMaps(onAuthFailure?: () => void): Promise<typeof googl
     script.onload = () => resolve(window.google);
     script.onerror = () => {
       loaderPromise = null;
+      reportFailure(null);
       reject(new Error("Failed to load Google Maps"));
     };
     document.head.appendChild(script);
