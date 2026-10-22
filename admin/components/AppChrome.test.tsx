@@ -6,6 +6,7 @@ vi.mock("@/components/TopBar", () => ({ default: () => null }));
 vi.mock("@/components/CountryBanner", () => ({ default: () => null }));
 vi.mock("@/components/EmailVerificationBanner", () => ({ default: () => null }));
 vi.mock("@/components/ImpersonationBanner", () => ({ default: () => null }));
+vi.mock("@/components/MapsHealthBanner", () => ({ default: () => <div data-testid="maps-banner" /> }));
 vi.mock("@/components/NewOrderBanner", () => ({ default: () => null }));
 vi.mock("@/components/CommandPalette", () => ({ default: () => null }));
 import AppChrome from "./AppChrome";
@@ -19,5 +20,10 @@ describe("AppChrome", () => {
     expect(main.className).toMatch(/\bpx-4\b/);
     expect(main.className).toMatch(/\bmd:px-12\b/);
     expect(main.className).not.toMatch(/(^|\s)px-12\b/);
+  });
+
+  it("mounts the merchant-only Maps health banner in the shared chrome (F9)", () => {
+    const { getByTestId } = render(<AppChrome><p>x</p></AppChrome>);
+    expect(getByTestId("maps-banner")).toBeInTheDocument();
   });
 });
