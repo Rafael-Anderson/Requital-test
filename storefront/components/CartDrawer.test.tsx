@@ -12,7 +12,8 @@ const subtotal = 120.5;
 vi.mock("@/lib/shop-context", () => ({
   useShop: () => ({ shop: { currency: "AED" }, shopBasePath: "", themeConfig }),
 }));
-vi.mock("@/lib/cart", () => ({
+vi.mock("@/lib/cart", async (orig) => ({
+  ...(await orig<typeof import("@/lib/cart")>()),
   useCart: () => ({ items, subtotal, setQuantity: vi.fn(), removeItem: vi.fn() }),
 }));
 let drawerOpen = true;

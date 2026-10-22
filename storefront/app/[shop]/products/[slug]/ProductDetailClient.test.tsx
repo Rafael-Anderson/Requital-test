@@ -41,7 +41,8 @@ vi.mock("@/lib/shop-context", () => ({
   }),
 }));
 
-vi.mock("@/lib/cart", () => ({
+vi.mock("@/lib/cart", async (orig) => ({
+  ...(await orig<typeof import("@/lib/cart")>()),
   useCart: () => ({ addItem: vi.fn(), clear: vi.fn() }),
 }));
 

@@ -2,10 +2,68 @@ import type { DayHours } from "./types";
 
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
-// Mirrors the backend's outlet-status weekday key derivation, but for a
-// specific calendar date the customer picked rather than "now".
-function weekdayKey(date: Date): (typeof WEEKDAYS)[number] {
-  return WEEKDAYS[date.getDay()];
+// Same fallback lib/earliest-delivery.ts uses when a shop carries no timezone.
+const DEFAULT_TIMEZONE = "Asia/Dubai";
+
+// "What day and time is it for the SHOP?" The checkout used the browser clock
+// for this, so a shopper (or a travelling customer ordering for home) outside
+// the shop's zone saw a different "today", a different same-day cutoff and a
+// different weekday than the server enforces (backend/src/public/time-slots.ts
+// reads everything in shop.timezone). These mirror that file and
+// lib/earliest-delivery.ts: Intl formatToParts, "24" normalised to 0, and a
+// bad timezone string answers null so the caller fails closed (no same-day
+// slots) instead of silently reverting to the browser's clock.
+function zoneParts(now: Date, timezone: string | undefined, opts: Intl.DateTimeFormatOptions) {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone || DEFAULT_TIMEZONE,
+      hourCycle: "h23",
+      ...opts,
+    }).formatToParts(now);
+  } catch {
+    return null; // invalid timezone string
+  }
+}
+
+// YYYY-MM-DD of `now` on the shop's wall calendar, or null for an unusable timezone.
+export function dateKeyInTimezone(now: Date, timezone: string | undefined): string | null {
+  const parts = zoneParts(now, timezone, { year: "numeric", month: "2-digit", day: "2-digit" });
+  if (!parts) return null;
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+// Minutes since midnight on the shop's wall clock, or null for an unusable timezone.
+export function minutesSinceMidnightInTimezone(now: Date, timezone: string | undefined): number | null {
+  const parts = zoneParts(now, timezone, { hour: "2-digit", minute: "2-digit" });
+  if (!parts) return null;
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
+  const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return h * 60 + m;
+}
+
+// A date KEY names a calendar day, so its weekday needs no timezone at all.
+// Parsed at UTC noon so no offset in either direction can move it across a
+// midnight (new Date("2026-10-21") is UTC midnight, which getDay() in a
+// browser west of UTC calls the 20th).
+function keyToUtcNoon(dateKey: string): Date {
+  return new Date(`${dateKey}T12:00:00Z`);
+}
+
+export function weekdayKeyForDateKey(dateKey: string): (typeof WEEKDAYS)[number] {
+  return WEEKDAYS[keyToUtcNoon(dateKey).getUTCDay()];
+}
+
+export function addDaysToDateKey(dateKey: string, days: number): string {
+  const d = keyToUtcNoon(dateKey);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// A Date is read on the viewer's own calendar (what every caller did before
+// date keys existed); a string is already a calendar day.
+function asDateKey(date: Date | string): string {
+  return typeof date === "string" ? date : localDateKey(date);
 }
 
 // Generates "HH:MM - HH:MM" slot labels stepping by gapMinutes across the
@@ -14,9 +72,10 @@ function weekdayKey(date: Date): (typeof WEEKDAYS)[number] {
 // convention the backend uses), so a shop that hasn't filled in delivery/
 // pickup hours still gets a usable picker instead of an empty one.
 //
-// `nowMinutes` is optional and only meaningful when `date` is today — pass
-// the current local wall-clock time as minutes-since-midnight (see
-// useCheckoutForm.ts's own call site) to drop any slot whose start has
+// `date` is a YYYY-MM-DD calendar day (or a Date, read on the viewer's own
+// calendar). `nowMinutes` is optional and only meaningful when `date` is the
+// SHOP's today — pass the shop's wall-clock time as minutes-since-midnight
+// (minutesSinceMidnightInTimezone; see useCheckoutForm.ts's own call site) to drop any slot whose start has
 // already passed. Omitted entirely for a non-today date, since the cutoff
 // only ever applies to today. This is optimistic client-side UX only — the
 // backend independently regenerates and re-checks this same list at
@@ -24,12 +83,12 @@ function weekdayKey(date: Date): (typeof WEEKDAYS)[number] {
 // function), since a page left open across the cutoff must still be
 // rejected server-side.
 export function generateTimeSlots(
-  date: Date,
+  date: Date | string,
   hours: DayHours | null,
   gapMinutes: number,
   nowMinutes?: number,
 ): string[] {
-  const day = hours?.[weekdayKey(date)];
+  const day = hours?.[weekdayKeyForDateKey(asDateKey(date))];
   if (day?.closed) return [];
 
   const [openH, openM] = (day?.open ?? "09:00").split(":").map(Number);
@@ -61,16 +120,17 @@ export function localDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// `referenceDate` is the shop's "today" as a date key (dateKeyInTimezone), or a
+// Date read on the viewer's own calendar.
 export function isDateBlocked(
   deliveryDate: string,
-  referenceDate: Date,
+  referenceDate: Date | string,
   allowSameDayOrders: boolean | undefined,
   allowNextDayOrders: boolean | undefined,
 ): boolean {
   if (!deliveryDate) return false;
-  const minDate = localDateKey(referenceDate);
-  const next = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate() + 1);
-  const tomorrow = localDateKey(next);
+  const minDate = asDateKey(referenceDate);
+  const tomorrow = addDaysToDateKey(minDate, 1);
   const dateIsToday = deliveryDate === minDate;
   const dateIsTomorrow = deliveryDate === tomorrow;
   return (dateIsToday && allowSameDayOrders === false) || (dateIsTomorrow && allowNextDayOrders === false);

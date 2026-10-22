@@ -1,7 +1,7 @@
 "use client";
 
 import { useShop } from "@/lib/shop-context";
-import { useCart } from "@/lib/cart";
+import { lineAllowance, useCart } from "@/lib/cart";
 import CurrencySymbol from "@/components/CurrencySymbol";
 import { formatPriceAmount } from "@/lib/currency";
 
@@ -20,9 +20,13 @@ export default function CartLineItems() {
   // markup. The blanket reduced-motion rule neutralises it.
   const animateItems = themeConfig?.globalSettings.cart?.itemAnimation === true;
 
+  // How much more each line can hold: stock, plus the order size limits
+  // (lib/cart.tsx), which depend on the rest of the cart.
+  const allowances = items.map((i) => lineAllowance(items, i));
+
   return (
     <div className="divide-y divide-black/5">
-      {items.map((item) => (
+      {items.map((item, idx) => (
         <div
           key={`${item.productId}:${item.variantId ?? ""}`}
           className={`flex items-center gap-3 py-4${animateItems ? " theme-cart-item-in" : ""}`}
@@ -34,6 +38,9 @@ export default function CartLineItems() {
             {item.variantLabel && <p className="text-xs text-zinc-500">{item.variantLabel}</p>}
             {item.maxStock !== null && item.quantity >= item.maxStock && (
               <p className="text-xs text-zinc-500">Only {item.maxStock} available</p>
+            )}
+            {allowances[idx].message && item.quantity >= allowances[idx].orderMax && (
+              <p className="text-xs text-zinc-500">{allowances[idx].message}</p>
             )}
             <p className="text-sm text-price-main">
               {formatPriceAmount(item.price, shop?.currency)} <CurrencySymbol code={shop?.currency} />
@@ -52,7 +59,7 @@ export default function CartLineItems() {
             <button
               type="button"
               onClick={() => setQuantity(item.productId, item.quantity + 1, item.variantId)}
-              disabled={item.maxStock !== null && item.quantity >= item.maxStock}
+              disabled={item.quantity >= allowances[idx].max}
               aria-label={`Increase quantity of ${item.name}`}
               className="min-h-9 min-w-9 cursor-pointer disabled:opacity-30"
             >
