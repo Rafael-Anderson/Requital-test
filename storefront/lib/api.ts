@@ -345,6 +345,8 @@ export interface DeliveryQuoteRequest {
   area?: string;
   latitude?: number;
   longitude?: number;
+  // Maps was unavailable and no pin was given: the typed address stands in.
+  addressManual?: boolean;
   discountCode?: string;
   items: { productId: number; variantId?: number; quantity: number; giftCardAmount?: number }[];
 }
@@ -406,6 +408,32 @@ export function reportNotFound(shopSlug: string, path: string, referrer: string)
     body: JSON.stringify({ path, ...(referrer ? { referrer } : {}) }),
     keepalive: true,
   }).catch(() => {});
+}
+
+// F9: the shopper's Google Maps failed with a named error. Reported so the
+// merchant (and Requital) can see a key or referrer problem on THIS host, which
+// the admin cannot see for a custom domain. Fire-and-forget and advisory: never
+// throws, never shown to the shopper, no cookies sent (so no CSRF exchange), and
+// only the error code and this page's host leave the browser.
+export function reportMapsError(shopSlug: string, code: string, host: string): void {
+  fetch(`${apiBase()}/public/${shopSlug}/maps-error`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, host }),
+    credentials: "omit",
+    keepalive: true,
+  }).catch(() => {});
+}
+
+export interface GeocodeResult {
+  latitude: number;
+  longitude: number;
+  displayName: string;
+}
+// Manual address lookup through the backend's Nominatim proxy (the "Find on map"
+// fallback). Only ever called from a button press, never while typing.
+export function geocodeAddress(shopSlug: string, query: string) {
+  return get<GeocodeResult>(`/public/${shopSlug}/geocode?q=${encodeURIComponent(query)}`);
 }
 
 export function validateGiftCard(shopSlug: string, code: string) {

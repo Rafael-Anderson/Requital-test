@@ -134,6 +134,8 @@ export default function AddressesPage() {
             />
           </div>
           <MapPicker
+            shopSlug={shopSlug}
+            addressQuery={form.address}
             latitude={form.latitude}
             longitude={form.longitude}
             onPick={(coords, address) =>

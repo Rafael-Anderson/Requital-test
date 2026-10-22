@@ -50,6 +50,9 @@ class FakeAutocomplete {
 }
 
 vi.mock("@/lib/google-maps-loader", () => ({
+  getMapsFailure: () => null,
+  subscribeMapsFailure: () => () => {},
+  markMapsHealthy: () => {},
   loadGoogleMaps: vi.fn(() =>
     Promise.resolve({
       maps: {

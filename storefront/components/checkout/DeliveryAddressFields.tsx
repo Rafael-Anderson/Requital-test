@@ -3,6 +3,7 @@
 import type { CheckoutFormState } from "@/lib/useCheckoutForm";
 import RegionSelect from "./RegionSelect";
 import MapPicker from "@/components/MapPicker";
+import { useShop } from "@/lib/shop-context";
 import { FIELD_CLASS, TEXTAREA_CLASS, BUTTON_OUTLINE_CLASS } from "./checkout-field-styles";
 
 // The "delivery address" card — identical in CheckoutSinglePage and
@@ -22,7 +23,13 @@ export default function DeliveryAddressFields({ state }: { state: CheckoutFormSt
     useMyLocation,
     savedAddresses,
     applySavedAddress,
+    shopSlug,
   } = state;
+  const { regions } = useShop();
+  // What "Find on map" looks up when Maps is unavailable: the typed address plus
+  // the chosen region's name, which anchors it to the right country.
+  const regionName = regions.find((r) => r.id === regionId)?.nameEn;
+  const addressQuery = [customerAddress, area, regionName].map((p) => p?.trim()).filter(Boolean).join(", ");
 
   return (
     <div className="space-y-3 rounded-lg border border-black/10 p-4">
@@ -60,6 +67,8 @@ export default function DeliveryAddressFields({ state }: { state: CheckoutFormSt
         {coords && <span className="text-xs text-zinc-500 self-center">Location captured</span>}
       </div>
       <MapPicker
+        shopSlug={shopSlug}
+        addressQuery={addressQuery}
         latitude={coords?.latitude ?? null}
         longitude={coords?.longitude ?? null}
         onPick={(picked, address) => {
