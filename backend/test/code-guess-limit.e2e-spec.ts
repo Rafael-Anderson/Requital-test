@@ -90,7 +90,7 @@ describe('Code guess limiter (e2e)', () => {
     (res.body as { message?: string }).message;
 
   it('unknown, inactive, expired and not-started codes get one identical answer', async () => {
-    const answers = [];
+    const answers: Record<string, unknown>[] = [];
     for (const code of ['NOSUCHCODE1', s1.inactive, s1.expired, s1.future]) {
       const res = await validate(s1, code);
       expect(res.status).toBe(201);
@@ -196,9 +196,9 @@ describe('Code guess limiter (e2e)', () => {
     it('failures are generic, carry no balance, and a disabled card looks like an unknown one', async () => {
       const card = await issue(s4, 75);
       const ok = await giftValidate(s4, card.code);
-      expect(body<{ valid: boolean; remainingBalance: number }>(ok)).toMatchObject(
-        { valid: true, remainingBalance: 75 },
-      );
+      expect(
+        body<{ valid: boolean; remainingBalance: number }>(ok),
+      ).toMatchObject({ valid: true, remainingBalance: 75 });
       await request(f.http())
         .patch(`/gift-cards/${card.id}`)
         .set(f.auth(s4.shop))
@@ -219,7 +219,9 @@ describe('Code guess limiter (e2e)', () => {
         giftCardCode: 'NOPE-NOPE',
       });
       expect(res.status).toBe(400);
-      expect(msg(res)).toBe('This gift card code is not valid or cannot be applied');
+      expect(msg(res)).toBe(
+        'This gift card code is not valid or cannot be applied',
+      );
     });
   });
 });

@@ -78,7 +78,9 @@ export class CodeGuessLimiter {
       b.count >= CODE_GUESS_MAX_REPEATS ? b.retryAfterMs : 0,
     );
     if (lockedMs > 0) {
-      throw new CodeGuessLockedException(Math.max(1, Math.ceil(lockedMs / 1000)));
+      throw new CodeGuessLockedException(
+        Math.max(1, Math.ceil(lockedMs / 1000)),
+      );
     }
   }
 

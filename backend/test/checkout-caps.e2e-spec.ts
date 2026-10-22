@@ -107,7 +107,9 @@ describe('Order size caps (e2e)', () => {
       expect(admin.status).toBe(400);
       expect(messageOf(admin)).toMatch(/quantity must not be greater than 999/);
 
-      const ok = await f.adminOrder(w.shop, [{ productId: w.a.id, quantity: 1 }]);
+      const ok = await f.adminOrder(w.shop, [
+        { productId: w.a.id, quantity: 1 },
+      ]);
       const edit = await f.editItems(w.shop, ok.id, [tooMany(w.a.id)]);
       expect(edit.status).toBe(400);
       expect((await f.editItems(w.shop, ok.id, lines101(w.a.id))).status).toBe(
@@ -157,7 +159,11 @@ describe('Order size caps (e2e)', () => {
       expect(messageOf(so)).toMatch(/Maximum 1000 items per order/);
       const quote = await request(f.http())
         .post(`/public/${w.shop.slug}/delivery-quote`)
-        .send({ outletId: w.shop.outletId, orderType: 'pickup', items: big(w) });
+        .send({
+          outletId: w.shop.outletId,
+          orderType: 'pickup',
+          items: big(w),
+        });
       expect(quote.status).toBe(400);
       expect(messageOf(quote)).toMatch(/Maximum 1000 items per order/);
       const val = await request(f.http())
@@ -183,7 +189,9 @@ describe('Order size caps (e2e)', () => {
         });
       expect(ao.status).toBe(400);
       expect(messageOf(ao)).toMatch(/Maximum 1000 items per order/);
-      const ok = await f.adminOrder(w.shop, [{ productId: w.a.id, quantity: 1 }]);
+      const ok = await f.adminOrder(w.shop, [
+        { productId: w.a.id, quantity: 1 },
+      ]);
       const edit = await f.editItems(w.shop, ok.id, big(w));
       expect(edit.status).toBe(400);
       expect(messageOf(edit)).toMatch(/Maximum 1000 items per order/);
@@ -227,11 +235,9 @@ describe('Order size caps (e2e)', () => {
     });
 
     it('21 units are refused before anything is written', async () => {
-      const res = await f.storefrontOrderRaw(
-        w.shop,
-        [gc(w.giftId, 21)],
-        { customerEmail: 'gc-cap@example.com' },
-      );
+      const res = await f.storefrontOrderRaw(w.shop, [gc(w.giftId, 21)], {
+        customerEmail: 'gc-cap@example.com',
+      });
       expect(res.status).toBe(400);
       expect(messageOf(res)).toMatch(/Maximum 20 gift cards per order/);
       expect(await orderCount(w.shop.shopId)).toBe(0);

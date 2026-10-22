@@ -39,9 +39,7 @@ export function assertOrderWithinLimits(
       giftCards += l.quantity;
   }
   if (units > MAX_ORDER_UNITS) {
-    throw new BadRequestException(
-      `Maximum ${MAX_ORDER_UNITS} items per order`,
-    );
+    throw new BadRequestException(`Maximum ${MAX_ORDER_UNITS} items per order`);
   }
   if (giftCards > MAX_GIFT_CARD_UNITS) {
     throw new BadRequestException(

@@ -31,11 +31,27 @@ describe('assertOrderWithinLimits', () => {
   });
 
   it.each([
-    ['too many lines', Array.from({ length: MAX_ORDER_LINES + 1 }, () => line(1)), /different items/],
+    [
+      'too many lines',
+      Array.from({ length: MAX_ORDER_LINES + 1 }, () => line(1)),
+      /different items/,
+    ],
     ['a line over the per-line cap', [line(MAX_LINE_QUANTITY + 1)], /per item/],
-    ['units over the cart-wide cap', [line(600), line(401)], /1000 items per order/],
-    ['gift cards over the cap on one line', [line(MAX_GIFT_CARD_UNITS + 1, true)], /gift cards/],
-    ['gift cards over the cap across lines', [line(11, true), line(10, true)], /gift cards/],
+    [
+      'units over the cart-wide cap',
+      [line(600), line(401)],
+      /1000 items per order/,
+    ],
+    [
+      'gift cards over the cap on one line',
+      [line(MAX_GIFT_CARD_UNITS + 1, true)],
+      /gift cards/,
+    ],
+    [
+      'gift cards over the cap across lines',
+      [line(11, true), line(10, true)],
+      /gift cards/,
+    ],
   ])('refuses %s with a 400 and a clear message', (_n, lines, re) => {
     try {
       assertOrderWithinLimits(lines);
