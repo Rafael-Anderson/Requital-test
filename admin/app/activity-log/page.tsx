@@ -70,8 +70,8 @@ export default function ActivityLogPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [entityType, setEntityType] = useState("");
-  const [actorUserId, setActorUserId] = useState("");
-  const [actors, setActors] = useState<{ id: number; name: string }[]>([]);
+  const [actorFilter, setActorFilter] = useState("");
+  const [actors, setActors] = useState<{ id: number | null; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // `latest` drops a response a newer refresh has superseded; a failure ends in
@@ -83,7 +83,9 @@ export default function ActivityLogPage() {
         page,
         pageSize: PAGE_SIZE,
         entityType: entityType || undefined,
-        actorUserId: actorUserId ? Number(actorUserId) : undefined,
+        // "u<id>" is a staff member, "l<label>" an actor with no user (system, driver).
+        actorUserId: actorFilter.startsWith("u") ? Number(actorFilter.slice(1)) : undefined,
+        actorLabel: actorFilter.startsWith("l") ? actorFilter.slice(1) : undefined,
       })
       .then((result) => {
         if (mine !== latest.current) return;
@@ -95,11 +97,11 @@ export default function ActivityLogPage() {
         if (mine !== latest.current) return;
         setError(err instanceof Error ? err.message : "Failed to load activity log");
       });
-  }, [page, entityType, actorUserId]);
+  }, [page, entityType, actorFilter]);
 
   useEffect(() => {
     setPage(1);
-  }, [entityType, actorUserId]);
+  }, [entityType, actorFilter]);
 
   useEffect(() => {
     refresh();
@@ -130,13 +132,13 @@ export default function ActivityLogPage() {
             ))}
           </select>
           <select
-            value={actorUserId}
-            onChange={(e) => setActorUserId(e.target.value)}
+            value={actorFilter}
+            onChange={(e) => setActorFilter(e.target.value)}
             className="h-9 border border-border dark:border-white/15 rounded-[10px] px-3 text-[13.5px] font-semibold bg-surface dark:bg-zinc-900 transition-colors hover:border-[#D3D8D7] dark:hover:border-white/30 cursor-pointer"
           >
             <option value="">All staff</option>
             {actors.map((a) => (
-              <option key={a.id} value={a.id}>
+              <option key={a.id ?? `l${a.name}`} value={a.id !== null ? `u${a.id}` : `l${a.name}`}>
                 {a.name}
               </option>
             ))}

@@ -476,6 +476,7 @@ export class PaymentsService {
       shopId,
       role: 'admin',
       outletId: null,
+      systemActorLabel: 'system (payment gateway)',
     };
     try {
       if (action === 'confirmed') {

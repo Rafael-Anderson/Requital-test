@@ -1240,6 +1240,8 @@ export function setLowStockThreshold(data: {
 export function listAuditLog(params: {
   entityType?: string;
   actorUserId?: number;
+  // A system, driver or marketplace actor has no user: filter by its label.
+  actorLabel?: string;
   page?: number;
   pageSize?: number;
 } = {}) {
@@ -1252,7 +1254,7 @@ export function listAuditLog(params: {
 }
 
 export function listAuditLogActors() {
-  return apiFetch<{ id: number; name: string }[]>("/audit-log/actors");
+  return apiFetch<{ id: number | null; name: string }[]>("/audit-log/actors");
 }
 
 export function listFailedJobs() {

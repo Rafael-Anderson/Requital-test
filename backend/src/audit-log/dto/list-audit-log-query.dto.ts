@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsPositive, IsString } from 'class-validator';
+import { IsInt, IsOptional, IsPositive, IsString, MaxLength } from 'class-validator';
 
 export class ListAuditLogQueryDto {
   @IsOptional()
@@ -11,6 +11,11 @@ export class ListAuditLogQueryDto {
   @IsInt()
   @IsPositive()
   actorUserId?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(191)
+  actorLabel?: string;
 
   @IsOptional()
   @Type(() => Number)

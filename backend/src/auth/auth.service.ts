@@ -233,7 +233,7 @@ export class AuthService {
       };
     }
     await this.auditLogService.log(
-      { shopId: user.shopId, actorUserId: user.id },
+      { shopId: user.shopId, actorUserId: user.id, actorLabel: user.name },
       { action: 'auth.login', entityType: 'auth', entityId: user.id },
     );
     return this.issueTokenPair(user, { meta });
@@ -258,7 +258,7 @@ export class AuthService {
     }
     const kind = await this.twoFactor.verifyLoginCode(user.id, dto.code);
     await this.auditLogService.log(
-      { shopId: user.shopId, actorUserId: user.id },
+      { shopId: user.shopId, actorUserId: user.id, actorLabel: user.name },
       {
         action: 'auth.login',
         entityType: 'auth',

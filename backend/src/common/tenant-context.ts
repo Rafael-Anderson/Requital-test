@@ -34,4 +34,12 @@ export interface TenantContext {
   // AuditLogService.logCtx attributes the entry to "driver <name>" and
   // OrdersService.collectCash records the driver instead of a user.
   driver?: { id: number; name: string };
+  // The user's display name at the time of the request, from the same per-request
+  // user re-read AuthGuard already does. AuditLogService.logCtx snapshots it into
+  // auditlog.actorLabel so history survives a later rename.
+  userName?: string;
+  // Set ONLY on a context the server builds itself for a system action (a payment
+  // gateway webhook, a courier webhook). AuditLogService.logCtx then records this
+  // label and NO user: the action was not personally done by the borrowed admin.
+  systemActorLabel?: string;
 }

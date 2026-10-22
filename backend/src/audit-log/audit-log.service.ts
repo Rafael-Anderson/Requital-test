@@ -66,7 +66,25 @@ export class AuditLogService {
       );
       return;
     }
-    await this.log({ shopId: ctx.shopId, actorUserId: ctx.userId }, entry);
+    if (ctx.systemActorLabel) {
+      await this.log(
+        {
+          shopId: ctx.shopId,
+          actorUserId: null,
+          actorLabel: ctx.systemActorLabel,
+        },
+        entry,
+      );
+      return;
+    }
+    await this.log(
+      {
+        shopId: ctx.shopId,
+        actorUserId: ctx.userId,
+        actorLabel: staffActorLabel(ctx),
+      },
+      entry,
+    );
   }
 
   async list(ctx: TenantContext, query: ListAuditLogQueryDto) {
@@ -83,6 +101,11 @@ export class AuditLogService {
       conditions.push('al.actorUserId = ?');
       params.push(query.actorUserId);
     }
+    if (query.actorLabel) {
+      // A system, driver or marketplace actor has no user row: filter by label.
+      conditions.push('al.actorUserId IS NULL AND al.actorLabel = ?');
+      params.push(query.actorLabel);
+    }
     const whereClause = conditions.join(' AND ');
 
     const countRows = await this.db.query<RowDataPacket[]>(
@@ -94,7 +117,7 @@ export class AuditLogService {
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT al.id, al.action, al.entityType, al.entityId, al.\`before\`, al.\`after\`,
               al.metadata, al.createdAt, u.id AS actorId,
-              COALESCE(u.name, al.actorLabel) AS actorName
+              COALESCE(al.actorLabel, u.name) AS actorName
        FROM auditlog al
        LEFT JOIN user u ON u.id = al.actorUserId
        WHERE ${whereClause}
@@ -142,7 +165,7 @@ export class AuditLogService {
 
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT al.id, al.action, al.\`before\`, al.\`after\`, al.createdAt,
-              COALESCE(u.name, al.actorLabel) AS actorName
+              COALESCE(al.actorLabel, u.name) AS actorName
        FROM auditlog al
        LEFT JOIN user u ON u.id = al.actorUserId
        WHERE ${conditions.join(' AND ')}
@@ -159,10 +182,11 @@ export class AuditLogService {
     }));
   }
 
-  // For filter dropdowns — every distinct staff member who has at least one
-  // logged action in this shop.
+  // For filter dropdowns: every staff member who has at least one logged action
+  // in this shop (id set), then every label-only actor such as "driver Ahmed" or
+  // "system (payment gateway)" (id null, filtered by label).
   async listActors(ctx: TenantContext) {
-    const rows = await this.db.query<RowDataPacket[]>(
+    const staff = await this.db.query<RowDataPacket[]>(
       `SELECT DISTINCT al.actorUserId AS id, u.name AS name
        FROM auditlog al
        JOIN user u ON u.id = al.actorUserId
@@ -170,8 +194,29 @@ export class AuditLogService {
        ORDER BY al.actorUserId ASC`,
       [ctx.shopId],
     );
-    return rows.map((r) => ({ id: r.id as number, name: r.name as string }));
+    const labels = await this.db.query<RowDataPacket[]>(
+      `SELECT DISTINCT al.actorLabel AS name
+       FROM auditlog al
+       WHERE al.shopId = ? AND al.actorUserId IS NULL AND al.actorLabel IS NOT NULL
+       ORDER BY al.actorLabel ASC`,
+      [ctx.shopId],
+    );
+    return [
+      ...staff.map((r) => ({ id: r.id as number | null, name: r.name as string })),
+      ...labels.map((r) => ({ id: null as number | null, name: r.name as string })),
+    ];
   }
+}
+
+// The label snapshotted with a staff action (auditlog.actorLabel is VARCHAR(191)).
+// An impersonated session is Requital staff acting as that user.
+function staffActorLabel(ctx: TenantContext): string | undefined {
+  if (!ctx.userName) return undefined;
+  const label =
+    ctx.impersonatedByPlatformAdminId !== undefined
+      ? `Requital support (impersonating ${ctx.userName})`
+      : ctx.userName;
+  return label.slice(0, 191);
 }
 
 function toJson(value: unknown): string | null {
