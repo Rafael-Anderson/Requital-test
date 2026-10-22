@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useShop } from "@/lib/shop-context";
 import { quoteCartTax } from "@/lib/order-tax";
+import { useMapsFailure } from "@/lib/maps-status";
 import { buildQuoteRequest, quoteBlocksSubmit, useDeliveryQuote } from "@/lib/useDeliveryQuote";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
@@ -131,9 +132,11 @@ export function useCheckoutForm() {
   // The server's delivery fee and totals for what is in the cart right now (same
   // pricing as order creation). Drives the summary and blocks Place order when
   // the server says this cart cannot be delivered as asked.
+  // Google Maps unavailable (F9): checkout stays completable with a typed address.
+  const addressManual = useMapsFailure(shopSlug) !== null;
   const { state: deliveryQuote, retry: retryDeliveryQuote } = useDeliveryQuote(
     shopSlug,
-    buildQuoteRequest({ items, outletId, orderType, regionId, area, coords, discountCode }),
+    buildQuoteRequest({ items, outletId, orderType, regionId, area, coords, discountCode, addressManual }),
   );
   const quoteBlocked = quoteBlocksSubmit(deliveryQuote);
 
@@ -280,6 +283,7 @@ export function useCheckoutForm() {
         area: area || undefined,
         latitude: orderType === "delivery" ? coords?.latitude : undefined,
         longitude: orderType === "delivery" ? coords?.longitude : undefined,
+        addressManual: orderType === "delivery" && addressManual && !coords ? true : undefined,
         deliveryDate: deliveryDate || undefined,
         deliveryTimeSlot: deliveryTimeSlot || undefined,
         deliveryNotes: deliveryNotes || undefined,

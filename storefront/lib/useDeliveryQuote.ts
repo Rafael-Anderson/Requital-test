@@ -16,6 +16,9 @@ export function buildQuoteRequest(p: {
   area: string;
   coords: { latitude: number; longitude: number } | null;
   discountCode: string | null | undefined;
+  // Google Maps is unavailable to this shopper (F9): the typed address stands in
+  // for a pin, so the server stops demanding one.
+  addressManual?: boolean;
 }): DeliveryQuoteRequest | null {
   if (!p.outletId || !p.orderType || p.items.length === 0) return null;
   const delivery = p.orderType === "delivery";
@@ -27,6 +30,7 @@ export function buildQuoteRequest(p: {
     area: delivery ? p.area.trim() || undefined : undefined,
     latitude: delivery ? p.coords?.latitude : undefined,
     longitude: delivery ? p.coords?.longitude : undefined,
+    addressManual: delivery && p.addressManual && !p.coords ? true : undefined,
     discountCode: p.discountCode || undefined,
     items: p.items.map((i) => ({
       productId: i.productId,

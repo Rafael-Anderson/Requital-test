@@ -34,6 +34,17 @@ describe("buildQuoteRequest", () => {
     expect(buildQuoteRequest({ ...base, regionId: 3 })).not.toBeNull();
     expect(buildQuoteRequest({ ...base, coords: { latitude: 1, longitude: 2 } })).not.toBeNull();
   });
+  it("marks a typed-address quote only while Maps is unavailable and no pin exists (F9)", () => {
+    const withArea = { ...base, area: "Jumeirah" };
+    expect(buildQuoteRequest(withArea)!.addressManual).toBeUndefined();
+    expect(buildQuoteRequest({ ...withArea, addressManual: true })!.addressManual).toBe(true);
+    // A real pin always wins: the flag is dropped.
+    expect(
+      buildQuoteRequest({ ...withArea, addressManual: true, coords: { latitude: 1, longitude: 2 } })!.addressManual,
+    ).toBeUndefined();
+    // Pickup never carries it.
+    expect(buildQuoteRequest({ ...withArea, orderType: "pickup", addressManual: true })!.addressManual).toBeUndefined();
+  });
   it("needs no address for pickup and drops delivery-only fields", () => {
     const r = buildQuoteRequest({ ...base, orderType: "pickup", regionId: 3, area: "x", coords: { latitude: 1, longitude: 2 } })!;
     expect(r).toMatchObject({ orderType: "pickup", outletId: 5 });
