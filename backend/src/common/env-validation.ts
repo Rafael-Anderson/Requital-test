@@ -82,6 +82,12 @@ const SPECS: EnvVarSpec[] = [
     hint: 'must be a hop count (1-10) or a comma-separated list of loopback/linklocal/uniquelocal, IPs or CIDRs; "true" and trust-all ranges are refused (see docs/runbook.md)',
   },
   {
+    name: 'INTERNAL_API_SECRET',
+    required: false,
+    validate: (value) => value.length >= 32,
+    hint: 'must be at least 32 characters and identical in the backend and storefront env; it only gives the storefront server its own throttle bucket (see docs/runbook.md, "Client IP behind the proxies"). Unset = off',
+  },
+  {
     name: 'ADMIN_ORIGINS',
     required: false,
     hint: 'must be a comma-separated list of origins',
