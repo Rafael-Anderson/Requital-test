@@ -329,7 +329,7 @@ describe('SHP-5 driver actions: proof, cash, timeline', () => {
         after: unknown;
         metadata: unknown;
       }>(
-        `SELECT actorUserId, actorLabel, \`after\`, metadata FROM auditlog WHERE shopId = ? AND entityType = 'order' AND entityId = ? AND actorLabel IS NOT NULL`,
+        `SELECT actorUserId, actorLabel, \`after\`, metadata FROM auditlog WHERE shopId = ? AND entityType = 'order' AND entityId = ? AND actorUserId IS NULL AND actorLabel IS NOT NULL`,
         [a.shopId, r.orders[0].id],
       );
       expect(rows).toHaveLength(1);
