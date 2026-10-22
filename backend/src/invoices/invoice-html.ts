@@ -55,6 +55,9 @@ export interface InvoiceHtmlData {
     customerPhone: string;
     customerEmail: string | null;
     customerAddress: string;
+    // F9: typed address with no map pin (Maps was unavailable to the shopper).
+    // Only the packing slip prints a warning for it.
+    addressUnverified?: boolean;
     // NULL for an order placed without a region (pickup, or a country with no region model).
     regionName: string | null;
     area: string | null;
@@ -220,6 +223,7 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #18181b; margin: 0; padding: 32px; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #18181b; padding-bottom: 16px; margin-bottom: 24px; }
   .shop-name { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+  .address-unverified { margin-top: 8px; padding: 8px 10px; border: 2px solid #b45309; color: #92400e; background: #fffbeb; font-size: 13px; font-weight: 700; }
   .muted { color: #71717a; font-size: 13px; line-height: 1.5; }
   .doc-title { font-size: 24px; font-weight: 700; text-align: right; margin: 0; }
   .doc-number { text-align: right; color: #71717a; font-size: 13px; }
@@ -272,6 +276,11 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
         ${escapeHtml(data.order.customerAddress)}<br />
         ${escapeHtml([data.order.area, data.order.regionName].filter(Boolean).join(', '))}
       </p>
+      ${
+        data.type === 'PACKING_SLIP' && data.order.addressUnverified
+          ? '<p class="address-unverified">Address not verified on a map, please confirm with the customer</p>'
+          : ''
+      }
     </div>
     <div>
       <h3>Order</h3>

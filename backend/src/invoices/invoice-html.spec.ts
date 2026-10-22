@@ -275,3 +275,25 @@ describe('renderInvoiceHtml delivery address line', () => {
     expect(areaOnly).not.toContain('null');
   });
 });
+
+// F9: a delivery order placed with a typed address and no map pin is flagged,
+// and only the packing slip (the document the rider/warehouse reads) says so.
+describe('renderInvoiceHtml unverified address warning', () => {
+  const WARNING =
+    'Address not verified on a map, please confirm with the customer';
+  const flagged = (type: InvoiceHtmlData['type']) => {
+    const d = data({ type });
+    d.order.addressUnverified = true;
+    return renderInvoiceHtml(d);
+  };
+
+  it('prints on a flagged packing slip', () => {
+    expect(flagged('PACKING_SLIP')).toContain(WARNING);
+  });
+  it('does not print on an unflagged packing slip or on an invoice', () => {
+    expect(renderInvoiceHtml(data({ type: 'PACKING_SLIP' }))).not.toContain(
+      WARNING,
+    );
+    expect(flagged('INVOICE')).not.toContain(WARNING);
+  });
+});

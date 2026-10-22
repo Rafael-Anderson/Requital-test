@@ -105,6 +105,8 @@ import { loadVisibleProductMetafields } from '../metafields/metafields.service';
 // Meta descriptions render best under ~160 characters (Google truncates
 // around there) — cuts at the last whole word rather than mid-word.
 const META_DESCRIPTION_MAX = 160;
+// A typed address shorter than this is not a usable fallback address (F9).
+const MANUAL_ADDRESS_MIN_LENGTH = 10;
 function truncateDescription(description: string | null): string | null {
   if (!description) return null;
   const trimmed = description.trim();
@@ -1579,6 +1581,7 @@ export class PublicService {
       discountCodeSnapshot,
       totals,
       orderTotal,
+      addressUnverified,
     } = await this.priceCheckout(shop, outlet, dto, resolvedItems, region, {
       clientIp,
     });
@@ -1789,8 +1792,8 @@ export class PublicService {
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
           giftCardId, giftCardCode, giftCardAmount, storeCreditAmount, total, paymentStatus, trackingToken, shopOrderNumber,
-          currency, rateBaseCurrency, exchangeRate, attributionJson
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          currency, rateBaseCurrency, exchangeRate, attributionJson, addressUnverified
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
@@ -1844,6 +1847,9 @@ export class PublicService {
           // MKT-14: where the order came from, plus the cookie-consent state at
           // this moment. NULL = the browser sent nothing (unknown).
           attributionData ? JSON.stringify(attributionData) : null,
+          // F9: typed address with no map pin (Maps unavailable): flagged so the
+          // merchant confirms it with the customer.
+          addressUnverified ? 1 : 0,
         ],
             ),
           );
@@ -2095,7 +2101,7 @@ export class PublicService {
       | 'latitude'
       | 'longitude'
       | 'discountCode'
-    >,
+    > & { addressManual?: boolean; customerAddress?: string },
     resolvedItems: Awaited<
       ReturnType<ProductsService['resolveOrderItems']>
     >,
@@ -2119,6 +2125,7 @@ export class PublicService {
 
     let zoneName: string | null = null;
     let deliveryFee = 0;
+    let addressUnverified = false;
     if (input.orderType !== 'pickup') {
       const resolved = await this.resolveDeliveryFee(
         shop,
@@ -2128,9 +2135,22 @@ export class PublicService {
         region.regionName ?? '',
         region.regionId,
         opts.quiet,
+        // Only an order (not a quote) geocodes a typed address, and only when
+        // the shopper's Maps was unavailable and no pin was given (F9).
+        input.addressManual && input.latitude == null
+          ? {
+              geocodeQuery: opts.quiet
+                ? null
+                : [input.customerAddress, region.regionName, shop.country]
+                    .filter(Boolean)
+                    .join(', '),
+              address: input.customerAddress ?? '',
+            }
+          : null,
       );
       deliveryFee = Number(resolved.fee);
       zoneName = resolved.zoneName;
+      addressUnverified = resolved.addressUnverified;
     }
 
     // Resolved before any write - an invalid/expired/exhausted code throws here
@@ -2218,6 +2238,7 @@ export class PublicService {
       subtotal,
       deliveryFee,
       zoneName,
+      addressUnverified,
       discount,
       discountAmount,
       discountCodeSnapshot,
@@ -2383,19 +2404,50 @@ export class PublicService {
     regionName: string,
     regionId: number | null,
     quiet = false,
-  ): Promise<{ fee: string; zoneName: string | null }> {
+    // F9: Google Maps was unavailable to the shopper and no pin was given. The
+    // address is then typed text: geocoded server-side when we are placing an
+    // order on a radius outlet, else accepted, and either way flagged.
+    manual: { geocodeQuery: string | null; address: string } | null = null,
+  ): Promise<{
+    fee: string;
+    zoneName: string | null;
+    addressUnverified: boolean;
+  }> {
+    let lat = dto.latitude ?? null;
+    let lng = dto.longitude ?? null;
+    const addressUnverified = manual != null && (lat == null || lng == null);
     // Radius is the eligibility boundary — if configured, coordinates are
     // required to prove the customer is inside it. Zones (below) then
     // decide the actual fee; radius never itself sets a fee.
     if (outlet.deliveryRadiusKm != null) {
-      if (dto.latitude == null || dto.longitude == null) {
+      if ((lat == null || lng == null) && manual) {
+        if (manual.geocodeQuery != null) {
+          if (manual.address.trim().length < MANUAL_ADDRESS_MIN_LENGTH) {
+            throw new DeliveryAddressRequiredException(
+              'Please enter your full delivery address',
+            );
+          }
+          // A failed or empty lookup is not a rejection: the address is
+          // accepted and flagged so the merchant confirms it with the customer.
+          // A found point still has to be inside the radius (real rejection).
+          const found = await geocodeAddress(manual.geocodeQuery).catch(
+            () => null,
+          );
+          if (found) {
+            lat = found.latitude;
+            lng = found.longitude;
+          }
+        }
+      } else if (lat == null || lng == null) {
         throw new DeliveryAddressRequiredException(
           'Your location is required to confirm delivery is available at this address',
         );
       }
+    }
+    if (outlet.deliveryRadiusKm != null && lat != null && lng != null) {
       const distance = haversineDistanceKm(
-        dto.latitude,
-        dto.longitude,
+        lat,
+        lng,
         outlet.latitude!,
         outlet.longitude!,
       );
@@ -2410,10 +2462,7 @@ export class PublicService {
       `SELECT * FROM deliveryzone WHERE outletId = ? AND isActive = 1`,
       [outlet.id],
     );
-    const pin =
-      dto.latitude != null && dto.longitude != null
-        ? { lat: dto.latitude, lng: dto.longitude }
-        : null;
+    const pin = lat != null && lng != null ? { lat, lng } : null;
     // Which rule decides the zone: until a merchant has reviewed and confirmed
     // every active zone's regions, the shop keeps the old name matching and no fee
     // changes. See delivery-zones/zone-matching-mode.ts.
@@ -2451,7 +2500,7 @@ export class PublicService {
           `Minimum order amount for this area is ${zone.minOrderAmount}`,
         );
       }
-      return { fee: zone.fee, zoneName: zone.name };
+      return { fee: zone.fee, zoneName: zone.name, addressUnverified };
     }
 
     if (zones.length > 0) {
@@ -2484,7 +2533,11 @@ export class PublicService {
       }
     }
 
-    return { fee: shop.defaultDeliveryFee, zoneName: null };
+    return {
+      fee: shop.defaultDeliveryFee,
+      zoneName: null,
+      addressUnverified,
+    };
   }
 
   private async assertPaymentMethodAvailable(

@@ -257,12 +257,16 @@ export class PublicController {
     );
   }
 
+  // Nominatim allows about one request a second: cap each IP well below the
+  // global default (F9, the checkout "Find on map" fallback).
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Public()
   @Get('geocode')
   geocode(@Query('q') query?: string) {
     return this.publicService.geocode(query);
   }
 
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Public()
   @Get('reverse-geocode')
   reverseGeocode(@Query('lat') lat?: string, @Query('lon') lon?: string) {

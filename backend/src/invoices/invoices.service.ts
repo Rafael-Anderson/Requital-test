@@ -32,6 +32,9 @@ export interface OrderForInvoice {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string;
+  // F9: typed address with no map pin. Optional (an older snapshot has none) and
+  // read only by the live-rendered packing slip.
+  addressUnverified?: boolean;
   // The region's English name at the time the document was read; NULL for an
   // order placed without a region (pickup, or a country with no region model).
   regionName: string | null;
@@ -276,6 +279,7 @@ export class InvoicesService {
       customerPhone: order.customerPhone as string,
       customerEmail: order.customerEmail as string | null,
       customerAddress: order.customerAddress as string,
+      addressUnverified: Boolean(order.addressUnverified),
       regionName: order.regionName as string | null,
       area: order.area as string | null,
       createdAt: order.createdAt as Date,
