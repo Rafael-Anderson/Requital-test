@@ -13,9 +13,9 @@
 //
 // Every id is re-validated (analytics-ids.ts) before it is placed in a URL.
 //
-// Only browser-side events live here. The server-side Meta Conversions API event
-// for a purchase is sent by the backend and shares `purchaseEventId` with the
-// browser's own purchase event so Meta deduplicates the pair.
+// Only browser-side events live here. The server-side Meta, TikTok and Snap
+// purchase events are sent by the backend and share `purchaseEventId` with the
+// browser's own purchase event so each platform can deduplicate the pair.
 import { carriesToken, redactTokenUrl } from "./redact-token-url";
 import { loadScriptOnce } from "./load-script";
 import { sanitizeAnalyticsConfig, type PublicAnalyticsConfig } from "./analytics-ids";
@@ -189,6 +189,10 @@ function snapParams(p: AnalyticsPayload) {
     price: totalValue(p),
     currency: p.currency,
     transaction_id: p.transactionId,
+    // UNVERIFIED field name: Snap's browser-pixel dedupe key, expected to match
+    // the server Conversions API event's event_id (order_<id>). Verify in Snap's
+    // Events Manager test mode. Absent unless the caller supplied an eventId.
+    client_dedup_id: p.eventId,
     search_string: p.query,
   });
 }

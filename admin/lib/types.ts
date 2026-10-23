@@ -151,21 +151,26 @@ export interface OrderAttributionView {
   consentMarketing: boolean | null;
 }
 
-// MKT-4. The Meta access token is write-only: the API only ever says whether one
-// is set.
+// MKT-4. The Meta, TikTok and Snap access tokens are write-only: the API only
+// ever says whether one is set.
 export interface AnalyticsSettings {
   ga4MeasurementId: string | null;
   metaPixelId: string | null;
   metaCapiTokenSet: boolean;
   metaTestEventCode: string | null;
   tiktokPixelId: string | null;
+  tiktokEventsTokenSet: boolean;
   snapPixelId: string | null;
+  snapCapiTokenSet: boolean;
   googleAdsConversionId: string | null;
   googleAdsConversionLabel: string | null;
 }
 
+export type AnalyticsTokenKey = "metaCapiToken" | "tiktokEventsToken" | "snapCapiToken";
+
 export type AnalyticsSettingsUpdate = Partial<
-  Omit<AnalyticsSettings, "metaCapiTokenSet"> & { metaCapiToken: string | null }
+  Omit<AnalyticsSettings, "metaCapiTokenSet" | "tiktokEventsTokenSet" | "snapCapiTokenSet"> &
+    Record<AnalyticsTokenKey, string | null>
 >;
 
 export type AttributionModel = "first" | "last";
