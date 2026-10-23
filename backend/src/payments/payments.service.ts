@@ -398,6 +398,7 @@ export class PaymentsService {
         if (result.status === 'paid') {
           await this.conversionEventsService.enqueuePurchase(
             order.id as number,
+            { paid: true },
           );
         }
         return { received: true };
@@ -419,7 +420,9 @@ export class PaymentsService {
       // payment outcome is applied, reached by the gateway webhooks AND by the
       // reconciliation sweep, so queueing here covers both with one call. It
       // never throws and queues nothing without recorded marketing consent.
-      await this.conversionEventsService.enqueuePurchase(order.id as number);
+      await this.conversionEventsService.enqueuePurchase(order.id as number, {
+        paid: true,
+      });
     }
 
     if (result.advanceOrderStatus) {

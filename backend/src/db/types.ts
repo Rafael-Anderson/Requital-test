@@ -1253,7 +1253,10 @@ export interface ShopanalyticsRow {
   metaCapiTokenEnc: string | null;
   metaTestEventCode: string | null;
   tiktokPixelId: string | null;
+  // AES-GCM ciphertext (migration 20261122100000), same rules as metaCapiTokenEnc.
+  tiktokEventsTokenEnc: string | null;
   snapPixelId: string | null;
+  snapCapiTokenEnc: string | null;
   googleAdsConversionId: string | null;
   googleAdsConversionLabel: string | null;
   createdAt: Date;
