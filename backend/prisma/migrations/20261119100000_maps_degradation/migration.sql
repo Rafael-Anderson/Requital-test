@@ -12,9 +12,12 @@ CREATE TABLE `mapserrorlog` (
   `shopId` INT NOT NULL,
   `code` VARCHAR(40) NOT NULL,
   `host` VARCHAR(255) NOT NULL,
+  -- hitCount, firstSeenAt and lastSeenAt describe the hits SINCE the last
+  -- "Mark resolved" (resolve zeroes hitCount; the next hit restarts firstSeenAt).
   `hitCount` INT UNSIGNED NOT NULL DEFAULT 1,
   `firstSeenAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `lastSeenAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `resolvedAt` DATETIME(3) NULL,
   PRIMARY KEY (`shopId`, `code`, `host`),
   CONSTRAINT `mapserrorlog_shopId_fkey` FOREIGN KEY (`shopId`) REFERENCES `shop` (`id`) ON DELETE CASCADE
 ) DEFAULT CHARACTER SET utf8mb4;

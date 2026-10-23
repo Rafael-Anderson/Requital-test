@@ -78,6 +78,7 @@ export interface MapsErrorLogRow {
   hitCount: number;
   firstSeenAt: Date;
   lastSeenAt: Date;
+  resolvedAt: Date | null;
 }
 
 export interface OrdernoteRow {

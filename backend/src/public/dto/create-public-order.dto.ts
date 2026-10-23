@@ -106,6 +106,7 @@ export class CreatePublicOrderDto {
   // unconditionally required in the admin's CreateOrderDto today.
   @IsString()
   @IsNotEmpty()
+  @MaxLength(500)
   customerAddress: string;
 
   // The region, by id. Options come from GET /regions (staff) or

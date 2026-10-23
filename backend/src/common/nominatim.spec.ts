@@ -1,4 +1,4 @@
-import { geocodeAddress } from './nominatim';
+import { geocodeAddress, reverseGeocodeAddress } from './nominatim';
 
 describe('geocodeAddress', () => {
   const original = global.fetch;
@@ -25,5 +25,37 @@ describe('geocodeAddress', () => {
     await expect(geocodeAddress('Dubai Mall')).rejects.toThrow(
       'Geocoding lookup failed',
     );
+  });
+});
+
+describe('geocode body handling', () => {
+  const original = global.fetch;
+  afterEach(() => {
+    global.fetch = original;
+  });
+
+  it('a body that fails to read is the existing 400, not a 500', async () => {
+    global.fetch = (() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.reject(new Error('aborted while reading body')),
+      })) as unknown as typeof fetch;
+    await expect(geocodeAddress('Dubai Mall')).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(reverseGeocodeAddress(25.2, 55.3)).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it('keeps the 404 for an empty result', async () => {
+    global.fetch = (() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      })) as unknown as typeof fetch;
+    await expect(geocodeAddress('nowhere')).rejects.toMatchObject({
+      status: 404,
+    });
   });
 });
