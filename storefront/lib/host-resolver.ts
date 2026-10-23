@@ -76,7 +76,9 @@ export function createHostResolver(deps: HostResolverDeps) {
         }
         return unavailable(host, null);
       }
-      if (res.status === 404) {
+      // 404 = unknown host; 400 = the backend refused the host as malformed,
+      // which is also "not a shop", not a backend problem.
+      if (res.status === 404 || res.status === 400) {
         // Genuinely unknown (or disconnected): never served from a stale entry.
         cache.delete(host);
         return { kind: "unknown" };
@@ -87,7 +89,9 @@ export function createHostResolver(deps: HostResolverDeps) {
     return unavailable(host, res);
   }
 
-  async function resolve(host: string, clientIp?: string): Promise<HostResolution> {
+  async function resolve(rawHost: string, clientIp?: string): Promise<HostResolution> {
+    // "Acme.Requital.io." and "acme.requital.io" are one host: one cache entry.
+    const host = rawHost.toLowerCase().replace(/\.+$/, "");
     const hit = cache.get(host);
     if (hit && now() - hit.at < HOST_TTL_MS) return { kind: "ok", subdomain: hit.subdomain };
     let pending = inflight.get(host);

@@ -84,7 +84,7 @@ const SPECS: EnvVarSpec[] = [
   {
     name: 'INTERNAL_API_SECRET',
     required: false,
-    validate: (value) => value.length >= 32,
+    validate: (value) => value.trim().length >= 32,
     hint: 'must be at least 32 characters and identical in the backend and storefront env; it only gives the storefront server its own throttle bucket (see docs/runbook.md, "Client IP behind the proxies"). Unset = off',
   },
   {

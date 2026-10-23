@@ -216,7 +216,9 @@ function staffActorLabel(ctx: TenantContext): string | undefined {
     ctx.impersonatedByPlatformAdminId !== undefined
       ? `Requital support (impersonating ${ctx.userName})`
       : ctx.userName;
-  return label.slice(0, 191);
+  // auditlog.actorLabel is VARCHAR(191) characters: cut by code point so a
+  // surrogate pair (an emoji in a name) is never split.
+  return Array.from(label).slice(0, 191).join('');
 }
 
 function toJson(value: unknown): string | null {

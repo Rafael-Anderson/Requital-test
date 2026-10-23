@@ -109,6 +109,20 @@ describe("proxy host resolution", () => {
     expect(resolveCalls).toBe(2);
   });
 
+  it("treats a backend 400 (malformed host) as an unknown host, not an outage", async () => {
+    const proxy = await load();
+    answer = { status: 400 };
+    expect((await proxy(req())).status).toBe(404);
+  });
+
+  it("shares one cache entry between host spellings (case, trailing dot)", async () => {
+    const proxy = await load();
+    await proxy(req("/", "acme.requital.io"));
+    await proxy(req("/", "ACME.requital.io"));
+    await proxy(req("/", "acme.requital.io."));
+    expect(resolveCalls).toBe(1);
+  });
+
   it("treats a 200 with an unreadable body as unavailable, not as an unknown host", async () => {
     const proxy = await load();
     answer = { status: 200, body: undefined };

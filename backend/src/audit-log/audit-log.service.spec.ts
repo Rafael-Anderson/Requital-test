@@ -48,4 +48,13 @@ describe('AuditLogService.logCtx actor labels (F11)', () => {
     await t.service.logCtx({ ...base, userName: 'n'.repeat(500) }, entry);
     expect((t.insertedLabel() as string).length).toBe(191);
   });
+
+  it('truncates by code point: an emoji at the cut is dropped whole, never split', async () => {
+    const t = make();
+    await t.service.logCtx({ ...base, userName: 'n'.repeat(190) + '\u{1F600}\u{1F600}' }, entry);
+    const label = t.insertedLabel() as string;
+    expect(Array.from(label)).toHaveLength(191);
+    expect(label.endsWith('\u{1F600}')).toBe(true);
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(label)).toBe(false);
+  });
 });
