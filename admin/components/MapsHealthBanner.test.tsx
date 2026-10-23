@@ -3,12 +3,12 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import MapsHealthBanner from "./MapsHealthBanner";
 import { useAuth } from "@/lib/auth-context";
-import { getMapsHealth } from "@/lib/api";
+import { getMapsHealth, resolveMapsHealth } from "@/lib/api";
 import { loadGoogleMaps, resetMapsFailureForTests } from "@/lib/google-maps-loader";
 import type { AuthUser } from "@/lib/types";
 
 vi.mock("@/lib/auth-context", () => ({ useAuth: vi.fn() }));
-vi.mock("@/lib/api", () => ({ getMapsHealth: vi.fn() }));
+vi.mock("@/lib/api", () => ({ getMapsHealth: vi.fn(), resolveMapsHealth: vi.fn() }));
 
 const asUser = (role: string) =>
   vi.mocked(useAuth).mockReturnValue({ user: { role } as AuthUser } as ReturnType<typeof useAuth>);
@@ -40,8 +40,34 @@ describe("MapsHealthBanner", () => {
     expect(banner).toHaveTextContent(
       "Google Maps is not working for your store (RefererNotAllowedMapError). Contact Requital support.",
     );
-    expect(banner).toHaveTextContent("Reported from shop.example.com.");
+    expect(banner).toHaveTextContent("Reported by visitors on shop.example.com.");
     expect(banner.textContent).not.toContain("—");
+  });
+
+  it("Mark resolved tells the server and hides the visitor report", async () => {
+    asUser("admin");
+    reported([{ code: "InvalidKeyMapError", host: "x.example.com" }]);
+    vi.mocked(resolveMapsHealth).mockResolvedValue({ resolved: true });
+    render(<MapsHealthBanner />);
+    await screen.findByTestId("maps-health-banner");
+    vi.mocked(getMapsHealth).mockResolvedValue({ errors: [] });
+    await userEvent.click(screen.getByRole("button", { name: "Mark resolved" }));
+    expect(resolveMapsHealth).toHaveBeenCalledWith("InvalidKeyMapError", "x.example.com");
+    await waitFor(() => expect(screen.queryByTestId("maps-health-banner")).not.toBeInTheDocument());
+  });
+
+  it("this browser's own failure says nothing about visitors and has no resolve button", async () => {
+    asUser("admin");
+    reported([]);
+    render(<MapsHealthBanner />);
+    await waitFor(() => expect(getMapsHealth).toHaveBeenCalled());
+    void loadGoogleMaps();
+    act(() => {
+      console.error("Google Maps JavaScript API error: InvalidKeyMapError\nu");
+    });
+    const banner = await screen.findByTestId("maps-health-banner");
+    expect(banner).not.toHaveTextContent("visitors");
+    expect(screen.queryByRole("button", { name: "Mark resolved" })).not.toBeInTheDocument();
   });
 
   it("also reacts to this browser's own Maps failure", async () => {

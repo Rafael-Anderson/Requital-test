@@ -415,7 +415,18 @@ describe('Maps degradation (e2e)', () => {
     });
 
     it('caps the address length and what is sent to the geocoder', async () => {
-      await place({ customerAddress: 'x'.repeat(501) }).expect(400);
+      // With a valid pin, only the length can make this fail.
+      const res = await place({
+        customerAddress: 'x'.repeat(501),
+        latitude: OUTLET_LAT,
+        longitude: OUTLET_LON,
+      }).expect(400);
+      expect(messageOf(res)).toContain('customerAddress');
+      await place({
+        customerAddress: 'x'.repeat(500),
+        latitude: OUTLET_LAT,
+        longitude: OUTLET_LON,
+      }).expect(201);
       const long = `Villa 12 ${'Jumeirah '.repeat(50)}`.slice(0, 500);
       await place({ addressManual: true, customerAddress: long }).expect(201);
       const q = new URL(nominatimCalls[0]).searchParams.get('q')!;
