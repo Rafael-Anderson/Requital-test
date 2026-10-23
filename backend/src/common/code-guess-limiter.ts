@@ -11,6 +11,9 @@ export const CODE_GUESS_MAX_DISTINCT_FAILURES = 10;
 // not guessing) but are still bounded.
 export const CODE_GUESS_MAX_REPEATS = 30;
 
+export const CODE_GUESS_LOCKED_MESSAGE =
+  'Too many attempts. Please try again later.';
+
 // 429 that the global exception filter turns into a Retry-After header
 // (it reads `retryAfterSeconds`). The body is deliberately generic: it must
 // say nothing about which code, or whether any code exists.
@@ -19,7 +22,7 @@ export class CodeGuessLockedException extends HttpException {
     super(
       {
         statusCode: HttpStatus.TOO_MANY_REQUESTS,
-        message: 'Too many attempts. Please try again later.',
+        message: CODE_GUESS_LOCKED_MESSAGE,
       },
       HttpStatus.TOO_MANY_REQUESTS,
     );

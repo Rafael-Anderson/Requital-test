@@ -118,4 +118,30 @@ describe("useDeliveryQuote", () => {
     });
     expect(result.current.state.phase).toBe("ready");
   });
+
+  it("a 429 from the quote (rate limited) is a calm error state, not a crash, and retry works", async () => {
+    quoteDelivery
+      .mockRejectedValueOnce(Object.assign(new Error("Too many attempts. Please try again later."), { status: 429 }))
+      .mockResolvedValueOnce(quote());
+    const req = buildQuoteRequest({ ...base, regionId: 3 });
+    const { result } = renderHook(() => useDeliveryQuote("s", req));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(result.current.state).toEqual({ phase: "error", message: "Too many attempts. Please try again later." });
+    expect(quoteBlocksSubmit(result.current.state)).toBe(false);
+    act(() => result.current.retry());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(result.current.state.phase).toBe("ready");
+  });
+
+  it("the server's own 'unavailable' answer for a locked client blocks submit with that message and nothing else", () => {
+    const state = {
+      phase: "ready" as const,
+      quote: quote({ status: "unavailable", reason: "Too many attempts. Please try again later.", total: null }),
+    };
+    expect(quoteBlocksSubmit(state)).toBe(true);
+  });
 });

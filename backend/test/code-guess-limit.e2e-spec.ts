@@ -143,7 +143,6 @@ describe('Code guess limiter (e2e)', () => {
     }
     for (const res of [
       await validate(s2, 'GUESSD'),
-      await quote(s2, 'GUESSE'),
       await order(s2, 'GUESSF'),
       await giftValidate(s2, 'AAAA-BBBB'),
       // even the shop's REAL code: the budget is spent, the client waits
@@ -155,6 +154,15 @@ describe('Code guess limiter (e2e)', () => {
       expect(wait).toBeGreaterThan(0);
       expect(wait).toBeLessThanOrEqual(900);
     }
+    // the debounced quote answers in its own shape, with no error status and
+    // nothing about any code
+    const lockedQuote = await quote(s2, 'GUESSE');
+    expect(lockedQuote.status).toBe(201);
+    expect(body<Record<string, unknown>>(lockedQuote)).toMatchObject({
+      status: 'unavailable',
+      reason: 'Too many attempts. Please try again later.',
+      total: null,
+    });
     // a 429 does not write an order, and an order with no code is untouched
     const plain = await f.storefrontOrderRaw(s2.shop, items(s2));
     expect(plain.status).toBe(201);
@@ -171,14 +179,15 @@ describe('Code guess limiter (e2e)', () => {
       ...Array.from({ length: 4 }, (_, i) => giftValidate(s6, `BURSTG-${i}`)),
     ];
     const results = await Promise.all(attempts);
+    const locked = 'Too many attempts. Please try again later.';
     const limited = results.filter(
       (r) =>
-        r.status === 429 &&
-        msg(r) === 'Too many attempts. Please try again later.',
+        (r.status === 429 && msg(r) === locked) ||
+        (r.status === 201 && (r.body as { reason?: string }).reason === locked),
     );
     expect(results).toHaveLength(20);
     expect(limited).toHaveLength(10);
-    for (const r of limited)
+    for (const r of limited.filter((x) => x.status === 429))
       expect(Number(r.headers['retry-after'])).toBeGreaterThan(0);
     // and the budget really is spent
     expect((await validate(s6, s6.valid)).status).toBe(429);

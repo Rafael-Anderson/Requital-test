@@ -8,7 +8,9 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { assertOrderWithinLimits } from '../common/order-limits';
 import {
+  CODE_GUESS_LOCKED_MESSAGE,
   CodeGuessLimiter,
+  CodeGuessLockedException,
   type CodeGuessTicket,
 } from '../common/code-guess-limiter';
 import {
@@ -2357,6 +2359,12 @@ export class PublicService {
       }
       if (err instanceof BadRequestException) {
         return unquoted('unavailable', err.message);
+      }
+      // A client that has used up its code-guess budget: the debounced quote
+      // re-fires on every address change, so this answers in the quote's own
+      // shape (generic, nothing about any code) instead of an error status.
+      if (err instanceof CodeGuessLockedException) {
+        return unquoted('unavailable', CODE_GUESS_LOCKED_MESSAGE);
       }
       throw err;
     }
