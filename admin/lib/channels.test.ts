@@ -38,6 +38,8 @@ const conn = (over: Partial<ChannelConnection> = {}): ChannelConnection => ({
   lastSyncStatus: null,
   lastError: null,
   locationVerified: true,
+  verificationRequestedAt: null,
+  autoConfirmScheduled: false,
   createdAt: "2026-10-13T00:00:00.000Z",
   ...over,
 });

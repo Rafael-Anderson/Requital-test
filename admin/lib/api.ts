@@ -162,6 +162,7 @@ import type {
   ChannelConnection,
   ChannelConnectionInput,
   ChannelConnectionUpdate,
+  ChannelItemMapping,
   ChannelOrder,
   ChannelOrderList,
   ChannelOrderState,
@@ -2778,6 +2779,31 @@ export function listChannelOrders(params: { state?: ChannelOrderState; outletId?
 
 export function acceptChannelOrder(id: number) {
   return apiFetch<ChannelOrder>(`/channels/orders/${id}/accept`, { method: "POST" });
+}
+
+// "Ready for collection" and the scheduled-order confirm step. Both tell the
+// marketplace first; a failure changes nothing.
+export function markChannelOrderReady(id: number) {
+  return apiFetch<ChannelOrder>(`/channels/orders/${id}/ready`, { method: "POST" });
+}
+
+export function confirmScheduledChannelOrder(id: number) {
+  return apiFetch<ChannelOrder>(`/channels/orders/${id}/confirm-scheduled`, { method: "POST" });
+}
+
+export function requestChannelVerification(id: number) {
+  return apiFetch<ChannelConnection>(`/channels/connections/${id}/request-verification`, { method: "POST" });
+}
+
+export function listChannelMappings(provider: string) {
+  return apiFetch<ChannelItemMapping[]>(`/channels/mappings?provider=${encodeURIComponent(provider)}`);
+}
+
+export function setChannelItemAvailability(id: number, items: { externalItemId: string; available: boolean }[]) {
+  return apiFetch<{ updated: number }>(`/channels/connections/${id}/availability`, {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
 }
 
 export function rejectChannelOrder(id: number, reason?: string) {

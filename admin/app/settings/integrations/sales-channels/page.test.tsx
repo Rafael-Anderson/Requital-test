@@ -16,6 +16,9 @@ const api = vi.hoisted(() => ({
   testChannelConnection: vi.fn(),
   deleteChannelConnection: vi.fn(),
   resolveChannelUnmappedItem: vi.fn(),
+  requestChannelVerification: vi.fn(),
+  listChannelMappings: vi.fn(),
+  setChannelItemAvailability: vi.fn(),
 }));
 vi.mock("@/lib/api", () => api);
 const toast = vi.hoisted(() => vi.fn());
@@ -49,6 +52,8 @@ const conn = (over: Partial<ChannelConnection> = {}): ChannelConnection => ({
   lastSyncStatus: null,
   lastError: null,
   locationVerified: false,
+  verificationRequestedAt: null,
+  autoConfirmScheduled: false,
   createdAt: "2026-10-13T00:00:00.000Z",
   ...over,
 });
@@ -355,6 +360,122 @@ describe("Sales channels settings page", () => {
       await user.click(await screen.findByRole("option", { name: "Large" }));
       await user.click(screen.getByRole("button", { name: "Save link" }));
       await waitFor(() => expect(api.resolveChannelUnmappedItem).toHaveBeenCalledWith(9, { productId: 32, variantId: 501 }));
+    });
+  });
+
+  describe("request verification, automatic confirm and item availability", () => {
+    const richProvider: ChannelProviderInfo = {
+      ...provider,
+      capabilities: { ...provider.capabilities, scheduledConfirm: true, itemAvailability: true },
+    };
+    const setupRich = (connections: ChannelConnection[]) => {
+      setup({ connections });
+      api.listChannelProviders.mockResolvedValue([richProvider]);
+    };
+
+    it("an unverified connection offers Request verification, which asks once and then shows when", async () => {
+      const user = userEvent.setup();
+      setup({ connections: [conn()] });
+      api.requestChannelVerification.mockResolvedValue(conn({ verificationRequestedAt: new Date().toISOString() }));
+      render(<Page />);
+      const card = await screen.findByRole("article", { name: "Deliveroo at Marina Branch" });
+      await user.click(within(card).getByRole("button", { name: "Request verification" }));
+      expect(api.requestChannelVerification).toHaveBeenCalledWith(1);
+      expect(await within(card).findByText(/Requested on/)).toBeInTheDocument();
+      expect(within(card).queryByRole("button", { name: /Request verification|Request again/ })).not.toBeInTheDocument();
+    });
+
+    it("a request older than a day can be repeated; a 429 shows the API's words", async () => {
+      const user = userEvent.setup();
+      setup({ connections: [conn({ verificationRequestedAt: new Date(Date.now() - 30 * 3_600_000).toISOString() })] });
+      api.requestChannelVerification.mockRejectedValue(new Error("Verification was already requested in the last 24 hours."));
+      render(<Page />);
+      const card = await screen.findByRole("article", { name: "Deliveroo at Marina Branch" });
+      await user.click(within(card).getByRole("button", { name: "Request again" }));
+      expect(await within(card).findByText(/already requested in the last 24 hours/)).toBeInTheDocument();
+    });
+
+    it("no location id means no request button action", async () => {
+      setup({ connections: [conn({ externalLocationId: null })] });
+      render(<Page />);
+      const card = await screen.findByRole("article", { name: "Deliveroo at Marina Branch" });
+      expect(within(card).getByRole("button", { name: "Request verification" })).toBeDisabled();
+    });
+
+    it("automatic confirmation is off by default, and turning it on asks first", async () => {
+      const user = userEvent.setup();
+      setupRich([conn({ locationVerified: true })]);
+      api.updateChannelConnection.mockResolvedValue(conn({ locationVerified: true, autoConfirmScheduled: true }));
+      render(<Page />);
+      const card = await screen.findByRole("article", { name: "Deliveroo at Marina Branch" });
+      const sw = within(card).getByRole("switch", { name: /Confirm scheduled Deliveroo orders automatically/ });
+      expect(sw).toHaveAttribute("aria-checked", "false");
+      await user.click(sw);
+      expect(api.updateChannelConnection).not.toHaveBeenCalled();
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText(/commits you to prepare|prepare every scheduled order/)).toBeInTheDocument();
+      await user.click(within(dialog).getByRole("button", { name: "Keep it off" }));
+      expect(api.updateChannelConnection).not.toHaveBeenCalled();
+      await user.click(sw);
+      await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Turn on" }));
+      await waitFor(() => expect(api.updateChannelConnection).toHaveBeenCalledWith(1, { autoConfirmScheduled: true }));
+    });
+
+    it("turning it off needs no question", async () => {
+      const user = userEvent.setup();
+      setupRich([conn({ locationVerified: true, autoConfirmScheduled: true })]);
+      api.updateChannelConnection.mockResolvedValue(conn({ locationVerified: true }));
+      render(<Page />);
+      const card = await screen.findByRole("article", { name: "Deliveroo at Marina Branch" });
+      await user.click(within(card).getByRole("switch", { name: /Confirm scheduled Deliveroo orders automatically/ }));
+      await waitFor(() => expect(api.updateChannelConnection).toHaveBeenCalledWith(1, { autoConfirmScheduled: false }));
+    });
+
+    it("a provider without those capabilities shows neither control", async () => {
+      setup({ connections: [conn({ locationVerified: true, enabled: true, externalBrandId: "B", externalSiteId: "S" })] });
+      render(<Page />);
+      const card = await screen.findByRole("article", { name: "Deliveroo at Marina Branch" });
+      expect(within(card).queryByRole("switch", { name: /automatically/ })).not.toBeInTheDocument();
+      expect(within(card).queryByRole("button", { name: "Item availability" })).not.toBeInTheDocument();
+    });
+
+    it("item availability needs an enabled connection with brand and site ids", async () => {
+      setupRich([conn({ locationVerified: true, enabled: true, externalBrandId: "B" })]);
+      render(<Page />);
+      const card = await screen.findByRole("article", { name: "Deliveroo at Marina Branch" });
+      expect(within(card).queryByRole("button", { name: "Item availability" })).not.toBeInTheDocument();
+    });
+
+    it("lists linked items and sends one item at a time; a refusal is shown and nothing claims success", async () => {
+      const user = userEvent.setup();
+      setupRich([conn({ locationVerified: true, enabled: true, externalBrandId: "B", externalSiteId: "S" })]);
+      api.listChannelMappings.mockResolvedValue([
+        { id: 1, provider: "deliveroo", externalItemId: "sku-1", externalName: "Red roses", productName: "Rose Bouquet" },
+      ]);
+      api.setChannelItemAvailability.mockRejectedValueOnce(new Error("The marketplace did not accept the change. Nothing was changed; try again."));
+      api.setChannelItemAvailability.mockResolvedValueOnce({ updated: 1 });
+      render(<Page />);
+      const card = await screen.findByRole("article", { name: "Deliveroo at Marina Branch" });
+      await user.click(within(card).getByRole("button", { name: "Item availability" }));
+      const dialog = await screen.findByRole("dialog");
+      expect(api.listChannelMappings).toHaveBeenCalledWith("deliveroo");
+      await user.click(await within(dialog).findByRole("button", { name: "Mark Rose Bouquet sold out" }));
+      expect(api.setChannelItemAvailability).toHaveBeenCalledWith(1, [{ externalItemId: "sku-1", available: false }]);
+      expect(await within(dialog).findByText(/Nothing was changed/)).toBeInTheDocument();
+      expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/sold out at/));
+      await user.click(within(dialog).getByRole("button", { name: "Mark Rose Bouquet available" }));
+      await waitFor(() => expect(toast).toHaveBeenCalledWith("Rose Bouquet is available again at Deliveroo"));
+    });
+
+    it("a failed item list ends in an error with Try again", async () => {
+      const user = userEvent.setup();
+      setupRich([conn({ locationVerified: true, enabled: true, externalBrandId: "B", externalSiteId: "S" })]);
+      api.listChannelMappings.mockRejectedValueOnce(new Error("x")).mockResolvedValueOnce([]);
+      render(<Page />);
+      await user.click(within(await screen.findByRole("article", { name: "Deliveroo at Marina Branch" })).getByRole("button", { name: "Item availability" }));
+      expect(await screen.findByText(/Could not load linked items/)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      expect(await screen.findByText(/No items are linked yet/)).toBeInTheDocument();
     });
   });
 });

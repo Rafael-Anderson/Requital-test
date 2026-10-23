@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Pencil, ShieldCheck, Hourglass, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
@@ -37,6 +38,11 @@ export default function ConnectionCard({
   onTest,
   onEdit,
   onDelete,
+  requestingVerification = false,
+  onRequestVerification,
+  onAutoConfirm,
+  onAvailability,
+  now,
 }: {
   connection: ChannelConnection;
   provider: ChannelProviderInfo | undefined;
@@ -51,6 +57,11 @@ export default function ConnectionCard({
   onTest: (c: ChannelConnection) => void;
   onEdit: (c: ChannelConnection) => void;
   onDelete: (c: ChannelConnection) => void;
+  requestingVerification?: boolean;
+  onRequestVerification?: (c: ChannelConnection) => void;
+  onAutoConfirm?: (c: ChannelConnection, next: boolean) => void;
+  onAvailability?: (c: ChannelConnection) => void;
+  now?: number;
 }) {
   const name = providerLabel(c.provider, providers);
   const outletName = outlet?.name ?? `Outlet ${c.outletId}`;
@@ -59,6 +70,11 @@ export default function ConnectionCard({
   const status = connectionStatus(c, provider);
   const alertNumber = outlet?.whatsapp || outlet?.phone || null;
   const reasonId = `reason-${c.id}`;
+  // A merchant may ask again a day after the last request (the server enforces it).
+  const requestedAt = c.verificationRequestedAt ? new Date(c.verificationRequestedAt) : null;
+  const [clock] = useState(() => now ?? Date.now());
+  const askedToday = requestedAt !== null && clock - requestedAt.getTime() < 24 * 3_600_000;
+  const caps = provider?.capabilities;
 
   return (
     <article aria-label={`${name} at ${outletName}`} className="rounded-2xl border border-border bg-surface p-4 dark:border-white/10 dark:bg-zinc-900">
@@ -117,11 +133,30 @@ export default function ConnectionCard({
             </p>
           )}
           {verification === "waiting" && (
-            <p>
-              <span className="font-semibold">Waiting for Requital to verify your location.</span> Before orders can flow, Requital
-              confirms your location ID with the marketplace. There is nothing for you to do. Changing the location ID or the
-              credentials starts this check again.
-            </p>
+            <div className="space-y-2">
+              <p>
+                <span className="font-semibold">Waiting for Requital to verify your location.</span> Before orders can flow,
+                Requital confirms your location ID with the marketplace. Check the ids above, then ask for verification. Changing
+                the location ID or the credentials starts this check again.
+              </p>
+              {requestedAt && (
+                <p className="text-text-muted">
+                  Requested on {requestedAt.toLocaleDateString()}. {askedToday ? "Requital has been asked and will confirm it." : "You can ask again."}
+                </p>
+              )}
+              {onRequestVerification && !askedToday && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={requestingVerification}
+                  disabled={busy || !flagOn || !c.externalLocationId}
+                  onClick={() => onRequestVerification(c)}
+                  title={!c.externalLocationId ? "Set the location ID first." : undefined}
+                >
+                  {requestedAt ? "Request again" : "Request verification"}
+                </Button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -142,6 +177,34 @@ export default function ConnectionCard({
           Test connection
         </Button>
       </div>
+      {(caps?.scheduledConfirm && onAutoConfirm) || (caps?.itemAvailability && c.enabled && c.externalBrandId && c.externalSiteId && onAvailability) ? (
+        <div className="mt-3 space-y-3 border-t border-border pt-3 dark:border-white/10">
+          {caps?.scheduledConfirm && onAutoConfirm && (
+            <div className="flex flex-wrap items-start gap-3">
+              <Toggle
+                checked={c.autoConfirmScheduled}
+                onChange={(next) => onAutoConfirm(c, next)}
+                disabled={busy}
+                label={`Confirm scheduled ${name} orders automatically at ${outletName}`}
+              />
+              <p className="min-w-0 flex-1 basis-60 text-[12.5px] text-text-muted">
+                <span className="font-semibold text-text-primary dark:text-zinc-100">Confirm scheduled orders automatically.</span>{" "}
+                Off by default. When on, Requital confirms an accepted scheduled order shortly before the marketplace&apos;s deadline,
+                which commits you to prepare it. When off, you get one WhatsApp alert and press Confirm scheduled order in Orders,
+                Marketplace.
+              </p>
+            </div>
+          )}
+          {caps?.itemAvailability && c.enabled && c.externalBrandId && c.externalSiteId && onAvailability && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button size="sm" variant="secondary" onClick={() => onAvailability(c)} disabled={busy}>
+                Item availability
+              </Button>
+              <p className="min-w-0 flex-1 basis-60 text-[12.5px] text-text-muted">Mark linked items sold out or available again at {name}.</p>
+            </div>
+          )}
+        </div>
+      ) : null}
       {reason && (
         <p id={reasonId} className="mt-1.5 text-xs text-text-muted">
           {reason}

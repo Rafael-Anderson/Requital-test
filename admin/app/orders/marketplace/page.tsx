@@ -2,12 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { acceptChannelOrder, listChannelOrders, rejectChannelOrder } from "@/lib/api";
+import {
+  acceptChannelOrder,
+  confirmScheduledChannelOrder,
+  listChannelOrders,
+  listChannelProviders,
+  markChannelOrderReady,
+  rejectChannelOrder,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useOutletFilter } from "@/lib/outlet-context";
 import { marketplaceDeskVisible, useChannelAvailability } from "@/lib/useChannelAvailability";
 import { providerLabel } from "@/lib/channels";
-import type { ChannelOrder } from "@/lib/types";
+import type { ChannelOrder, ChannelProviderInfo } from "@/lib/types";
 import BackButton from "@/components/ui/BackButton";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
@@ -36,6 +43,9 @@ export default function MarketplaceOrdersPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [rejecting, setRejecting] = useState<ChannelOrder | null>(null);
   const [reason, setReason] = useState("");
+  const [providers, setProviders] = useState<ChannelProviderInfo[] | null>(null);
+  // The two human-only marketplace actions go through a confirm dialog.
+  const [asking, setAsking] = useState<{ order: ChannelOrder; kind: "ready" | "confirm" } | null>(null);
   const visible = marketplaceDeskVisible(availability);
 
   const latest = useRef(0);
@@ -62,13 +72,38 @@ export default function MarketplaceOrdersPage() {
     return () => clearInterval(t);
   }, [visible, refresh]);
 
-  async function act(order: ChannelOrder, kind: "accept" | "reject", why?: string) {
+  // Capabilities decide which buttons exist. If they cannot be loaded the desk still
+  // works; the extra buttons are simply not offered (accept and reject never depend on this).
+  useEffect(() => {
+    if (!visible) return;
+    let live = true;
+    listChannelProviders().then(
+      (p) => live && setProviders(p),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [visible]);
+
+  async function act(order: ChannelOrder, kind: "accept" | "reject" | "ready" | "confirm", why?: string) {
     setBusyId(order.id);
     setActionError(null);
     try {
       if (kind === "accept") await acceptChannelOrder(order.id);
+      else if (kind === "ready") await markChannelOrderReady(order.id);
+      else if (kind === "confirm") await confirmScheduledChannelOrder(order.id);
       else await rejectChannelOrder(order.id, why);
-      toast(kind === "accept" ? "Order accepted" : "Order rejected");
+      toast(
+        kind === "accept"
+          ? "Order accepted"
+          : kind === "ready"
+            ? "Marked ready for collection"
+            : kind === "confirm"
+              ? "Scheduled order confirmed"
+              : "Order rejected",
+      );
+      setAsking(null);
       setRejecting(null);
       setReason("");
       refresh();
@@ -96,6 +131,15 @@ export default function MarketplaceOrdersPage() {
       outletName={outletName.get(o.outletId)}
       isAdmin={isAdmin}
       busy={busyId === o.id}
+      capabilities={providers?.find((p) => p.name === o.provider)?.capabilities}
+      onReady={(x) => {
+        setActionError(null);
+        setAsking({ order: x, kind: "ready" });
+      }}
+      onConfirmScheduled={(x) => {
+        setActionError(null);
+        setAsking({ order: x, kind: "confirm" });
+      }}
       onAccept={(x) => act(x, "accept")}
       onReject={(x) => {
         setActionError(null);
@@ -124,7 +168,7 @@ export default function MarketplaceOrdersPage() {
         />
       ) : (
         <div className="space-y-6">
-          {actionError && !rejecting && <InlineErrorMessage>{actionError}</InlineErrorMessage>}
+          {actionError && !rejecting && !asking && <InlineErrorMessage>{actionError}</InlineErrorMessage>}
           {error && orders !== null && <InlineErrorMessage>{error}</InlineErrorMessage>}
           {orders === null ? (
             error ? (
@@ -184,6 +228,38 @@ export default function MarketplaceOrdersPage() {
             </p>
           )}
         </div>
+      )}
+
+      {asking && (
+        <Modal
+          size="sm"
+          title={asking.kind === "ready" ? "Mark this order ready for collection?" : "Confirm this scheduled order?"}
+          onClose={() => setAsking(null)}
+        >
+          {(requestClose) => (
+            <div className="space-y-4">
+              <p className="text-sm text-text-secondary dark:text-zinc-300">
+                {asking.kind === "ready"
+                  ? `This tells ${providerLabel(asking.order.provider, providers ?? undefined)} that order ${asking.order.displayId ?? asking.order.externalOrderId} is ready, and the courier or customer is sent for it. Only do this when the order is really ready. It cannot be undone.`
+                  : `This tells ${providerLabel(asking.order.provider, providers ?? undefined)} that you will prepare order ${asking.order.displayId ?? asking.order.externalOrderId} for its scheduled time. Confirm it only if you can.`}
+              </p>
+              {actionError && <InlineErrorMessage>{actionError}</InlineErrorMessage>}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={requestClose}>
+                  Not yet
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  loading={busyId === asking.order.id}
+                  onClick={() => void act(asking.order, asking.kind)}
+                >
+                  {asking.kind === "ready" ? "Mark ready" : "Confirm order"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal>
       )}
 
       {rejecting && (

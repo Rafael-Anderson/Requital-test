@@ -49,6 +49,9 @@ export class ChannelsController {
     private readonly registry: ChannelProviderRegistry,
   ) {}
 
+  // Names, labels and capabilities only (no secret): the orders desk needs the
+  // capabilities to know which buttons to offer, so desk roles may read it too.
+  @Roles('admin', 'branch', 'order_manager')
   @Get('providers')
   providers() {
     return this.registry.names().map((n) => {

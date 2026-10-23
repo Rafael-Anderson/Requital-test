@@ -11,6 +11,7 @@ import {
   type ShopStatus,
 } from "@/lib/platform-api";
 import { confirmSuspend, startImpersonation } from "@/lib/impersonation";
+import PendingChannelVerifications from "@/components/platform/PendingChannelVerifications";
 
 const STATUS_STYLES: Record<ShopStatus, string> = {
   active: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -84,6 +85,7 @@ export default function PlatformShopsPage() {
 
   return (
     <div className="space-y-6">
+      <PendingChannelVerifications />
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-100">Shops</h1>
         <div className="flex items-center gap-3">

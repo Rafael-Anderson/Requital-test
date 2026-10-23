@@ -295,6 +295,28 @@ describe('Marketplace follow-ups (E5)', () => {
 
   // -------------------------------------------------------------------------
   describe('scheduled-order confirm (desk)', () => {
+    it('desk roles can read provider capabilities (to know which buttons exist); a viewer cannot', async () => {
+      const staff = await createStaff(
+        app,
+        a.adminToken,
+        'e5pr',
+        'order_manager',
+      );
+      const res = await r()
+        .get('/channels/providers')
+        .set({ Authorization: `Bearer ${staff.token}` })
+        .expect(200);
+      const stubInfo = res.body.find(
+        (p: { name: string }) => p.name === STUB_PROVIDER,
+      );
+      expect(stubInfo.capabilities.scheduledConfirm).toBe(true);
+      const viewer = await createStaff(app, a.adminToken, 'e5pv', 'viewer');
+      await r()
+        .get('/channels/providers')
+        .set({ Authorization: `Bearer ${viewer.token}` })
+        .expect(403);
+    });
+
     it('stores confirmBy from the canonical order, and an ASAP order has none', async () => {
       const { co } = await orderFor(ca, { confirmInMin: 120 });
       expect(co.confirmBy).not.toBeNull();
