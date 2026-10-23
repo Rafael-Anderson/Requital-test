@@ -16,7 +16,9 @@ export interface AnalyticsSettingsResponse {
   metaCapiTokenSet: boolean;
   metaTestEventCode: string | null;
   tiktokPixelId: string | null;
+  tiktokEventsTokenSet: boolean;
   snapPixelId: string | null;
+  snapCapiTokenSet: boolean;
   googleAdsConversionId: string | null;
   googleAdsConversionLabel: string | null;
 }
@@ -38,6 +40,21 @@ export interface MetaCapiCredentials {
   accessToken: string;
   testEventCode: string | null;
 }
+
+// Server-side TikTok / Snap: a pixel id AND a token, nothing else (no test code
+// yet: provider test modes are unverified, see conversion-platform-assumptions.ts).
+export interface AdPlatformCredentials {
+  pixelId: string;
+  accessToken: string;
+}
+
+// The write-only secrets: DTO key -> encrypted column. Closed table, so a DTO key
+// is never interpolated into SQL and a new token is one line here.
+const TOKEN_FIELDS = [
+  { dto: 'metaCapiToken', column: 'metaCapiTokenEnc' },
+  { dto: 'tiktokEventsToken', column: 'tiktokEventsTokenEnc' },
+  { dto: 'snapCapiToken', column: 'snapCapiTokenEnc' },
+] as const;
 
 // The only columns an update may touch, as a closed map from the DTO key to the
 // real column. A DTO key is never interpolated into SQL.
@@ -73,7 +90,9 @@ export class ShopAnalyticsService {
       metaCapiTokenSet: Boolean(row?.metaCapiTokenEnc),
       metaTestEventCode: row?.metaTestEventCode ?? null,
       tiktokPixelId: row?.tiktokPixelId ?? null,
+      tiktokEventsTokenSet: Boolean(row?.tiktokEventsTokenEnc),
       snapPixelId: row?.snapPixelId ?? null,
+      snapCapiTokenSet: Boolean(row?.snapCapiTokenEnc),
       googleAdsConversionId: row?.googleAdsConversionId ?? null,
       googleAdsConversionLabel: row?.googleAdsConversionLabel ?? null,
     };
@@ -97,11 +116,13 @@ export class ShopAnalyticsService {
       values.push(dto[field]);
       changed.push(field);
     }
-    if (dto.metaCapiToken !== undefined) {
-      columns.push('metaCapiTokenEnc');
-      values.push(dto.metaCapiToken === null ? null : encrypt(dto.metaCapiToken));
+    for (const { dto: key, column } of TOKEN_FIELDS) {
+      const token = dto[key];
+      if (token === undefined) continue;
+      columns.push(column);
+      values.push(token === null ? null : encrypt(token));
       // The name of the field that changed, never its value.
-      changed.push('metaCapiToken');
+      changed.push(key);
     }
 
     if (columns.length > 0) {
@@ -157,5 +178,19 @@ export class ShopAnalyticsService {
       accessToken: decrypt(row.metaCapiTokenEnc),
       testEventCode: row.metaTestEventCode ?? null,
     };
+  }
+
+  // Same contract as the Meta resolver: null unless BOTH the pixel id and the
+  // token are set.
+  async resolveTiktokCredentials(shopId: number): Promise<AdPlatformCredentials | null> {
+    const row = await this.loadRow(shopId);
+    if (!row?.tiktokPixelId || !row.tiktokEventsTokenEnc) return null;
+    return { pixelId: row.tiktokPixelId, accessToken: decrypt(row.tiktokEventsTokenEnc) };
+  }
+
+  async resolveSnapCredentials(shopId: number): Promise<AdPlatformCredentials | null> {
+    const row = await this.loadRow(shopId);
+    if (!row?.snapPixelId || !row.snapCapiTokenEnc) return null;
+    return { pixelId: row.snapPixelId, accessToken: decrypt(row.snapCapiTokenEnc) };
   }
 }
