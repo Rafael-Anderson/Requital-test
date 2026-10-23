@@ -12,10 +12,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import {
-  MAX_LINE_QUANTITY,
-  MAX_ORDER_LINES,
-} from '../../common/order-limits';
+import { MAX_LINE_QUANTITY, MAX_ORDER_LINES } from '../../common/order-limits';
 
 // Shared by the admin-authenticated POST /shop/discounts/validate (used by
 // the draft-order builder) and the public POST /public/:shopSlug/discounts/validate

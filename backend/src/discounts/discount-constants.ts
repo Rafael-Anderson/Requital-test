@@ -66,12 +66,18 @@ export const DISCOUNT_EXISTENCE_ORACLE_REASONS: readonly DiscountRejectionReason
 export function isDiscountExistenceOracle(
   reason: DiscountRejectionReason | undefined,
 ): boolean {
-  return reason !== undefined && DISCOUNT_EXISTENCE_ORACLE_REASONS.includes(reason);
+  return (
+    reason !== undefined && DISCOUNT_EXISTENCE_ORACLE_REASONS.includes(reason)
+  );
 }
 
 // Collapses the oracle reasons to one answer (same reason, same message).
 export function toPublicDiscountResult<
-  T extends { valid: boolean; reason?: DiscountRejectionReason; message?: string },
+  T extends {
+    valid: boolean;
+    reason?: DiscountRejectionReason;
+    message?: string;
+  },
 >(result: T): T {
   if (result.valid || !isDiscountExistenceOracle(result.reason)) return result;
   return { ...result, reason: 'not_found', message: GENERIC_DISCOUNT_MESSAGE };
