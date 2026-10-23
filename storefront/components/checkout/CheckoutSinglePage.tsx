@@ -92,7 +92,7 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
             onChange={setDeliveryDate}
             minDate={minDate}
             isDateGrayedOut={(d) =>
-              isDateBlocked(d, new Date(`${minDate}T00:00:00`), shop?.allowSameDayOrders, shop?.allowNextDayOrders) ||
+              isDateBlocked(d, minDate, shop?.allowSameDayOrders, shop?.allowNextDayOrders) ||
               (d === minDate && todayFullyBooked)
             }
           />

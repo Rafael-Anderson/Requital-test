@@ -105,6 +105,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.errorTracking.captureException(exception, errorContext);
     }
 
+    // A 429 that knows when to come back (CodeGuessLockedException).
+    const retryAfter = (exception as { retryAfterSeconds?: unknown })
+      ?.retryAfterSeconds;
+    if (typeof retryAfter === 'number') {
+      response.setHeader('Retry-After', String(retryAfter));
+    }
     response.status(status).json(body);
   }
 }

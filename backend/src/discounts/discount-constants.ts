@@ -51,3 +51,34 @@ export const DISCOUNT_REJECTION_MESSAGES: Record<
     'You have already used this code the maximum number of times',
   not_eligible: 'This code does not apply to the items in your cart',
 };
+
+// What a PUBLIC (unauthenticated) caller is told. Not-found, inactive, not
+// started and expired all answer identically, because each one on its own
+// confirms that a code exists: with specific wording a guesser could list a
+// shop's real codes. The rest (minimum purchase, usage limits, eligibility) are
+// only ever reached once existence is already proven to the caller, so they
+// stay specific. Staff routes (draft-order builder) keep the specific wording.
+export const GENERIC_DISCOUNT_MESSAGE =
+  'This code is not valid or cannot be applied';
+export const DISCOUNT_EXISTENCE_ORACLE_REASONS: readonly DiscountRejectionReason[] =
+  ['not_found', 'inactive', 'not_started', 'expired'];
+
+export function isDiscountExistenceOracle(
+  reason: DiscountRejectionReason | undefined,
+): boolean {
+  return (
+    reason !== undefined && DISCOUNT_EXISTENCE_ORACLE_REASONS.includes(reason)
+  );
+}
+
+// Collapses the oracle reasons to one answer (same reason, same message).
+export function toPublicDiscountResult<
+  T extends {
+    valid: boolean;
+    reason?: DiscountRejectionReason;
+    message?: string;
+  },
+>(result: T): T {
+  if (result.valid || !isDiscountExistenceOracle(result.reason)) return result;
+  return { ...result, reason: 'not_found', message: GENERIC_DISCOUNT_MESSAGE };
+}

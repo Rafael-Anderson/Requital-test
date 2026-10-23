@@ -1,14 +1,17 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsInt,
   IsNumber,
   IsOptional,
   IsPositive,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { MAX_LINE_QUANTITY, MAX_ORDER_LINES } from '../../common/order-limits';
 
 class OrderItemEdit {
   @IsInt()
@@ -22,6 +25,7 @@ class OrderItemEdit {
 
   @IsInt()
   @IsPositive()
+  @Max(MAX_LINE_QUANTITY)
   quantity: number;
 
   // Same admin-only override as CreateOrderDto's own item shape — never
@@ -41,6 +45,7 @@ class OrderItemEdit {
 export class UpdateOrderItemsDto {
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(MAX_ORDER_LINES)
   @ValidateNested({ each: true })
   @Type(() => OrderItemEdit)
   items: OrderItemEdit[];

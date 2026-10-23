@@ -16,6 +16,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { MAX_LINE_QUANTITY, MAX_ORDER_LINES } from '../../common/order-limits';
 
 class QuoteItemInput {
   @IsInt()
@@ -29,7 +30,7 @@ class QuoteItemInput {
 
   @IsInt()
   @IsPositive()
-  @Max(999)
+  @Max(MAX_LINE_QUANTITY)
   quantity: number;
 
   @IsOptional()
@@ -74,7 +75,7 @@ export class QuoteDeliveryDto {
 
   @IsArray()
   @ArrayNotEmpty()
-  @ArrayMaxSize(100)
+  @ArrayMaxSize(MAX_ORDER_LINES)
   @ValidateNested({ each: true })
   @Type(() => QuoteItemInput)
   items: QuoteItemInput[];

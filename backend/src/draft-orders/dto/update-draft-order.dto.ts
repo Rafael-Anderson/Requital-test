@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsIn,
@@ -9,9 +10,11 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
+import { MAX_LINE_QUANTITY, MAX_ORDER_LINES } from '../../common/order-limits';
 
 class DraftOrderItemInput {
   @IsInt()
@@ -25,6 +28,7 @@ class DraftOrderItemInput {
 
   @IsInt()
   @IsPositive()
+  @Max(MAX_LINE_QUANTITY)
   quantity: number;
 
   @IsOptional()
@@ -90,6 +94,7 @@ export class UpdateDraftOrderDto {
   @IsOptional()
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayMaxSize(MAX_ORDER_LINES)
   @ValidateNested({ each: true })
   @Type(() => DraftOrderItemInput)
   items?: DraftOrderItemInput[];

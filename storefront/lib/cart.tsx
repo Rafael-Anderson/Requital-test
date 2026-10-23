@@ -68,6 +68,60 @@ function storageKey(shopSlug: string) {
   return `requital_storefront_cart:${shopSlug}`;
 }
 
+// Order size limits, hand-mirrored from backend/src/common/order-limits.ts (the
+// apps share no code; change both together). The server refuses a larger order
+// with a 400, so the cart never lets the shopper build one.
+export const MAX_LINE_QUANTITY = 999;
+export const MAX_ORDER_LINES = 100;
+export const MAX_ORDER_UNITS = 1000;
+export const MAX_GIFT_CARD_UNITS = 20;
+
+type LineRef = Pick<CartItem, "productId" | "variantId" | "isGiftCard" | "maxStock">;
+
+// The most one line may hold given everything else in the cart. `orderMax` is
+// the order-size ceiling alone (stock ignored), `max` also honours stock, and
+// `message` names the order-size ceiling when that is what stops the shopper
+// (null when stock is the tighter limit: the stock note already says so).
+export function lineAllowance(
+  items: CartItem[],
+  line: LineRef,
+): { max: number; orderMax: number; message: string | null } {
+  let units = 0;
+  let giftCards = 0;
+  for (const i of items) {
+    if (i.productId === line.productId && i.variantId === line.variantId) continue;
+    units += i.quantity;
+    if (i.isGiftCard) giftCards += i.quantity;
+  }
+  const byUnits = MAX_ORDER_UNITS - units;
+  const byGift = line.isGiftCard ? MAX_GIFT_CARD_UNITS - giftCards : Infinity;
+  const orderMax = Math.max(0, Math.min(MAX_LINE_QUANTITY, byUnits, byGift));
+  const stock = line.maxStock ?? Infinity;
+  const message =
+    orderMax >= stock
+      ? null
+      : byGift <= Math.min(MAX_LINE_QUANTITY, byUnits)
+        ? `Maximum ${MAX_GIFT_CARD_UNITS} gift cards per order`
+        : byUnits < MAX_LINE_QUANTITY
+          ? `Maximum ${MAX_ORDER_UNITS} items per order`
+          : `Maximum ${MAX_LINE_QUANTITY} per order`;
+  return { max: Math.min(stock, orderMax), orderMax, message };
+}
+
+// A cart saved before these limits existed may be over them. Clamp it (never
+// drop it wholesale, never leave a state the server would refuse): keep the
+// first lines in order, cut each to what still fits. Stock is deliberately not
+// applied here: the stored maxStock is only as fresh as the last add.
+export function clampCartState(state: CartState): CartState {
+  const kept: CartItem[] = [];
+  for (const line of state.items.slice(0, MAX_ORDER_LINES)) {
+    const quantity = Math.min(line.quantity, lineAllowance(kept, line).orderMax);
+    if (quantity > 0) kept.push(quantity === line.quantity ? line : { ...line, quantity });
+  }
+  const unchanged = kept.length === state.items.length && kept.every((k, i) => k === state.items[i]);
+  return unchanged ? state : { ...state, items: kept };
+}
+
 // Two different variants of the same product are distinct cart lines — this
 // is the match key used everywhere an item needs to be found/updated.
 // undefined variantId (a non-variant product) matches only itself, same as
@@ -89,7 +143,7 @@ export function addItemToState(
   // first — stock/price context doesn't carry over between outlets.
   const items = state.outletId !== null && state.outletId !== outletId ? [] : state.items;
   const existing = items.find((i) => sameLine(i, item.productId, item.variantId));
-  const cap = item.maxStock ?? Infinity;
+  const cap = lineAllowance(items, item).max;
   if (existing) {
     // A gift card product has no variants to key a second, independently-
     // priced line off — re-adding it at a *different* chosen amount
@@ -115,6 +169,8 @@ export function addItemToState(
       ),
     };
   }
+  // A new line past the line limit, or with no room left, is not added.
+  if (items.length >= MAX_ORDER_LINES || cap <= 0) return { ...state, outletId, items };
   return { ...state, outletId, items: [...items, { ...item, quantity: Math.min(quantity, cap) }] };
 }
 
@@ -130,7 +186,7 @@ export function setQuantityInState(
       quantity <= 0
         ? state.items.filter((i) => !sameLine(i, productId, variantId))
         : state.items.map((i) =>
-            sameLine(i, productId, variantId) ? { ...i, quantity: Math.min(quantity, i.maxStock ?? Infinity) } : i,
+            sameLine(i, productId, variantId) ? { ...i, quantity: Math.min(quantity, lineAllowance(state.items, i).max) } : i,
           ),
   };
 }
@@ -157,7 +213,9 @@ export function CartProvider({ shopSlug, children }: { shopSlug: string; childre
         // A cart saved before discountCode/giftCardCode existed parses
         // without those keys — default them rather than carrying an
         // undefined field through state.
-        setState({ ...parsed, discountCode: parsed.discountCode ?? null, giftCardCode: parsed.giftCardCode ?? null });
+        setState(
+          clampCartState({ ...parsed, discountCode: parsed.discountCode ?? null, giftCardCode: parsed.giftCardCode ?? null }),
+        );
       }
     } catch {
       // corrupt/blocked storage — start with an empty cart rather than crash

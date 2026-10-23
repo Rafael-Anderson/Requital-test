@@ -6,6 +6,20 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { assertOrderWithinLimits } from '../common/order-limits';
+import {
+  CODE_GUESS_LOCKED_MESSAGE,
+  CodeGuessLimiter,
+  CodeGuessLockedException,
+  type CodeGuessTicket,
+} from '../common/code-guess-limiter';
+import {
+  isDiscountExistenceOracle,
+  toPublicDiscountResult,
+} from '../discounts/discount-constants';
+import type { EvaluateResult } from '../discounts/discounts.service';
+import type { EvaluateGiftCardResult } from '../gift-cards/gift-cards.service';
+import { GENERIC_GIFT_CARD_MESSAGE } from '../gift-cards/gift-card.constants';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService, type QueryParam } from '../database/database.service';
 import { trimDecimal } from '../database/decimal.util';
@@ -149,6 +163,7 @@ export class PublicService {
     private readonly shopAnalyticsService: ShopAnalyticsService,
     private readonly conversionEventsService: ConversionEventsService,
     private readonly reviewsService: ReviewsService,
+    private readonly codeGuessLimiter: CodeGuessLimiter,
   ) {}
 
   // Backs the theme builder's live preview for a shop that hasn't published
@@ -233,9 +248,43 @@ export class PublicService {
     return this.abandonedCartsService.resolveByToken(token);
   }
 
-  async validateGiftCard(shopSlug: string, dto: ValidateGiftCardDto) {
+  async validateGiftCard(
+    shopSlug: string,
+    dto: ValidateGiftCardDto,
+    clientIp?: string,
+  ) {
     const shop = await this.resolveShop(shopSlug);
-    return this.giftCardsService.validateCode(shop.id, dto.code);
+    // Reserved before the lookup (see CodeGuessLimiter): every failure of a gift
+    // card code reveals that it exists, so a failure keeps its slot.
+    const ticket = this.codeGuessLimiter.reserve(shop.id, clientIp, dto.code);
+    let result: EvaluateGiftCardResult;
+    try {
+      result = await this.giftCardsService.validateCode(shop.id, dto.code);
+    } catch (err) {
+      ticket.refund();
+      throw err;
+    }
+    if (result.valid) {
+      ticket.refund();
+      return result;
+    }
+    // One answer for every failure, no reason and never a balance.
+    return { valid: false, message: GENERIC_GIFT_CARD_MESSAGE };
+  }
+
+  // Settles a public discount-code attempt reserved with CodeGuessLimiter: an
+  // answer that confirms or denies existence (not found, inactive, not started,
+  // expired) keeps its slot and is collapsed to one message; a valid code or a
+  // rejection that needs the code to exist (minimum purchase, limits,
+  // eligibility) gives the slot back and is returned as it is.
+  private settleDiscount<T extends EvaluateResult>(
+    ticket: CodeGuessTicket,
+    result: T,
+  ): T {
+    if (result.valid || !isDiscountExistenceOracle(result.reason)) {
+      ticket.refund();
+    }
+    return toPublicDiscountResult(result);
   }
 
   // No dedicated module for this — it's a single insert-or-409, not enough
@@ -1381,14 +1430,34 @@ export class PublicService {
     return { success: true };
   }
 
-  async validateDiscount(shopSlug: string, dto: ValidateDiscountDto) {
+  async validateDiscount(
+    shopSlug: string,
+    dto: ValidateDiscountDto,
+    clientIp?: string,
+  ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
-    if (!dto.items?.length) return this.discountsService.validate(shop.id, dto);
+    const ticket = this.codeGuessLimiter.reserve(shop.id, clientIp, dto.code);
+    try {
+      return this.settleDiscount(
+        ticket,
+        await this.validateDiscountResult(shop.id, dto),
+      );
+    } catch (err) {
+      ticket.refund();
+      throw err;
+    }
+  }
+
+  private async validateDiscountResult(
+    shopId: number,
+    dto: ValidateDiscountDto,
+  ) {
+    if (!dto.items?.length) return this.discountsService.validate(shopId, dto);
     // Priced by the same resolver checkout uses, so what is shown is what is
     // charged. A client price is never honoured on this public route.
     const resolved = await this.productsService.resolveOrderItems(
-      shop.id,
+      shopId,
       dto.items.map((i) => ({
         productId: i.productId,
         variantId: i.variantId,
@@ -1396,6 +1465,7 @@ export class PublicService {
         giftCardAmount: i.giftCardAmount,
       })),
     );
+    assertOrderWithinLimits(resolved);
     // Same rule as createOrder: an unpublished product must not be priced
     // (or even confirmed to exist) through this unauthenticated endpoint.
     for (const { product } of resolved) {
@@ -1406,14 +1476,14 @@ export class PublicService {
       }
     }
     const lines = await this.discountsService.buildLines(
-      shop.id,
+      shopId,
       resolved.map((r) => ({
         productId: r.product.id as number,
         price: r.price,
         quantity: r.quantity,
       })),
     );
-    return this.discountsService.validate(shop.id, dto, lines);
+    return this.discountsService.validate(shopId, dto, lines);
   }
 
   // Every live auto-apply discount for this shop, for the storefront to
@@ -1441,6 +1511,7 @@ export class PublicService {
     // Set by the controller ONLY when dto.useStoreCredit (an authenticated
     // customer of this shop); null for every guest checkout.
     sessionCustomer: CustomerContext | null = null,
+    clientIp?: string,
   ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
@@ -1482,6 +1553,7 @@ export class PublicService {
         giftCardAmount: i.giftCardAmount,
       })),
     );
+    assertOrderWithinLimits(resolvedItems);
     for (const { product } of resolvedItems) {
       if (product.status !== 'Available') {
         throw new BadRequestException(
@@ -1507,7 +1579,9 @@ export class PublicService {
       discountCodeSnapshot,
       totals,
       orderTotal,
-    } = await this.priceCheckout(shop, outlet, dto, resolvedItems, region);
+    } = await this.priceCheckout(shop, outlet, dto, resolvedItems, region, {
+      clientIp,
+    });
     const { taxAmount, total } = totals;
     const itemsData = resolvedItems.map(
       (
@@ -1550,15 +1624,26 @@ export class PublicService {
     let giftCard: { id: number; code: string } | null = null;
     let giftCardAmountApplied = 0;
     if (dto.giftCardCode) {
-      const evaluated = await this.giftCardsService.validateCode(
+      // Reserved before the lookup (CodeGuessLimiter); a failure keeps its slot.
+      const ticket = this.codeGuessLimiter.reserve(
         shop.id,
+        clientIp,
         dto.giftCardCode,
       );
-      if (!evaluated.valid) {
-        throw new BadRequestException(
-          evaluated.message ?? 'This gift card cannot be applied',
+      let evaluated: EvaluateGiftCardResult;
+      try {
+        evaluated = await this.giftCardsService.validateCode(
+          shop.id,
+          dto.giftCardCode,
         );
+      } catch (err) {
+        ticket.refund();
+        throw err;
       }
+      if (!evaluated.valid) {
+        throw new BadRequestException(GENERIC_GIFT_CARD_MESSAGE);
+      }
+      ticket.refund();
       giftCard = { id: evaluated.giftCardId!, code: evaluated.code! };
       giftCardAmountApplied = Math.min(evaluated.remainingBalance!, orderTotal);
     }
@@ -2019,7 +2104,7 @@ export class PublicService {
     region: { regionId: number | null; regionName: string | null },
     // A quote is re-asked on every debounced address change: it must not write
     // the "matched no zone" warning createOrder logs once per real order.
-    opts: { quiet?: boolean } = {},
+    opts: { quiet?: boolean; clientIp?: string } = {},
   ) {
     const lines = resolvedItems.map((r) => ({
       productId: r.product.id as number,
@@ -2061,23 +2146,39 @@ export class PublicService {
     let discountAmount = 0;
     let discountCodeSnapshot: string | undefined;
     if (input.discountCode) {
-      const resolved = await this.discountsService.resolveByCode(
+      // Reserved before the lookup and settled after it (CodeGuessLimiter).
+      const ticket = this.codeGuessLimiter.reserve(
         shop.id,
+        opts.clientIp,
         input.discountCode,
       );
-      // Eligibility and the amount come from the resolved lines (server
-      // prices, server collection membership), never from client-supplied ids.
-      const evaluated = await this.discountsService.evaluate(resolved, {
-        lines: await this.discountsService.buildLines(
+      let resolved: Awaited<ReturnType<DiscountsService['resolveByCode']>>;
+      let evaluated: EvaluateResult;
+      try {
+        resolved = await this.discountsService.resolveByCode(
           shop.id,
-          lines.map((d) => ({
-            productId: d.productId,
-            price: d.price,
-            quantity: d.quantity,
-          })),
-        ),
-        currency: shop.currency,
-      });
+          input.discountCode,
+        );
+        // Eligibility and the amount come from the resolved lines (server
+        // prices, server collection membership), never from client-supplied ids.
+        evaluated = this.settleDiscount(
+          ticket,
+          await this.discountsService.evaluate(resolved, {
+            lines: await this.discountsService.buildLines(
+              shop.id,
+              lines.map((d) => ({
+                productId: d.productId,
+                price: d.price,
+                quantity: d.quantity,
+              })),
+            ),
+            currency: shop.currency,
+          }),
+        );
+      } catch (err) {
+        ticket.refund();
+        throw err;
+      }
       if (!evaluated.valid) {
         throw new BadRequestException(
           evaluated.message ?? 'This discount code cannot be applied',
@@ -2131,7 +2232,11 @@ export class PublicService {
   // credit are payment credits applied after the total and are deliberately not
   // part of a quote. A rejection createOrder would answer with a 400 comes back
   // as status 'unavailable' carrying that same message.
-  async quoteDelivery(shopSlug: string, dto: QuoteDeliveryDto) {
+  async quoteDelivery(
+    shopSlug: string,
+    dto: QuoteDeliveryDto,
+    clientIp?: string,
+  ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
     const outletRows = await this.db.query<(OutletRow & RowDataPacket)[]>(
@@ -2179,6 +2284,7 @@ export class PublicService {
         giftCardAmount: i.giftCardAmount,
       })),
     );
+    assertOrderWithinLimits(resolvedItems);
     const base = {
       currency: shop.currency,
       orderType: dto.orderType,
@@ -2234,7 +2340,7 @@ export class PublicService {
         dto,
         resolvedItems,
         region,
-        { quiet: true },
+        { quiet: true, clientIp },
       );
       return {
         ...base,
@@ -2253,6 +2359,12 @@ export class PublicService {
       }
       if (err instanceof BadRequestException) {
         return unquoted('unavailable', err.message);
+      }
+      // A client that has used up its code-guess budget: the debounced quote
+      // re-fires on every address change, so this answers in the quote's own
+      // shape (generic, nothing about any code) instead of an error status.
+      if (err instanceof CodeGuessLockedException) {
+        return unquoted('unavailable', CODE_GUESS_LOCKED_MESSAGE);
       }
       throw err;
     }

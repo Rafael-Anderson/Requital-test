@@ -9,6 +9,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
+import {
+  assertOrderWithinLimits,
+  loadStoredOrderSize,
+  type OrderSize,
+} from '../common/order-limits';
 import { DatabaseService } from '../database/database.service';
 import type { QueryParam } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
@@ -285,7 +290,9 @@ export class OrdersService {
   async create(
     ctx: TenantContext,
     dto: CreateOrderDto,
-    options: { reserveStock?: boolean } = {},
+    // sizeBaseline: the size of the draft being converted, so a legacy draft
+    // that predates the order limits can still be completed as it stands.
+    options: { reserveStock?: boolean; sizeBaseline?: OrderSize } = {},
   ) {
     // Branch users are always pinned to their own outlet — any outletId in
     // the request body is ignored, not just validated, so a branch account
@@ -330,6 +337,7 @@ export class OrdersService {
         priceOverride: item.priceOverride,
       })),
     );
+    assertOrderWithinLimits(resolvedItems, options.sizeBaseline);
 
     const itemsData = resolvedItems.map(
       ({
@@ -1043,6 +1051,16 @@ export class OrdersService {
         variantId: item.variantId,
         priceOverride: item.priceOverride,
       })),
+    );
+    // Judged against what the order holds today: an order that predates the
+    // limits can still be edited DOWN.
+    assertOrderWithinLimits(
+      resolvedItems,
+      await loadStoredOrderSize(
+        this.db,
+        { table: 'orderitem', fk: 'orderId' },
+        orderId,
+      ),
     );
 
     const newItemsData = resolvedItems.map(

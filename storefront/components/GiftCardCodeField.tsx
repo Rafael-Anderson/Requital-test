@@ -68,7 +68,7 @@ export default function GiftCardCodeField({
         setRemainingBalance(res.remainingBalance ?? null);
         onAmountChange?.(res.remainingBalance ?? 0);
       } else {
-        setError(res.message ?? "This gift card cannot be applied");
+        setError(res.message ?? "This gift card code is not valid or cannot be applied");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not check this gift card");

@@ -57,6 +57,7 @@ function buildService(db: DatabaseService) {
     unused, // shopAnalyticsService
     unused, // conversionEventsService
     unused, // reviewsService
+    unused, // codeGuessLimiter
   );
   return { service, jwtService };
 }

@@ -4,6 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
+import {
+  assertOrderWithinLimits,
+  loadStoredOrderSize,
+} from '../common/order-limits';
 import { DatabaseService } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
 import { trimDecimal } from '../database/decimal.util';
@@ -186,7 +190,7 @@ export class DraftOrdersService {
           })
         : undefined;
 
-    const itemsData = await this.buildItemsData(ctx, dto.items);
+    const itemsData = await this.buildItemsData(ctx, dto.items, id);
     let lineItems: {
       productId: number;
       price: string | number;
@@ -379,13 +383,24 @@ export class DraftOrdersService {
           priceOverride: Number(i.price),
         })),
       },
-      { reserveStock: true },
+      {
+        reserveStock: true,
+        // a draft that predates the order limits completes as it stands
+        sizeBaseline: await loadStoredOrderSize(
+          this.db,
+          { table: 'draftorderitem', fk: 'draftOrderId' },
+          draft.id,
+        ),
+      },
     );
   }
 
   private async buildItemsData(
     ctx: TenantContext,
     items: DraftItemInput[] | undefined,
+    // The draft being edited (already resolved shop-scoped by the caller): a
+    // draft that predates the order limits can still be edited down.
+    existingDraftId?: number,
   ) {
     if (!items) return undefined;
     const resolved = await this.productsService.resolveOrderItems(
@@ -396,6 +411,16 @@ export class DraftOrdersService {
         variantId: i.variantId,
         priceOverride: i.price,
       })),
+    );
+    assertOrderWithinLimits(
+      resolved,
+      existingDraftId === undefined
+        ? undefined
+        : await loadStoredOrderSize(
+            this.db,
+            { table: 'draftorderitem', fk: 'draftOrderId' },
+            existingDraftId,
+          ),
     );
     return resolved.map(({ product, variant, quantity, price }) => ({
       productId: product.id as number,
@@ -427,6 +452,7 @@ export class DraftOrdersService {
         priceOverride: i.priceOverride,
       })),
     );
+    assertOrderWithinLimits(resolved);
     const lines = await this.discountsService.buildLines(
       ctx.shopId,
       resolved.map((r) => ({

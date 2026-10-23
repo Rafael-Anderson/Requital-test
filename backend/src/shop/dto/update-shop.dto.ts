@@ -14,6 +14,7 @@ import {
   Min,
   MaxLength,
 } from 'class-validator';
+import { IsIanaTimeZone } from '../../common/validators/is-iana-time-zone.validator';
 
 // The single source of truth for which currencies the backend will accept.
 // Widening this list is the deliberate, visible act that turns multi-currency
@@ -140,6 +141,7 @@ export class UpdateShopDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
+  @IsIanaTimeZone()
   timezone?: string;
 
   @IsOptional()

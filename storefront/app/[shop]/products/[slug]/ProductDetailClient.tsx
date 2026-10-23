@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ShieldCheck, Truck, Store } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
-import { useCart } from "@/lib/cart";
+import { MAX_GIFT_CARD_UNITS, MAX_LINE_QUANTITY, useCart } from "@/lib/cart";
 import { useFlyToCart } from "@/lib/fly-to-cart";
 import { usePublishHeight } from "@/lib/use-publish-height";
 import { track } from "@/lib/analytics";
@@ -157,7 +157,9 @@ export default function ProductDetailClient() {
   const displayStock = product.isGiftCard ? null : product.hasVariants ? (selectedVariant?.stockQuantity ?? null) : product.stockQuantity;
   const stock = product.isGiftCard ? null : stockLabel(displayStock);
   const outOfStock = stock?.tone === "out";
-  const maxQty = displayStock ?? Infinity;
+  // Stock, then the order size limit (lib/cart.tsx), which the cart enforces again.
+  const orderCap = product.isGiftCard ? MAX_GIFT_CARD_UNITS : MAX_LINE_QUANTITY;
+  const maxQty = Math.min(displayStock ?? Infinity, orderCap);
   const giftCardAmountValid = !product.isGiftCard || (giftCardAmount !== null && giftCardAmount > 0);
   const zoomEnabled = shop?.productImageZoomEnabled !== false;
 
@@ -543,6 +545,11 @@ export default function ProductDetailClient() {
             )}
             {primaryCtaElement("flex-1 h-12 font-semibold text-[15px] shadow-sm shadow-black/10")}
           </div>
+          {cartMode !== "contact" && quantity >= orderCap && (displayStock ?? Infinity) > orderCap && (
+            <p className="mt-1 text-xs text-zinc-500">
+              {product.isGiftCard ? `Maximum ${orderCap} gift cards per order` : `Maximum ${orderCap} per order`}
+            </p>
+          )}
 
           {/* "Buy Now Pay Later!" card — each configured provider's own
               real widget (see BnplWidgetCard's own comment), under the CTA

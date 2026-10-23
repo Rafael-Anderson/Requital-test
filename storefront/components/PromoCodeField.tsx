@@ -78,7 +78,7 @@ export default function PromoCodeField({
         setInput("");
         onAmountChange?.(res.discountAmount ?? 0, !!res.freeShipping);
       } else {
-        setError(res.message ?? "This code cannot be applied");
+        setError(res.message ?? "This code is not valid or cannot be applied");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not check this code");

@@ -8,7 +8,13 @@ import { buildQuoteRequest, quoteBlocksSubmit, useDeliveryQuote } from "@/lib/us
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
 import { captureAbandonedCart, createOrder, listMyAddresses } from "@/lib/api";
-import { generateTimeSlots, isDateBlocked, localDateKey } from "@/lib/slots";
+import {
+  dateKeyInTimezone,
+  generateTimeSlots,
+  isDateBlocked,
+  localDateKey,
+  minutesSinceMidnightInTimezone,
+} from "@/lib/slots";
 import { resolvePaymentMethods } from "@/lib/payment-methods";
 import { effectiveOrderType, resolveFulfilmentOptions } from "@/lib/fulfilment";
 import { getStoredReferralCode } from "@/lib/referral";
@@ -178,39 +184,45 @@ export function useCheckoutForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderType, JSON.stringify(availablePaymentMethods)]);
 
-  const today = new Date();
-  const minDate = localDateKey(today);
-  const dateForSlots = deliveryDate ? new Date(deliveryDate) : today;
-  const relevantHours = orderType === "pickup" ? shop?.pickupHours ?? null : shop?.deliveryHours ?? null;
-  const gapMinutes = orderType === "pickup" ? shop?.pickupTimeSlotGapMinutes ?? 30 : shop?.deliveryTimeSlotGapMinutes ?? 60;
-  const dateIsToday = deliveryDate === minDate;
-
-  // Re-ticks every 60s so a slot that expires while the shopper lingers on
-  // this page disappears from the picker on its own, rather than only ever
-  // being caught at submit time (the server independently re-validates
-  // regardless — see backend PublicService.assertValidTimeSlot — this is
-  // just so the UI doesn't keep offering something already-stale).
+  // "Today" and "now" are the SHOP's (shop.timezone), not the browser's: the
+  // server enforces the same-day cutoff and the weekday hours in that zone
+  // (backend/src/public/time-slots.ts), so a browser in another zone must see
+  // the same calendar. Re-ticks every 60s so a slot that expires while the
+  // shopper lingers on this page disappears from the picker on its own, rather
+  // than only ever being caught at submit time (the server independently
+  // re-validates regardless - see backend PublicService.assertValidTimeSlot -
+  // this is just so the UI doesn't keep offering something already-stale).
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 60000);
     return () => clearInterval(id);
   }, []);
+  const now = new Date(nowTick);
+  const shopTodayKey = dateKeyInTimezone(now, shop?.timezone);
+  // An unusable timezone string fails closed: the calendar still needs a lower
+  // bound (the browser's own day), but no same-day slot is offered.
+  const minDate = shopTodayKey ?? localDateKey(now);
+  const shopNowMinutes = minutesSinceMidnightInTimezone(now, shop?.timezone);
+  const nowMinutes = shopNowMinutes ?? 24 * 60;
+  const dateForSlots = deliveryDate || minDate;
+  const relevantHours = orderType === "pickup" ? shop?.pickupHours ?? null : shop?.deliveryHours ?? null;
+  const gapMinutes = orderType === "pickup" ? shop?.pickupTimeSlotGapMinutes ?? 30 : shop?.deliveryTimeSlotGapMinutes ?? 60;
+  const dateIsToday = deliveryDate === minDate;
+
   // Only meaningful (passed through) when the target date is genuinely
-  // today — a future date's slots are never cutoff-filtered.
-  const nowMinutes = new Date(nowTick).getHours() * 60 + new Date(nowTick).getMinutes();
+  // today - a future date's slots are never cutoff-filtered.
   const timeSlots = useMemo(
     () => generateTimeSlots(dateForSlots, relevantHours, gapMinutes, dateIsToday || !deliveryDate ? nowMinutes : undefined),
-    [dateForSlots.getTime(), relevantHours, gapMinutes, dateIsToday, deliveryDate, nowMinutes],
+    [dateForSlots, relevantHours, gapMinutes, dateIsToday, deliveryDate, nowMinutes],
   );
-  // Independent of whatever date is currently selected — drives the
+  // Independent of whatever date is currently selected - drives the
   // calendar's own "today" cell greying out once nothing's left, even if
   // the shopper has already moved on to picking a later date.
   const todayFullyBooked = useMemo(
-    () => generateTimeSlots(today, relevantHours, gapMinutes, nowMinutes).length === 0,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [relevantHours, gapMinutes, nowMinutes],
+    () => generateTimeSlots(minDate, relevantHours, gapMinutes, nowMinutes).length === 0,
+    [minDate, relevantHours, gapMinutes, nowMinutes],
   );
-  const dateBlocked = isDateBlocked(deliveryDate, today, shop?.allowSameDayOrders, shop?.allowNextDayOrders);
+  const dateBlocked = isDateBlocked(deliveryDate, minDate, shop?.allowSameDayOrders, shop?.allowNextDayOrders);
 
   function useMyLocation() {
     if (!navigator.geolocation) {

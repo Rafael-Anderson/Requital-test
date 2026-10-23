@@ -11,6 +11,7 @@ import {
 import type { Request } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { PublicService } from './public.service';
+import { throttleKey } from '../common/client-ip';
 import { CustomerAuthGuard } from '../customer-auth/customer-auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
 import { QuoteDeliveryDto } from './dto/quote-delivery.dto';
@@ -295,8 +296,13 @@ export class PublicController {
   validateDiscount(
     @Param('shopSlug') shopSlug: string,
     @Body() dto: ValidateDiscountDto,
+    @Req() req: Request,
   ) {
-    return this.publicService.validateDiscount(shopSlug, dto);
+    return this.publicService.validateDiscount(
+      shopSlug,
+      dto,
+      throttleKey(req.ip),
+    );
   }
 
   // Read-only, no code/customer input — plain default throttling is fine,
@@ -325,7 +331,12 @@ export class PublicController {
     const customer = dto.useStoreCredit
       ? await this.customerAuth.authenticate(req)
       : null;
-    return this.publicService.createOrder(shopSlug, dto, customer);
+    return this.publicService.createOrder(
+      shopSlug,
+      dto,
+      customer,
+      throttleKey(req.ip),
+    );
   }
 
   // Read-only delivery-fee + totals quote for the cart/checkout summary (see
@@ -339,8 +350,9 @@ export class PublicController {
   quoteDelivery(
     @Param('shopSlug') shopSlug: string,
     @Body() dto: QuoteDeliveryDto,
+    @Req() req: Request,
   ) {
-    return this.publicService.quoteDelivery(shopSlug, dto);
+    return this.publicService.quoteDelivery(shopSlug, dto, throttleKey(req.ip));
   }
 
   // Fired by the checkout page once name+phone are both filled in — see
@@ -368,8 +380,13 @@ export class PublicController {
   validateGiftCard(
     @Param('shopSlug') shopSlug: string,
     @Body() dto: ValidateGiftCardDto,
+    @Req() req: Request,
   ) {
-    return this.publicService.validateGiftCard(shopSlug, dto);
+    return this.publicService.validateGiftCard(
+      shopSlug,
+      dto,
+      throttleKey(req.ip),
+    );
   }
 
   // Newsletter section's signup form (storefront/components/theme-sections/
