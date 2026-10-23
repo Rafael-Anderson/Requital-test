@@ -16,6 +16,7 @@ import {
   toPublicDiscountResult,
 } from '../discounts/discount-constants';
 import type { EvaluateResult } from '../discounts/discounts.service';
+import type { EvaluateGiftCardResult } from '../gift-cards/gift-cards.service';
 import { GENERIC_GIFT_CARD_MESSAGE } from '../gift-cards/gift-card.constants';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService, type QueryParam } from '../database/database.service';
@@ -254,7 +255,7 @@ export class PublicService {
     // Reserved before the lookup (see CodeGuessLimiter): every failure of a gift
     // card code reveals that it exists, so a failure keeps its slot.
     const ticket = this.codeGuessLimiter.reserve(shop.id, clientIp, dto.code);
-    let result;
+    let result: EvaluateGiftCardResult;
     try {
       result = await this.giftCardsService.validateCode(shop.id, dto.code);
     } catch (err) {
@@ -1446,7 +1447,10 @@ export class PublicService {
     }
   }
 
-  private async validateDiscountResult(shopId: number, dto: ValidateDiscountDto) {
+  private async validateDiscountResult(
+    shopId: number,
+    dto: ValidateDiscountDto,
+  ) {
     if (!dto.items?.length) return this.discountsService.validate(shopId, dto);
     // Priced by the same resolver checkout uses, so what is shown is what is
     // charged. A client price is never honoured on this public route.
@@ -1624,7 +1628,7 @@ export class PublicService {
         clientIp,
         dto.giftCardCode,
       );
-      let evaluated;
+      let evaluated: EvaluateGiftCardResult;
       try {
         evaluated = await this.giftCardsService.validateCode(
           shop.id,

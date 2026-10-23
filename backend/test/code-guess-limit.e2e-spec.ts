@@ -187,13 +187,17 @@ describe('Code guess limiter (e2e)', () => {
   it('a valid code gives its slot back: using the real code over and over never builds towards a lock', async () => {
     for (let i = 0; i < 12; i++) {
       const q = await quote(s5, s5.valid);
-      expect(body<{ discountCode: string | null }>(q).discountCode).toBe(s5.valid);
+      expect(body<{ discountCode: string | null }>(q).discountCode).toBe(
+        s5.valid,
+      );
     }
     // and a rejection that needs the code to exist (minimum purchase) is free too
     for (let i = 0; i < 12; i++) {
       expect((await quote(s5, s5.minPurchase)).status).toBe(201);
     }
-    expect(body<{ valid: boolean }>(await validate(s5, 'STILLFREE')).valid).toBe(false);
+    expect(
+      body<{ valid: boolean }>(await validate(s5, 'STILLFREE')).valid,
+    ).toBe(false);
   });
 
   it('the lock is per shop: the same client is not locked out of another shop', async () => {
