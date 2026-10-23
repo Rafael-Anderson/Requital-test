@@ -379,7 +379,13 @@ Nothing alarming and nothing from Google. The map area becomes "Map unavailable.
 
 ### How a merchant (and we) find out
 
-- An admin sees a banner on every admin page: "Google Maps is not working for your store (code). Contact Requital support." It has two sources: this browser's own admin Maps loader, and reports sent by the shop's own storefront visitors (`POST /public/:shopSlug/maps-error`, read back by `GET /shop/maps-health`, last 14 days, one row per code and host). The second source is what catches a referrer problem on a connected custom domain, which the admin cannot see. Reports are advisory: only the four codes below, only from the shop's own verified hosts, throttled per IP.
+- An admin sees a banner on every admin page: "Google Maps is not working for your store (code). Contact Requital support." It has two sources:
+  - **This browser's own admin Maps loader** (a real, logged-in admin whose map actually failed). It shows immediately and says nothing about visitors.
+  - **Reports sent by the shop's own storefront visitors** (`POST /public/:shopSlug/maps-error`, read back by `GET /shop/maps-health`). This is what catches a referrer problem on a connected custom domain, which the admin cannot see. The banner then says "Reported by visitors on <host>" and offers **Mark resolved**.
+- The visitor beacon is unauthenticated, so it is deliberately hard to use as a nuisance: only the four codes below, only from the shop's own verified hosts, throttled to 20 per minute per IP, and it shows in the banner only once a problem has been reported **at least 3 times over at least 60 minutes**, within the **last 7 days**. **Mark resolved** (admin only, audit logged as `maps_health.resolved`) zeroes that code and host's count, so only reports after it count again; if the problem really persists, three more reports over an hour bring it back.
+- The throttle and the one-row-per-code-and-host bound assume `TRUST_PROXY=loopback` is set in production (see the "Client IP behind the proxies" section above). Without it every visitor shares one bucket and the beacon throttle is meaningless.
+- **Privacy note for the owner:** in the typed-address fallback the shopper's typed delivery address (plus the chosen region) is sent to OpenStreetMap Nominatim by our backend to find coordinates, both from the "Find on map" button and, on a radius outlet, when the order is placed. The privacy policy should mention OpenStreetMap geocoding.
+- **Manual-address pricing rule:** while Maps is down and no pin exists, the delivery zone is matched by name and region only, never by a zone's map circle, in the quote and in the order alike (the quote cannot geocode, the order can, and a geocoded point matching a circle would otherwise charge a different fee than the one quoted). The geocoded point is used only for the delivery-radius check. An outlet that has zones but none match the typed address then charges the shop default fee on an unverified address (the order is flagged so the merchant confirms it before dispatch); a matched zone's minimum order still applies.
 - To look yourself: `SELECT s.subdomain, m.code, m.host, m.hitCount, m.lastSeenAt FROM mapserrorlog m JOIN shop s ON s.id = m.shopId ORDER BY m.lastSeenAt DESC;`
 
 ### Triage
@@ -394,7 +400,7 @@ Nothing alarming and nothing from Google. The map area becomes "Map unavailable.
 | Grey overlay with a repeating "For development purposes only" watermark, no error | Key is valid but the project's billing is not in good standing. | Fix billing. This produces no error code, so no banner appears. |
 | Map fine for shoppers, banner shows on a custom domain only | That domain's referrer is missing (the report names the host). | Add its referrer. |
 
-Reports age out of the banner after 14 days; the rows stay until the shop is deleted. A fixed problem therefore stops showing once it stops being reported and the window passes, or the admin can dismiss it for the session.
+Visitor reports leave the banner 7 days after the last one, or at once when an admin marks them resolved; the rows themselves stay until the shop is deleted. An admin can also dismiss the banner for the session.
 
 ## Shop owner lost their two-factor (platform-admin recovery)
 
