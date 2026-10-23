@@ -24,23 +24,20 @@ export async function geocodeAddress(query?: string): Promise<GeocodeResult> {
     throw new BadRequestException('A search query is required');
   }
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`;
-  let res: Response;
+  // The body is read inside the same try as the request: a slow or cut-off body
+  // (the 4s timeout also aborts it) must give the same 400 as a failed request,
+  // not an unhandled 500. Shared with the Slider and admin lookups.
+  let results: { lat: string; lon: string; display_name: string }[];
   try {
-    res = await fetch(url, {
+    const res = await fetch(url, {
       headers: { 'User-Agent': NOMINATIM_USER_AGENT },
       signal: AbortSignal.timeout(NOMINATIM_TIMEOUT_MS),
     });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    results = (await res.json()) as typeof results;
   } catch {
     throw new BadRequestException('Geocoding lookup failed. Try again');
   }
-  if (!res.ok) {
-    throw new BadRequestException('Geocoding lookup failed. Try again');
-  }
-  const results = (await res.json()) as {
-    lat: string;
-    lon: string;
-    display_name: string;
-  }[];
   if (results.length === 0) {
     // A bare `return null` here would serialize as an empty response body
     // (no Content-Type, Content-Length: 0) rather than the JSON literal
@@ -72,23 +69,19 @@ export async function reverseGeocodeAddress(
     throw new BadRequestException('lat and lon are required');
   }
   const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
-  let res: Response;
+  let result: { display_name?: string; error?: string };
   try {
-    res = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT } });
+    const res = await fetch(url, {
+      headers: { 'User-Agent': NOMINATIM_USER_AGENT },
+      signal: AbortSignal.timeout(NOMINATIM_TIMEOUT_MS),
+    });
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    result = (await res.json()) as typeof result;
   } catch {
     throw new BadRequestException(
       'Reverse geocoding lookup failed. Try again',
     );
   }
-  if (!res.ok) {
-    throw new BadRequestException(
-      'Reverse geocoding lookup failed. Try again',
-    );
-  }
-  const result = (await res.json()) as {
-    display_name?: string;
-    error?: string;
-  };
   if (!result.display_name) {
     throw new NotFoundException('No address found for that location');
   }

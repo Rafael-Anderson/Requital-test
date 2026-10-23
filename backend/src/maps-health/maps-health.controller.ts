@@ -6,6 +6,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { TenantContext } from '../common/tenant-context';
 import { MapsHealthService } from './maps-health.service';
 import { ReportMapsErrorDto } from './dto/report-maps-error.dto';
+import { ResolveMapsErrorDto } from './dto/resolve-maps-error.dto';
 
 // The storefront reports a Google Maps failure here (shopper origin).
 @Controller('public/:shopSlug')
@@ -33,5 +34,14 @@ export class MapsHealthController {
   @Get('maps-health')
   list(@CurrentUser() ctx: TenantContext) {
     return this.service.list(ctx.shopId);
+  }
+
+  @Post('maps-health/resolve')
+  @HttpCode(200)
+  resolve(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: ResolveMapsErrorDto,
+  ) {
+    return this.service.resolve(ctx, dto.code, dto.host);
   }
 }
