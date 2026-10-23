@@ -1,7 +1,9 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -17,10 +19,18 @@ import type { ChannelconnectionRow } from '../db/types';
 import { PlatformAuditLogService } from '../platform-admin/platform-audit-log.service';
 import { ChannelProviderRegistry } from './channel-provider.registry';
 import type { BoundChannelConnection } from './channel.types';
+import { resolveErrorTrackingProvider } from '../common/error-tracking/error-tracking.provider';
+import { createLogger } from '../common/logging/logger';
 import type {
   CreateChannelConnectionDto,
+  SetChannelAvailabilityDto,
   UpdateChannelConnectionDto,
 } from './dto/channels.dto';
+
+const logger = createLogger('ChannelConnections');
+
+// A merchant may ask staff to verify a location once a day per connection.
+export const VERIFICATION_REQUEST_COOLDOWN_MS = 24 * 3_600_000;
 
 // Never returned: credentials and webhookSecret. The view says only whether
 // they are set (write-only fields, like every other credential store here).
@@ -38,7 +48,26 @@ export interface ChannelConnectionView {
   lastSyncStatus: string | null;
   lastError: string | null;
   locationVerified: boolean;
+  // When the merchant last asked staff to verify (NULL = never / cleared).
+  verificationRequestedAt: Date | null;
+  // Opt-in: the sweep may confirm accepted scheduled orders itself (default off).
+  autoConfirmScheduled: boolean;
   createdAt: Date;
+}
+
+// What platform staff see: the merchant view plus who verified and which outlet.
+// Never secrets. Kept separate so the merchant view is not widened.
+export interface PlatformChannelConnectionView extends ChannelConnectionView {
+  shopId: number;
+  outletName: string | null;
+  providerDisplayName: string;
+  locationVerifiedAt: Date | null;
+  locationVerifiedBy: number | null;
+}
+
+export interface PendingVerificationView extends PlatformChannelConnectionView {
+  shopName: string | null;
+  shopSubdomain: string | null;
 }
 
 const CREDENTIAL_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -90,7 +119,23 @@ export class ChannelConnectionsService {
       lastSyncStatus: row.lastSyncStatus,
       lastError: row.lastError,
       locationVerified: !!row.locationVerifiedAt,
+      verificationRequestedAt: row.verificationRequestedAt ?? null,
+      autoConfirmScheduled: !!row.autoConfirmScheduled,
       createdAt: row.createdAt,
+    };
+  }
+
+  private platformView(
+    row: ChannelconnectionRow & { outletName?: string | null },
+  ): PlatformChannelConnectionView {
+    return {
+      ...ChannelConnectionsService.view(row),
+      shopId: row.shopId,
+      outletName: row.outletName ?? null,
+      providerDisplayName:
+        this.registry.find(row.provider)?.displayName ?? row.provider,
+      locationVerifiedAt: row.locationVerifiedAt,
+      locationVerifiedBy: row.locationVerifiedBy,
     };
   }
 
@@ -252,7 +297,24 @@ export class ChannelConnectionsService {
       dto.externalSiteId !== undefined ||
       dto.credentials !== undefined
     ) {
-      sets.push('locationVerifiedAt = NULL', 'locationVerifiedBy = NULL');
+      sets.push(
+        'locationVerifiedAt = NULL',
+        'locationVerifiedBy = NULL',
+        'verificationRequestedAt = NULL',
+      );
+    }
+    if (dto.autoConfirmScheduled !== undefined) {
+      // Only a marketplace that has a confirm step can have it automated.
+      if (
+        dto.autoConfirmScheduled &&
+        !this.registry.find(before.provider)?.capabilities.scheduledConfirm
+      ) {
+        throw new BadRequestException(
+          'This marketplace has no scheduled-order confirm step',
+        );
+      }
+      sets.push('autoConfirmScheduled = ?');
+      params.push(dto.autoConfirmScheduled ? 1 : 0);
     }
     if (dto.webhookSecret !== undefined) {
       sets.push('webhookSecret = ?');
@@ -488,15 +550,221 @@ export class ChannelConnectionsService {
     };
   }
 
+  // The merchant asks Requital staff to verify the ids. Once a day per
+  // connection, decided by ONE conditional UPDATE (a parallel double click sends
+  // one request). Needs the flag (it is part of onboarding a marketplace) and a
+  // location id; an already verified connection has nothing to request. Staff
+  // find it in the platform "pending verification" list, and one structured error
+  // line goes to the existing error-tracking webhook (no new channel).
+  async requestVerification(ctx: TenantContext, id: number) {
+    await this.assertFlag(ctx.shopId);
+    const row = await this.load(ctx, id);
+    if (row.locationVerifiedAt) {
+      throw new ConflictException('This location is already verified');
+    }
+    if (!row.externalLocationId) {
+      throw new BadRequestException(
+        'Set the location id before asking for verification',
+      );
+    }
+    const now = new Date();
+    const res = await this.db.execute(
+      `UPDATE channelconnection SET verificationRequestedAt = ?, updatedAt = ?
+        WHERE id = ? AND shopId = ? AND locationVerifiedAt IS NULL AND externalLocationId IS NOT NULL
+          AND (verificationRequestedAt IS NULL OR verificationRequestedAt < ?)`,
+      [
+        now,
+        now,
+        id,
+        ctx.shopId,
+        new Date(now.getTime() - VERIFICATION_REQUEST_COOLDOWN_MS),
+      ],
+    );
+    if (res.affectedRows === 0) {
+      throw new HttpException(
+        {
+          statusCode: 429,
+          message:
+            'Verification was already requested in the last 24 hours. Staff have it in their queue.',
+        },
+        429,
+      );
+    }
+    await this.audit.logCtx(ctx, {
+      action: 'channel.verification_requested',
+      entityType: 'channelconnection',
+      entityId: id,
+      after: { provider: row.provider },
+    });
+    // Ids and counts only: no credential, no secret.
+    logger.error('marketplace location verification requested', {
+      shopId: ctx.shopId,
+      connectionId: id,
+      provider: row.provider,
+    });
+    try {
+      resolveErrorTrackingProvider().captureException(
+        new Error(
+          `Marketplace verification requested: shop ${ctx.shopId}, connection ${id} (${row.provider})`,
+        ),
+        { shopId: ctx.shopId },
+      );
+    } catch {
+      /* best effort */
+    }
+    return ChannelConnectionsService.view(await this.load(ctx, id));
+  }
+
+  // Marks items (un)available at the marketplace. Admin only, flag on, an ENABLED
+  // connection, brand and site ids present, a provider with the capability, and
+  // EVERY item id must be one of this shop's own mappings for this provider
+  // (a foreign or invented id is a 400 and nothing is sent). The marketplace is
+  // called first; a failure changes nothing and is a 502. The Deliveroo Sites API
+  // is not enabled for the owner, so the real call is unexercised: tests use the
+  // fake provider only.
+  async setAvailability(
+    ctx: TenantContext,
+    id: number,
+    dto: SetChannelAvailabilityDto,
+  ) {
+    await this.assertFlag(ctx.shopId);
+    const row = await this.load(ctx, id);
+    const provider = this.registry.find(row.provider);
+    if (
+      !provider?.capabilities.itemAvailability ||
+      !provider.setItemAvailability
+    ) {
+      throw new ConflictException(
+        'This marketplace does not support item availability',
+      );
+    }
+    if (!row.enabled) {
+      throw new ConflictException('Enable the connection first');
+    }
+    if (!row.externalBrandId || !row.externalSiteId) {
+      throw new ConflictException(
+        'Set the brand id and site id on this connection first',
+      );
+    }
+    const ids = [...new Set(dto.items.map((i) => i.externalItemId))];
+    const mapped = await this.db.query<RowDataPacket[]>(
+      `SELECT externalItemId FROM channelitemmapping
+        WHERE shopId = ? AND provider = ? AND externalItemId IN (${ids.map(() => '?').join(', ')})`,
+      [ctx.shopId, row.provider, ...ids],
+    );
+    if (mapped.length !== ids.length) {
+      throw new BadRequestException(
+        'Every item must be one of your mapped marketplace items',
+      );
+    }
+    try {
+      const result = await provider.setItemAvailability(
+        this.bind(row),
+        dto.items.map((i) => ({
+          externalItemId: i.externalItemId,
+          available: i.available,
+        })),
+      );
+      if (!result.ok) throw new Error(result.message ?? 'refused');
+    } catch (e) {
+      logger.warn('marketplace availability failed', {
+        shopId: ctx.shopId,
+        connectionId: id,
+        error: e instanceof Error ? e.message.slice(0, 200) : String(e),
+      });
+      throw new BadGatewayException(
+        'The marketplace did not accept the change. Nothing was changed; try again.',
+      );
+    }
+    await this.audit.logCtx(ctx, {
+      action: 'channel.availability_set',
+      entityType: 'channelconnection',
+      entityId: id,
+      after: {
+        provider: row.provider,
+        items: dto.items.map((i) => ({
+          externalItemId: i.externalItemId,
+          available: i.available,
+        })),
+      },
+    });
+    return { updated: dto.items.length };
+  }
+
+  // Prep-time adjustment is capability-gated: a provider without it (Deliveroo
+  // has none we can use) answers 409 and nothing is called.
+  async setPrepTime(ctx: TenantContext, id: number, minutes: number) {
+    await this.assertFlag(ctx.shopId);
+    const row = await this.load(ctx, id);
+    const provider = this.registry.find(row.provider);
+    if (!provider?.capabilities.prepTimeAdjust || !provider.adjustPrepTime) {
+      throw new ConflictException(
+        'This marketplace does not support changing the preparation time',
+      );
+    }
+    if (!row.enabled) {
+      throw new ConflictException('Enable the connection first');
+    }
+    try {
+      const result = await provider.adjustPrepTime(this.bind(row), minutes);
+      if (!result.ok) throw new Error(result.message ?? 'refused');
+    } catch (e) {
+      logger.warn('marketplace prep time failed', {
+        shopId: ctx.shopId,
+        connectionId: id,
+        error: e instanceof Error ? e.message.slice(0, 200) : String(e),
+      });
+      throw new BadGatewayException(
+        'The marketplace did not accept the change. Nothing was changed; try again.',
+      );
+    }
+    await this.audit.logCtx(ctx, {
+      action: 'channel.prep_time_set',
+      entityType: 'channelconnection',
+      entityId: id,
+      after: { provider: row.provider, minutes },
+    });
+    return { minutes };
+  }
+
   // ---- platform staff (called only from the platform-admin tier) ----------
 
   // What staff see: ids and verification state, never secrets.
-  async listForShop(shopId: number): Promise<ChannelConnectionView[]> {
-    const rows = await this.db.query<(ChannelconnectionRow & RowDataPacket)[]>(
-      `SELECT * FROM channelconnection WHERE shopId = ? ORDER BY id`,
+  async listForShop(shopId: number): Promise<PlatformChannelConnectionView[]> {
+    const rows = await this.db.query<
+      (ChannelconnectionRow & { outletName: string | null } & RowDataPacket)[]
+    >(
+      `SELECT c.*, o.name AS outletName
+         FROM channelconnection c LEFT JOIN outlet o ON o.id = c.outletId AND o.shopId = c.shopId
+        WHERE c.shopId = ? ORDER BY c.id`,
       [shopId],
     );
-    return rows.map((r) => ChannelConnectionsService.view(r));
+    return rows.map((r) => this.platformView(r));
+  }
+
+  // Cross-shop, for staff only: connections a merchant asked to have verified
+  // that nobody has verified yet, oldest request first. Capped; never secrets.
+  async listPendingVerification(): Promise<PendingVerificationView[]> {
+    const rows = await this.db.query<
+      (ChannelconnectionRow & {
+        outletName: string | null;
+        shopName: string | null;
+        shopSubdomain: string | null;
+      } & RowDataPacket)[]
+    >(
+      `SELECT c.*, o.name AS outletName, s.name AS shopName, s.subdomain AS shopSubdomain
+         FROM channelconnection c
+         JOIN shop s ON s.id = c.shopId
+         LEFT JOIN outlet o ON o.id = c.outletId AND o.shopId = c.shopId
+        WHERE c.verificationRequestedAt IS NOT NULL AND c.locationVerifiedAt IS NULL
+        ORDER BY c.verificationRequestedAt ASC, c.id ASC
+        LIMIT 100`,
+    );
+    return rows.map((r) => ({
+      ...this.platformView(r),
+      shopName: r.shopName,
+      shopSubdomain: r.shopSubdomain,
+    }));
   }
 
   // Staff confirm the ids THEY checked with the marketplace's integration
@@ -512,7 +780,7 @@ export class ChannelConnectionsService {
       externalBrandId: string | null;
       externalSiteId: string | null;
     },
-  ): Promise<ChannelConnectionView> {
+  ): Promise<PlatformChannelConnectionView> {
     await this.db.transaction(async (conn) => {
       const [res] = await conn.query(
         `UPDATE channelconnection SET locationVerifiedAt = ?, locationVerifiedBy = ?, updatedAt = ?
@@ -542,16 +810,14 @@ export class ChannelConnectionsService {
         conn,
       );
     });
-    return ChannelConnectionsService.view(
-      await this.requireForShop(shopId, id),
-    );
+    return (await this.listForShop(shopId)).find((c) => c.id === id)!;
   }
 
   async platformUnverifyLocation(
     platformAdminId: number,
     shopId: number,
     id: number,
-  ): Promise<ChannelConnectionView> {
+  ): Promise<PlatformChannelConnectionView> {
     await this.db.transaction(async (conn) => {
       const [res] = await conn.query(
         `UPDATE channelconnection SET locationVerifiedAt = NULL, locationVerifiedBy = NULL, enabled = 0, updatedAt = ?
@@ -569,18 +835,7 @@ export class ChannelConnectionsService {
         conn,
       );
     });
-    return ChannelConnectionsService.view(
-      await this.requireForShop(shopId, id),
-    );
-  }
-
-  private async requireForShop(shopId: number, id: number) {
-    const rows = await this.db.query<(ChannelconnectionRow & RowDataPacket)[]>(
-      `SELECT * FROM channelconnection WHERE id = ? AND shopId = ?`,
-      [id, shopId],
-    );
-    if (!rows[0]) throw new NotFoundException('Connection not found');
-    return rows[0];
+    return (await this.listForShop(shopId)).find((c) => c.id === id)!;
   }
 
   // Decrypts one connection for a provider call. Takes a row the caller loaded

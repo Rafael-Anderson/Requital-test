@@ -1,5 +1,8 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -7,10 +10,12 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 
 const ID = { min: 1, max: 191 };
@@ -99,6 +104,12 @@ export class UpdateChannelConnectionDto {
   @MinLength(8)
   @MaxLength(512)
   webhookSecret?: string | null;
+
+  // Opt-in, OFF by default: lets the sweep confirm accepted scheduled orders
+  // itself. Confirming commits the merchant to prepare the order.
+  @IsOptional()
+  @IsBoolean()
+  autoConfirmScheduled?: boolean;
 }
 
 export class SetChannelEnabledDto {
@@ -204,4 +215,31 @@ export class VerifyChannelLocationDto {
   @MaxLength(ID.max)
   @Matches(ID_PATTERN, { message: ID_MESSAGE })
   externalSiteId: string | null;
+}
+
+export class AvailabilityItemDto {
+  @IsString()
+  @MinLength(ID.min)
+  @MaxLength(ID.max)
+  externalItemId: string;
+
+  @IsBoolean()
+  available: boolean;
+}
+
+export class SetChannelAvailabilityDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => AvailabilityItemDto)
+  items: AvailabilityItemDto[];
+}
+
+export class SetChannelPrepTimeDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(240)
+  minutes: number;
 }

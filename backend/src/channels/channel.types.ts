@@ -68,6 +68,10 @@ export interface CanonicalChannelOrder {
   acceptBy: string | null;
   // Scheduled / pre-orders: when the kitchen should start.
   scheduledFor: string | null;
+  // Scheduled orders: the marketplace's deadline to CONFIRM an accepted order.
+  // UNVERIFIED which payload field is the real deadline (Deliveroo confirm_at vs
+  // start_preparing_at); null = unknown, never invented.
+  confirmBy?: string | null;
   currency: string;
   handover: ChannelHandover;
   lines: CanonicalChannelLine[];
@@ -118,6 +122,9 @@ export interface ChannelCapabilities {
   branchStatus: boolean;
   catalogueSync: boolean;
   prepTimeAdjust: boolean;
+  // confirmScheduledOrder: the second step of a scheduled order (accepted, then
+  // confirmed before it is due). Deliveroo has it; the stub has it.
+  scheduledConfirm: boolean;
   fetchOrderStatus: boolean;
   // listOpenOrders: the polling fallback for a webhook outage.
   pollOrders: boolean;
@@ -143,6 +150,7 @@ export const NO_CAPABILITIES: ChannelCapabilities = {
   branchStatus: false,
   catalogueSync: false,
   prepTimeAdjust: false,
+  scheduledConfirm: false,
   fetchOrderStatus: false,
   pollOrders: false,
   callbackUrls: false,
@@ -268,6 +276,11 @@ export interface ChannelProvider {
       currency: string;
       available: boolean;
     }[],
+  ): Promise<ProviderCallResult>;
+  // Second step of a scheduled order. Must treat "already confirmed" as success.
+  confirmScheduledOrder?(
+    conn: BoundChannelConnection,
+    externalOrderId: string,
   ): Promise<ProviderCallResult>;
   adjustPrepTime?(
     conn: BoundChannelConnection,

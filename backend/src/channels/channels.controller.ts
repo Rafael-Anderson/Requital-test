@@ -24,7 +24,9 @@ import {
   ListChannelOrdersQueryDto,
   RejectChannelOrderDto,
   ResolveUnmappedItemDto,
+  SetChannelAvailabilityDto,
   SetChannelEnabledDto,
+  SetChannelPrepTimeDto,
   UpdateChannelConnectionDto,
 } from './dto/channels.dto';
 
@@ -100,6 +102,33 @@ export class ChannelsController {
     return this.connections.setEnabled(ctx, id, dto.enabled);
   }
 
+  // Admin only. Item ids are checked against this shop's mappings.
+  @Post('connections/:id/availability')
+  setAvailability(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SetChannelAvailabilityDto,
+  ) {
+    return this.connections.setAvailability(ctx, id, dto);
+  }
+
+  @Post('connections/:id/prep-time')
+  setPrepTime(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SetChannelPrepTimeDto,
+  ) {
+    return this.connections.setPrepTime(ctx, id, dto.minutes);
+  }
+
+  @Post('connections/:id/request-verification')
+  requestVerification(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.connections.requestVerification(ctx, id);
+  }
+
   @Post('connections/:id/test')
   test(
     @CurrentUser() ctx: TenantContext,
@@ -173,6 +202,24 @@ export class ChannelsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.orders.accept(ctx, id);
+  }
+
+  @Roles('admin', 'branch', 'order_manager')
+  @Post('orders/:id/ready')
+  ready(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.orders.markReady(ctx, id);
+  }
+
+  @Roles('admin', 'branch', 'order_manager')
+  @Post('orders/:id/confirm-scheduled')
+  confirmScheduled(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.orders.confirmScheduled(ctx, id);
   }
 
   @Roles('admin', 'branch', 'order_manager')

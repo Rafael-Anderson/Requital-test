@@ -92,6 +92,11 @@ export class ChannelOrdersService {
       externalStatus: r.externalStatus as string,
       acceptBy: r.acceptBy as Date | null,
       scheduledFor: r.scheduledFor as Date | null,
+      // Scheduled orders: when the marketplace wants the confirm step done by
+      // (UNVERIFIED field), when it was done, and when a person marked it ready.
+      confirmBy: (r.confirmBy as Date | null) ?? null,
+      confirmedAt: (r.confirmedAt as Date | null) ?? null,
+      readyAt: (r.readyAt as Date | null) ?? null,
       orderId: r.orderId as number | null,
       shopOrderNumber: r.shopOrderNumber as number | null,
       orderStatus: r.orderStatus as string | null,
@@ -156,7 +161,7 @@ export class ChannelOrdersService {
     if (co.state !== 'pending_acceptance') {
       throw new ConflictException('This order is already closed');
     }
-    await this.callProvider(co, 'accept', (provider, conn) =>
+    await this.callProvider(co, 'accept', 'acceptReject', (provider, conn) =>
       provider.acceptOrder!(conn, co.externalOrderId),
     );
     await this.ingestion.markAcceptedExternally(co, 'accepted', ctx);
@@ -176,7 +181,7 @@ export class ChannelOrdersService {
       throw new ConflictException('This order can no longer be rejected here');
     }
     const reason = dto.reason?.trim() || 'other';
-    await this.callProvider(co, 'reject', (provider, conn) =>
+    await this.callProvider(co, 'reject', 'acceptReject', (provider, conn) =>
       provider.rejectOrder!(conn, co.externalOrderId, reason),
     );
     await this.ingestion.closeUpstream(co, 'rejected', 'rejected', ctx);
@@ -193,20 +198,104 @@ export class ChannelOrdersService {
     return this.one(ctx, id);
   }
 
-  // A provider that cannot accept/reject over an API (capability off) is a local
-  // state change only. A provider that can, and fails, changes NOTHING here.
+  // "Ready for collection": a deliberate HUMAN action (the marketplace docs say
+  // it must never be automatic), so nothing in the sweep calls it. Only an
+  // accepted order with a Requital order behind it. The marketplace is told first;
+  // readyAt is then set by CAS (a repeat finds it set and is a no-op, so the
+  // marketplace is not told twice).
+  async markReady(ctx: TenantContext, id: number) {
+    const co = await this.load(ctx, id);
+    if (co.readyAt) return this.one(ctx, id);
+    if (co.state !== 'accepted' || co.orderId === null) {
+      throw new ConflictException(
+        'Only an accepted order can be marked ready for collection',
+      );
+    }
+    await this.callProvider(
+      co,
+      'mark it ready',
+      'markReady',
+      (provider, conn) => provider.markReady!(conn, co.externalOrderId),
+    );
+    await this.db.execute(
+      `UPDATE channelorder SET readyAt = ?, updatedAt = ?
+        WHERE id = ? AND shopId = ? AND state = 'accepted' AND readyAt IS NULL`,
+      [new Date(), new Date(), co.id, co.shopId],
+    );
+    await this.audit.logCtx(ctx, {
+      action: 'channel_order.marked_ready',
+      entityType: 'channelorder',
+      entityId: co.id,
+      after: { provider: co.provider, externalOrderId: co.externalOrderId },
+    });
+    return this.one(ctx, id);
+  }
+
+  // The second step of a SCHEDULED order. Same shape as accept: marketplace
+  // first, then a CAS on confirmedAt IS NULL; confirming twice is safe.
+  async confirmScheduled(ctx: TenantContext, id: number) {
+    const co = await this.load(ctx, id);
+    if (co.confirmedAt) return this.one(ctx, id);
+    if (co.state !== 'accepted') {
+      throw new ConflictException(
+        'Only an accepted scheduled order can be confirmed',
+      );
+    }
+    if (co.confirmBy === null && co.scheduledFor === null) {
+      throw new ConflictException('This is not a scheduled order');
+    }
+    await this.callProvider(
+      co,
+      'confirm',
+      'scheduledConfirm',
+      (provider, conn) =>
+        provider.confirmScheduledOrder!(conn, co.externalOrderId),
+    );
+    await this.db.execute(
+      `UPDATE channelorder SET confirmedAt = ?, confirmClaimedAt = NULL, updatedAt = ?
+        WHERE id = ? AND shopId = ? AND state = 'accepted' AND confirmedAt IS NULL`,
+      [new Date(), new Date(), co.id, co.shopId],
+    );
+    await this.audit.logCtx(ctx, {
+      action: 'channel_order.scheduled_confirmed',
+      entityType: 'channelorder',
+      entityId: co.id,
+      after: { provider: co.provider, externalOrderId: co.externalOrderId },
+    });
+    return this.one(ctx, id);
+  }
+
+  // accept/reject: a provider that cannot do it over an API (capability off) is
+  // a local state change only. markReady/confirm are different: the whole point
+  // is to tell the marketplace, so a provider without the capability is a 409
+  // (`required`). A provider that can, and fails, changes NOTHING here (502).
   private async callProvider(
     co: ChannelorderRow,
-    what: 'accept' | 'reject',
+    label: string,
+    capability: 'acceptReject' | 'markReady' | 'scheduledConfirm',
     call: (
       provider: NonNullable<ReturnType<ChannelProviderRegistry['find']>>,
       conn: ReturnType<ChannelConnectionsService['bind']>,
     ) => Promise<{ ok: boolean; message?: string }>,
+    required = capability !== 'acceptReject',
   ): Promise<void> {
     const provider = this.registry.find(co.provider);
-    const supported =
-      what === 'accept' ? !!provider?.acceptOrder : !!provider?.rejectOrder;
-    if (!provider || !provider.capabilities.acceptReject || !supported) return;
+    const method =
+      capability === 'markReady'
+        ? provider?.markReady
+        : capability === 'scheduledConfirm'
+          ? provider?.confirmScheduledOrder
+          : label === 'accept'
+            ? provider?.acceptOrder
+            : provider?.rejectOrder;
+    if (!provider || !provider.capabilities[capability] || !method) {
+      if (required) {
+        throw new ConflictException(
+          'This marketplace does not support that action',
+        );
+      }
+      return;
+    }
     const connRow = await this.connections.findById(co.connectionId);
     if (!connRow || connRow.shopId !== co.shopId) {
       throw new BadGatewayException(
@@ -216,17 +305,17 @@ export class ChannelOrdersService {
     try {
       const result = await call(provider, this.connections.bind(connRow));
       if (!result.ok) {
-        throw new Error(result.message ?? `${what} was refused`);
+        throw new Error(result.message ?? `${label} was refused`);
       }
     } catch (e) {
-      logger.warn(`marketplace ${what} failed`, {
+      logger.warn(`marketplace ${label} failed`, {
         channelOrderId: co.id,
         shopId: co.shopId,
         provider: co.provider,
         error: e instanceof Error ? e.message.slice(0, 200) : String(e),
       });
       throw new BadGatewayException(
-        `The marketplace did not accept the ${what}. Nothing was changed; try again.`,
+        `The marketplace did not accept the ${label}. Nothing was changed; try again.`,
       );
     }
   }

@@ -1696,9 +1696,13 @@ export interface ChannelconnectionRow {
   lastError: string | null;
   // Consecutive failed polls (reset by a good one); escalated at the threshold.
   pollFailures: number;
+  // Opt-in (default 0): the sweep may confirm accepted scheduled orders itself.
+  autoConfirmScheduled: boolean;
   // Platform-staff confirmation of the location (NULL = not verified).
   locationVerifiedAt: Date | null;
   locationVerifiedBy: number | null;
+  // The merchant asked staff to verify (once a day); cleared with the ids.
+  verificationRequestedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   // Generated: non-NULL only while enabled with a location id (UNIQUE).
@@ -1742,6 +1746,12 @@ export interface ChannelorderRow {
   externalStatus: string;
   acceptBy: Date | null;
   scheduledFor: Date | null;
+  // Marketplace deadline to confirm an accepted scheduled order (UNVERIFIED field).
+  confirmBy: Date | null;
+  confirmedAt: Date | null;
+  confirmClaimedAt: Date | null;
+  // Set when a person marked the order ready for collection.
+  readyAt: Date | null;
   currency: string;
   // NULL = the marketplace payload did not say, never zero.
   commissionAmount: string | null;

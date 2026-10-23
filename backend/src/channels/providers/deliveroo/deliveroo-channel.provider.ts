@@ -93,6 +93,7 @@ export class DeliverooChannelProvider implements ChannelProvider {
     ...NO_CAPABILITIES,
     acceptReject: true,
     markReady: true,
+    scheduledConfirm: true,
     itemAvailability: true,
     catalogueSync: true,
     fetchOrderStatus: true,
@@ -393,6 +394,17 @@ export class DeliverooChannelProvider implements ChannelProvider {
   acceptOrder(conn: BoundChannelConnection, externalOrderId: string) {
     return this.patchStatus(conn, externalOrderId, { status: 'accepted' }, [
       'accepted',
+      'confirmed',
+    ]);
+  }
+
+  // Second step of a SCHEDULED order: PATCH status `confirmed` through the same
+  // call as accept/reject (204 ok; 409 is success only if Deliveroo already shows
+  // `confirmed`; 503 order_not_ready retried after Retry-After). VERIFIED: the
+  // confirmed status exists. UNVERIFIED: how early it is accepted and what
+  // Deliveroo does with an accepted scheduled order that is never confirmed.
+  confirmScheduledOrder(conn: BoundChannelConnection, externalOrderId: string) {
+    return this.patchStatus(conn, externalOrderId, { status: 'confirmed' }, [
       'confirmed',
     ]);
   }

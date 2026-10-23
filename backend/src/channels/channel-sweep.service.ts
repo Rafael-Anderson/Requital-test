@@ -7,6 +7,7 @@ import { SchedulerService } from '../jobs/scheduler.service';
 import { JobsService } from '../jobs/jobs.service';
 import { createLogger } from '../common/logging/logger';
 import { OrderNotificationsService } from '../orders/order-notifications.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import type { ChannelconnectionRow, ChannelorderRow } from '../db/types';
 import { ChannelConnectionsService } from './channel-connections.service';
 import {
@@ -28,6 +29,20 @@ const BATCH = 50;
 // E2: this many failed polls in a row (about 10 minutes at the 2-minute cadence)
 // means the webhook-outage fallback is itself down: tell the merchant once.
 export const POLL_FAILURE_ALERT_AFTER = 5;
+// F/E5 scheduled-order confirm. ALL THREE NUMBERS ARE UNVERIFIED (Deliveroo does
+// not publish the lead time, nor what happens to an accepted scheduled order that
+// is never confirmed):
+//   alert / auto-confirm this long before the order's confirmBy deadline
+export const CONFIRM_LEAD_MINUTES = 30;
+//   an order whose deadline passed longer ago than this is left alone
+export const CONFIRM_GIVE_UP_HOURS = 24;
+//   a claim taken before the provider call is reclaimable after this (also the
+//   back-off between failed attempts for the same order)
+export const CONFIRM_CLAIM_STALE_SECONDS = 120;
+// Provider calls hold the 55 s sweep lock (each may retry with sleeps), so few
+// per tick and a wall-clock budget.
+const CONFIRM_BATCH = 3;
+const CONFIRM_BUDGET_MS = 30_000;
 
 // Everything that makes "accepted orders are never lost" true when a webhook did
 // not arrive, arrived and failed, or was processed half-way:
@@ -47,6 +62,7 @@ export class ChannelSweepService {
     private readonly connections: ChannelConnectionsService,
     private readonly ingestion: ChannelIngestionService,
     private readonly notifications: OrderNotificationsService,
+    private readonly audit: AuditLogService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -67,6 +83,8 @@ export class ChannelSweepService {
       repaired: 0,
       purged: 0,
       scrubbed: 0,
+      confirmed: 0,
+      confirmAlerted: 0,
     };
     const step = async (name: string, fn: () => Promise<void>) => {
       try {
@@ -89,6 +107,11 @@ export class ChannelSweepService {
       const r = await this.staleOrders();
       out.stale = r.alerted;
       out.repaired = r.repaired;
+    });
+    await step('confirmScheduled', async () => {
+      const r = await this.confirmScheduled();
+      out.confirmed = r.confirmed;
+      out.confirmAlerted = r.alerted;
     });
     await step(
       'purge',
@@ -210,6 +233,137 @@ export class ChannelSweepService {
       },
       `channelconn:${conn.id}:poll-down:${conn.lastSyncAt?.getTime() ?? 0}`,
     );
+  }
+
+  // Scheduled orders that were accepted but not yet confirmed.
+  //   DEFAULT (autoConfirmScheduled = 0): ONE WhatsApp alert to the merchant as
+  //     the confirm deadline approaches (job idempotency key
+  //     channelorder:<id>:confirm-alert, so it is sent once however often this
+  //     runs); the merchant presses "Confirm scheduled order" on the desk.
+  //   OPT-IN (autoConfirmScheduled = 1): this sweep confirms it, because
+  //     confirming commits the merchant to prepare the order. If that keeps
+  //     failing, the deadline passes and the same single alert goes out.
+  // Everything is keyed on confirmedAt IS NULL, never on externalStatus (a late
+  // 'accepted' event overwrites externalStatus).
+  async confirmScheduled(): Promise<{ confirmed: number; alerted: number }> {
+    const now = new Date();
+    const horizon = new Date(now.getTime() + CONFIRM_LEAD_MINUTES * 60_000);
+    const giveUp = new Date(now.getTime() - CONFIRM_GIVE_UP_HOURS * 3_600_000);
+    let alerted = 0;
+    let confirmed = 0;
+
+    const toAlert = await this.db.query<(ChannelorderRow & RowDataPacket)[]>(
+      `SELECT co.* FROM channelorder co
+         JOIN channelconnection c ON c.id = co.connectionId AND c.shopId = co.shopId
+        WHERE co.state = 'accepted' AND co.confirmedAt IS NULL AND co.confirmBy IS NOT NULL
+          AND co.confirmBy <= ? AND co.confirmBy > ?
+          AND (c.autoConfirmScheduled = 0 OR co.confirmBy < ?)
+          AND NOT EXISTS (SELECT 1 FROM job j WHERE j.idempotencyKey = CONCAT('channelorder:', co.id, ':confirm-alert'))
+        ORDER BY co.confirmBy ASC LIMIT ?`,
+      [horizon, giveUp, now, BATCH],
+    );
+    for (const co of toAlert) {
+      const to = await this.notifications.resolveMerchantAlertRecipient(
+        co.shopId,
+        co.outletId,
+      );
+      if (!to) continue;
+      await this.jobs.enqueue(
+        co.shopId,
+        'send_merchant_whatsapp_alert',
+        {
+          to,
+          body: `${co.provider} scheduled order ${co.displayId ?? co.externalOrderId} must be confirmed soon. Open Requital and press "Confirm scheduled order", or confirm it on the marketplace tablet.`,
+        },
+        `channelorder:${co.id}:confirm-alert`,
+      );
+      alerted += 1;
+    }
+
+    const started = Date.now();
+    const due = await this.db.query<(ChannelorderRow & RowDataPacket)[]>(
+      `SELECT co.* FROM channelorder co
+         JOIN channelconnection c ON c.id = co.connectionId AND c.shopId = co.shopId
+        WHERE co.state = 'accepted' AND co.confirmedAt IS NULL AND co.confirmBy IS NOT NULL
+          AND co.confirmBy <= ? AND co.confirmBy > ?
+          AND c.autoConfirmScheduled = 1 AND c.enabled = 1
+          AND (co.confirmClaimedAt IS NULL OR co.confirmClaimedAt < ?)
+        ORDER BY co.confirmBy ASC LIMIT ?`,
+      [
+        horizon,
+        giveUp,
+        new Date(now.getTime() - CONFIRM_CLAIM_STALE_SECONDS * 1000),
+        CONFIRM_BATCH,
+      ],
+    );
+    for (const co of due) {
+      if (Date.now() - started > CONFIRM_BUDGET_MS) break;
+      const provider = this.registry.find(co.provider);
+      if (
+        !provider?.capabilities.scheduledConfirm ||
+        !provider.confirmScheduledOrder
+      )
+        continue;
+      // Claim BEFORE the provider call. A lost claim sends nothing; a claim that
+      // is never released (crash, failure) is retried after the stale window.
+      const claim = await this.db.execute(
+        `UPDATE channelorder SET confirmClaimedAt = ?, updatedAt = ?
+          WHERE id = ? AND shopId = ? AND state = 'accepted' AND confirmedAt IS NULL
+            AND (confirmClaimedAt IS NULL OR confirmClaimedAt < ?)`,
+        [
+          new Date(),
+          new Date(),
+          co.id,
+          co.shopId,
+          new Date(Date.now() - CONFIRM_CLAIM_STALE_SECONDS * 1000),
+        ],
+      );
+      if (claim.affectedRows === 0) continue;
+      try {
+        const connRow = await this.connections.findById(co.connectionId);
+        if (!connRow || connRow.shopId !== co.shopId)
+          throw new Error('connection is gone');
+        const r = await provider.confirmScheduledOrder(
+          this.connections.bind(connRow),
+          co.externalOrderId,
+        );
+        if (!r.ok) throw new Error(r.message ?? 'confirm was refused');
+      } catch (e) {
+        logger.warn('automatic scheduled confirm failed', {
+          channelOrderId: co.id,
+          shopId: co.shopId,
+          provider: co.provider,
+          error: e instanceof Error ? e.message.slice(0, 200) : String(e),
+        });
+        continue;
+      }
+      const done = await this.db.execute(
+        `UPDATE channelorder SET confirmedAt = ?, confirmClaimedAt = NULL, updatedAt = ?
+          WHERE id = ? AND shopId = ? AND state = 'accepted' AND confirmedAt IS NULL`,
+        [new Date(), new Date(), co.id, co.shopId],
+      );
+      if (done.affectedRows > 0) {
+        confirmed += 1;
+        await this.audit.log(
+          {
+            shopId: co.shopId,
+            actorUserId: null,
+            actorLabel: 'system (automatic confirm)',
+          },
+          {
+            action: 'channel_order.scheduled_confirmed',
+            entityType: 'channelorder',
+            entityId: co.id,
+            after: {
+              provider: co.provider,
+              externalOrderId: co.externalOrderId,
+              automatic: true,
+            },
+          },
+        );
+      }
+    }
+    return { confirmed, alerted };
   }
 
   async staleOrders(): Promise<{ alerted: number; repaired: number }> {
