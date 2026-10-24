@@ -477,7 +477,11 @@ export class PaymentsService {
     gateway: string,
     result: WebhookResult,
   ) {
-    const context = { orderId: order.id, shopId: order.shopId, gateway };
+    const context = {
+      orderId: order.id as number,
+      shopId: order.shopId as number,
+      gateway,
+    };
     logger.error(
       'payment received for a CANCELLED order, refund it in the payment provider',
       { ...context, providerReference: result.providerReference },
@@ -489,11 +493,7 @@ export class PaymentsService {
       );
       await this.orderNotificationsService.alertLatePayment(
         order.shopId as number,
-        {
-          id: order.id as number,
-          shopOrderNumber: order.shopOrderNumber as number,
-          outletId: order.outletId as number,
-        },
+        order.id as number,
       );
     } catch (err) {
       logger.error('late-payment alert failed', {

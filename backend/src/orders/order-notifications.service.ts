@@ -522,11 +522,20 @@ export class OrderNotificationsService {
 
   // F8: a payment arrived for an order that is already cancelled. The merchant must
   // refund it by hand, so tell them, once per order (the job key). Never throws.
-  async alertLatePayment(
-    shopId: number,
-    order: { id: number; shopOrderNumber: number; outletId: number },
-  ) {
+  async alertLatePayment(shopId: number, orderId: number) {
     try {
+      // The order is read here, scoped by shop, so the outlet that receives the
+      // alert is always this shop's own.
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT shopOrderNumber, outletId FROM \`order\` WHERE id = ? AND shopId = ?`,
+        [orderId, shopId],
+      );
+      if (!rows[0]) return;
+      const order = {
+        id: orderId,
+        shopOrderNumber: rows[0].shopOrderNumber as number,
+        outletId: rows[0].outletId as number,
+      };
       const to = await this.resolveMerchantAlertRecipient(
         shopId,
         order.outletId,
@@ -544,8 +553,8 @@ export class OrderNotificationsService {
         `order:${order.id}:late-payment`,
       );
     } catch (err) {
-      logger.error(`order #${order.id}: late-payment alert enqueue failed`, {
-        orderId: order.id,
+      logger.error(`order #${orderId}: late-payment alert enqueue failed`, {
+        orderId,
         shopId,
         error: err instanceof Error ? err.message : String(err),
       });

@@ -43,6 +43,7 @@ import { getZoneMatchingMode } from '../delivery-zones/zone-matching-mode';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { PaymentSettingsService } from '../payments/payment-settings.service';
 import { amountStillDue } from '../payments/payments.service';
+import type { CheckoutSession } from '../payments/payment-provider.interface';
 import { OrdersService } from '../orders/orders.service';
 import {
   OrderNotPayableError,
@@ -1538,7 +1539,9 @@ export class PublicService {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
     const key = dto.idempotencyKey;
-    if (!key) return this.placeOrder(shop, dto, sessionCustomer, null, clientIp);
+    if (!key) {
+      return this.placeOrder(shop, dto, sessionCustomer, null, clientIp);
+    }
     const fingerprint = checkoutFingerprint(
       dto,
       sessionCustomer?.customerId ?? null,
@@ -1767,12 +1770,15 @@ export class PublicService {
         `SELECT status, paymentStatus FROM \`order\` WHERE id = ? AND shopId = ?`,
         [order.id, shop.id],
       );
-      if (rows[0]?.status === 'pending' && rows[0]?.paymentStatus === 'unpaid') {
+      if (
+        rows[0]?.status === 'pending' &&
+        rows[0]?.paymentStatus === 'unpaid'
+      ) {
         throw new SessionInProgressException();
       }
       throw new OrderNotPayableError();
     }
-    let session;
+    let session: CheckoutSession;
     try {
       const provider = this.providerRegistry.get(gatewayName);
       const credentials = await this.paymentSettingsService.resolveCredentials(
@@ -1873,7 +1879,10 @@ export class PublicService {
       `SELECT status, paymentStatus FROM \`order\` WHERE id = ? AND shopId = ?`,
       [orderId, shop.id],
     );
-    if (fresh[0]?.status === 'pending' && fresh[0]?.paymentStatus === 'unpaid') {
+    if (
+      fresh[0]?.status === 'pending' &&
+      fresh[0]?.paymentStatus === 'unpaid'
+    ) {
       throw new PaymentUnavailableException(false);
     }
     return this.settledOutcome(shop, orderId);
@@ -2153,6 +2162,10 @@ export class PublicService {
         conn,
         shop.id,
         async (shopOrderNumber) => {
+          const idemParams = [
+            idempotency?.key ?? null,
+            idempotency?.fingerprint ?? null,
+          ];
           const [res] = await withTrackingToken((trackingToken) =>
             conn.query(
         `INSERT INTO \`order\` (
@@ -2216,8 +2229,7 @@ export class PublicService {
           // MKT-14: where the order came from, plus the cookie-consent state at
           // this moment. NULL = the browser sent nothing (unknown).
           attributionData ? JSON.stringify(attributionData) : null,
-          idempotency?.key ?? null,
-          idempotency?.fingerprint ?? null,
+          ...idemParams,
         ],
             ),
           );
