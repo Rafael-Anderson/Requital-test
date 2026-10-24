@@ -275,6 +275,14 @@ describe("vocabulary -> provider event names", () => {
     expect(tt.args[3]).toEqual({ event_id: "order_42" });
     const ga = calls.find((c) => c.provider === "ga4")!;
     expect((ga.args[2] as Record<string, unknown>).transaction_id).toBe("42");
+    // Snap's browser dedupe id is the same order_<id> the server event carries.
+    const snap = calls.find((c) => c.provider === "snap")!;
+    expect(snap.args[2]).toEqual(expect.objectContaining({ client_dedup_id: "order_42", transaction_id: "42" }));
+  });
+
+  it("Snap gets no dedupe id when the caller supplies none", () => {
+    const snap = buildProviderCalls("add_to_cart", base, ALL).find((c) => c.provider === "snap")!;
+    expect(snap.args[2]).not.toHaveProperty("client_dedup_id");
   });
 
   it("no Google Ads conversion without a label", () => {

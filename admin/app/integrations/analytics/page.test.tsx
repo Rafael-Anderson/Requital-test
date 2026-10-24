@@ -17,7 +17,9 @@ const base: AnalyticsSettings = {
   metaCapiTokenSet: false,
   metaTestEventCode: null,
   tiktokPixelId: null,
+  tiktokEventsTokenSet: false,
   snapPixelId: null,
+  snapCapiTokenSet: false,
   googleAdsConversionId: null,
   googleAdsConversionLabel: null,
 };
@@ -80,5 +82,39 @@ describe("Analytics & Pixels page", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(updateAnalyticsSettings).not.toHaveBeenCalled();
     expect(await screen.findByText("Looks like G-XXXXXXXXXX")).toBeInTheDocument();
+  });
+
+  it("TikTok and Snapchat tokens: masked when saved, never shown, sent once when typed", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getAnalyticsSettings).mockResolvedValue({ ...base, tiktokPixelId: "CABCDEFGHIJKLMNOPQRS", tiktokEventsTokenSet: true });
+    vi.mocked(updateAnalyticsSettings).mockResolvedValue({ ...base, snapCapiTokenSet: true, tiktokEventsTokenSet: true });
+    renderPage();
+    expect(await screen.findByText("Saved (hidden)")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Paste your Events API access token")).not.toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("Paste your Conversions API token"), "snap." + "x".repeat(30));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(updateAnalyticsSettings).toHaveBeenCalled());
+    const sent = vi.mocked(updateAnalyticsSettings).mock.calls[0][0];
+    expect(sent.snapCapiToken).toBe("snap." + "x".repeat(30));
+    expect(sent).not.toHaveProperty("tiktokEventsToken");
+    expect(sent).not.toHaveProperty("metaCapiToken");
+  });
+
+  it("Remove token asks first, then sends null for that platform only", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getAnalyticsSettings).mockResolvedValue({ ...base, tiktokPixelId: "CABCDEFGHIJKLMNOPQRS", tiktokEventsTokenSet: true, snapCapiTokenSet: true });
+    vi.mocked(updateAnalyticsSettings).mockResolvedValue({ ...base, snapCapiTokenSet: true });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    renderPage();
+    await screen.findAllByText("Saved (hidden)");
+    const [tiktokRemove] = screen.getAllByRole("button", { name: "Remove token" });
+    await user.click(tiktokRemove);
+    expect(updateAnalyticsSettings).not.toHaveBeenCalled(); // declined the confirm
+    await user.click(tiktokRemove);
+    await waitFor(() => expect(updateAnalyticsSettings).toHaveBeenCalled());
+    const sent = vi.mocked(updateAnalyticsSettings).mock.calls[0][0];
+    expect(sent.tiktokEventsToken).toBeNull();
+    expect(sent).not.toHaveProperty("snapCapiToken");
+    confirmSpy.mockRestore();
   });
 });
