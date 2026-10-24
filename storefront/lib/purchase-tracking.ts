@@ -4,10 +4,14 @@
 // the event is sent there. An ONLINE-payment order leaves the site for the
 // gateway's page, so the data for the event is parked in sessionStorage, and sent
 // when the customer lands back on /orders/<trackingToken> and the SERVER reports
-// the order paid (the stash is taken, so a reload cannot send it twice). The authoritative record of an online payment is
-// the server-side Conversions API event, queued when the payment webhook (or the
-// reconciliation sweep) marks the order paid. Both carry purchaseEventId, so Meta
-// deduplicates the pair into one conversion.
+// the order paid (the stash is taken, so a reload cannot send it twice). That URL
+// carries a bearer token, so lib/analytics.ts sends it to GA4 / Google Ads only
+// (redacted) and SKIPS Meta, TikTok and Snap. The authoritative record of an online
+// payment for those three is the server-side event (Meta Conversions API, TikTok
+// Events API, Snap Conversions API), queued when the payment webhook (or the
+// reconciliation sweep) marks the order paid. Every event carries purchaseEventId
+// so a platform can deduplicate a pair when both do arrive (UNVERIFIED for TikTok
+// and Snap).
 import { purchaseEventId, type AnalyticsItem, type AnalyticsPayload } from "./analytics";
 
 function key(orderId: number | string): string {

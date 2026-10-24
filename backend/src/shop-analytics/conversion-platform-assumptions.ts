@@ -39,6 +39,10 @@ export const SNAP_ASSUMPTIONS = {
   tokenHeader: 'Authorization', // value: `Bearer <token>`
   // UNVERIFIED: matches the browser vocabulary (SNAP_EVENTS.purchase).
   eventName: 'PURCHASE',
+  // UNVERIFIED: success is judged by HTTP status ONLY (any 2xx). TikTok's client
+  // also checks a body `code !== 0`; Snap's real response shape is unknown, so
+  // a 200 carrying a rejection in its body would be treated as success.
+  successBy: 'http-status',
   // UNVERIFIED
   actionSource: 'WEB',
   // UNVERIFIED: Snap's server field for dedupe is event_id; the BROWSER pixel's

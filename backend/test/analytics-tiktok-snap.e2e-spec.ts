@@ -529,6 +529,21 @@ describe('TikTok and Snap server-side purchase events (e2e)', () => {
       expect(totalSends()).toBe(0);
     });
 
+    it('the event id sent is recomputed from the order id, not trusted from the job payload', async () => {
+      const shop = await setupShop('eid');
+      await configureAll(shop);
+      const orderId = await placeOnline(shop);
+      await paidWebhook(orderId, `evt_eid_${orderId}`).expect(201);
+      await db.execute(
+        `UPDATE job SET payload = JSON_SET(payload, '$.eventId', 'order_999999')
+          WHERE type = 'send_conversion_event' AND JSON_EXTRACT(payload, '$.orderId') = ?`,
+        [orderId],
+      );
+      await runJobs(orderId);
+      expect(tiktok.calls[0].events[0].event_id).toBe(`order_${orderId}`);
+      expect(snap.calls[0].events[0].event_id).toBe(`order_${orderId}`);
+    });
+
     it('no token (pixel only) or no pixel id (token only): no job for that platform; other platforms unaffected', async () => {
       const noToken = await setupShop('ntk');
       await patchSettings(noToken, { tiktokPixelId: TT_PIXEL, snapPixelId: SNAP_PIXEL }).expect(200);

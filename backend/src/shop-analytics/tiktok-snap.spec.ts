@@ -100,6 +100,13 @@ describe.each([
       events: [{}],
     });
 
+  it('never follows a redirect (the auth header would travel with it)', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({ code: 0 }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    await call();
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].redirect).toBe('error');
+  });
+
   it('puts the token in a header, never the URL or the body', async () => {
     const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({ code: 0 }) });
     global.fetch = fetchMock as unknown as typeof fetch;

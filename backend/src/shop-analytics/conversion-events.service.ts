@@ -82,11 +82,16 @@ export class ConversionEventsService implements OnModuleInit {
   // as "no": silence is not permission.
   //
   // `paid: true` is passed ONLY by the paid-transition call sites in
-  // PaymentsService. TikTok and Snap are queued only then: for a pay-on-delivery
-  // / pickup order the browser still sends its own purchase from the checkout
-  // page, and a server event too would count it twice. An online-payment order
-  // is the one whose browser purchase is skipped (the confirmation URL carries a
-  // bearer token), so the server event is its only record.
+  // PaymentsService. TikTok and Snap are queued only then. What the browser does
+  // (storefront/lib/analytics.ts guardTokenUrls, lib/purchase-tracking.ts):
+  //  - pay on delivery / pickup: track("purchase") fires from the checkout page
+  //    (no token in the URL), so a server TikTok/Snap event would count it twice;
+  //  - online payment: the purchase is stashed at checkout and fired on
+  //    /orders/<token> once the server reports paid. That URL carries a bearer
+  //    token, so the browser sends it to GA4/Google Ads only (redacted) and SKIPS
+  //    Meta, TikTok and Snap. For those three the server event is the only
+  //    record of an online-payment order. Whether event_id / client_dedup_id
+  //    dedupes a pair when both do arrive is UNVERIFIED for TikTok and Snap.
   async enqueuePurchase(
     orderId: number,
     opts: { paid?: boolean } = {},
@@ -197,7 +202,8 @@ export class ConversionEventsService implements OnModuleInit {
     );
 
     const input = {
-      eventId: payload.eventId,
+      // Recomputed, never trusted from the job payload.
+      eventId: purchaseEventId(payload.orderId),
       eventTimeSeconds: payload.eventTime,
       value: payload.value,
       currency: payload.currency,

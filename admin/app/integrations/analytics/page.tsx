@@ -175,9 +175,13 @@ export default function AnalyticsIntegrationsPage() {
             purchases to each platform. Nothing loads for a visitor until they accept the cookie banner,
             and only the platforms you fill in here are ever contacted. Server side purchase events (Meta,
             TikTok and Snapchat, each needing its own token below) are sent only for orders where the
-            shopper accepted marketing cookies. TikTok and Snapchat server events cover online card
-            payments, which the browser cannot report once the shopper returns to the confirmation page;
-            pay on delivery and pickup orders are reported by the browser as before.
+            shopper accepted marketing cookies. For an online card payment the shopper returns to a
+            confirmation page whose address is private, so the browser does not report that purchase to
+            Meta, TikTok or Snapchat, and the server event is the only one. TikTok and Snapchat server
+            events are sent for online card payments only; pay on delivery and pickup orders are reported
+            by the browser. Matching a browser and a server event on one order id is not yet confirmed
+            for TikTok and Snapchat, so check the test tool of each platform before relying on these
+            numbers.
           </p>
         </Card>
 

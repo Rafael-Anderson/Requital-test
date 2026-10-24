@@ -54,6 +54,8 @@ export class SnapCapiClient {
           [A.tokenHeader]: `Bearer ${params.accessToken}`,
         },
         body: JSON.stringify({ data: params.events }),
+        // A custom auth header would survive a cross-origin redirect.
+        redirect: 'error',
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch {
