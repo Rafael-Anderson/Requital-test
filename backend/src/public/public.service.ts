@@ -1538,7 +1538,7 @@ export class PublicService {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
     const key = dto.idempotencyKey;
-    if (!key) return this.placeOrder(shop, dto, sessionCustomer, null);
+    if (!key) return this.placeOrder(shop, dto, sessionCustomer, null, clientIp);
     const fingerprint = checkoutFingerprint(
       dto,
       sessionCustomer?.customerId ?? null,
@@ -1546,10 +1546,13 @@ export class PublicService {
     const replay = await this.replayCheckout(shop, key, fingerprint);
     if (replay) return replay;
     try {
-      return await this.placeOrder(shop, dto, sessionCustomer, {
-        key,
-        fingerprint,
-      });
+      return await this.placeOrder(
+        shop,
+        dto,
+        sessionCustomer,
+        { key, fingerprint },
+        clientIp,
+      );
     } catch (err) {
       if (
         err instanceof PaymentUnavailableException ||
@@ -1881,6 +1884,7 @@ export class PublicService {
     dto: CreatePublicOrderDto,
     sessionCustomer: CustomerContext | null,
     idempotency: { key: string; fingerprint: string } | null,
+    clientIp?: string,
   ) {
     const outletRows = await this.db.query<(OutletRow & RowDataPacket)[]>(
       `SELECT * FROM outlet WHERE id = ? AND shopId = ? AND active = 1 LIMIT 1`,
