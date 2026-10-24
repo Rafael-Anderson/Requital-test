@@ -25,6 +25,14 @@ import type {
 
 const logger = createLogger('ChannelOrders');
 
+// Which capability flag guards which provider method.
+const PROVIDER_METHOD_CAPABILITY = {
+  acceptOrder: 'acceptReject',
+  rejectOrder: 'acceptReject',
+  markReady: 'markReady',
+  confirmScheduledOrder: 'scheduledConfirm',
+} as const;
+
 // The merchant's view of marketplace orders, and the two things they can do to
 // one: accept it or reject it. Both go to the marketplace first and only then
 // change our state, by CAS, so a failed call changes nothing and a repeat is safe.
@@ -161,7 +169,7 @@ export class ChannelOrdersService {
     if (co.state !== 'pending_acceptance') {
       throw new ConflictException('This order is already closed');
     }
-    await this.callProvider(co, 'accept', 'acceptReject', (provider, conn) =>
+    await this.callProvider(co, 'accept', 'acceptOrder', (provider, conn) =>
       provider.acceptOrder!(conn, co.externalOrderId),
     );
     await this.ingestion.markAcceptedExternally(co, 'accepted', ctx);
@@ -181,7 +189,7 @@ export class ChannelOrdersService {
       throw new ConflictException('This order can no longer be rejected here');
     }
     const reason = dto.reason?.trim() || 'other';
-    await this.callProvider(co, 'reject', 'acceptReject', (provider, conn) =>
+    await this.callProvider(co, 'reject', 'rejectOrder', (provider, conn) =>
       provider.rejectOrder!(conn, co.externalOrderId, reason),
     );
     await this.ingestion.closeUpstream(co, 'rejected', 'rejected', ctx);
@@ -247,7 +255,7 @@ export class ChannelOrdersService {
     await this.callProvider(
       co,
       'confirm',
-      'scheduledConfirm',
+      'confirmScheduledOrder',
       (provider, conn) =>
         provider.confirmScheduledOrder!(conn, co.externalOrderId),
     );
@@ -272,24 +280,20 @@ export class ChannelOrdersService {
   private async callProvider(
     co: ChannelorderRow,
     label: string,
-    capability: 'acceptReject' | 'markReady' | 'scheduledConfirm',
+    method: keyof typeof PROVIDER_METHOD_CAPABILITY,
     call: (
       provider: NonNullable<ReturnType<ChannelProviderRegistry['find']>>,
       conn: ReturnType<ChannelConnectionsService['bind']>,
     ) => Promise<{ ok: boolean; message?: string }>,
-    required = capability !== 'acceptReject',
   ): Promise<void> {
     const provider = this.registry.find(co.provider);
-    const method =
-      capability === 'markReady'
-        ? provider?.markReady
-        : capability === 'scheduledConfirm'
-          ? provider?.confirmScheduledOrder
-          : label === 'accept'
-            ? provider?.acceptOrder
-            : provider?.rejectOrder;
-    if (!provider || !provider.capabilities[capability] || !method) {
-      if (required) {
+    const capability = PROVIDER_METHOD_CAPABILITY[method];
+    if (
+      !provider ||
+      !provider.capabilities[capability] ||
+      !(method in provider)
+    ) {
+      if (method !== 'acceptOrder' && method !== 'rejectOrder') {
         throw new ConflictException(
           'This marketplace does not support that action',
         );
