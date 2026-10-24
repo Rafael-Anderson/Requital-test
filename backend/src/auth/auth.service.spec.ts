@@ -115,6 +115,27 @@ describe('AuthService.login — progressive lockout', () => {
     );
   });
 
+  it('snapshots the user name into the audit label on a successful login (F11)', async () => {
+    const user = fakeUserRow({ name: 'Layla Ahmed' });
+    const db = createMockDb();
+    db.query.mockResolvedValue([user]);
+    mockCompare.mockResolvedValue(true);
+    const audit = createMockAuditLog();
+    const service = new AuthService(
+      db,
+      createMockJwt(),
+      audit,
+      createMockJobsService(),
+      new PasswordPolicyService(),
+      createMockTwoFactor(),
+    );
+    await service.login({ email: user.email, password: 'correct' });
+    expect(audit.log).toHaveBeenCalledWith(
+      { shopId: 1, actorUserId: 1, actorLabel: 'Layla Ahmed' },
+      expect.objectContaining({ action: 'auth.login' }),
+    );
+  });
+
   it('a wrong password below the lockout threshold still runs bcrypt and records the failure', async () => {
     const user = fakeUserRow({ failedLoginAttempts: 1, lastFailedLoginAt: null });
     const db = createMockDb();

@@ -296,7 +296,13 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
     await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
 
     expect(ordersService.updateStatus).toHaveBeenCalledWith(
-      { userId: 77, shopId: 5, role: 'admin', outletId: null },
+      {
+        userId: 77,
+        shopId: 5,
+        role: 'admin',
+        outletId: null,
+        systemActorLabel: 'system (payment gateway)',
+      },
       10,
       { status: 'confirmed' },
     );
@@ -339,7 +345,13 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
     await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
 
     expect(ordersService.cancel).toHaveBeenCalledWith(
-      { userId: 1, shopId: 5, role: 'admin', outletId: null },
+      {
+        userId: 1,
+        shopId: 5,
+        role: 'admin',
+        outletId: null,
+        systemActorLabel: 'system (payment gateway)',
+      },
       11,
     );
     expect(ordersService.updateStatus).not.toHaveBeenCalled();

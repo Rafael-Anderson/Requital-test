@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server";
 import { isLocalHost } from "./lib/is-local-host";
 import { createRedirectStore } from "./lib/redirect-map";
 import { resolveInternalApiOrigin } from "./lib/api-origin";
+import { createHostResolver } from "./lib/host-resolver";
+import { clientIpFromForwardedFor, internalAuthHeaders } from "./lib/internal-auth";
 
 // Runs on every real navigation (see matcher below) before the app/[shop]/...
 // route tree ever sees the request. Requital's own tenant resolution is a
@@ -20,18 +22,13 @@ const API_URL = resolveInternalApiOrigin(
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000",
 );
 
-// Last-known-good host -> subdomain, used ONLY when the resolve call fails
-// (backend restart / blip). A wrong 404 for a real shop is worse than briefly
-// stale-but-correct routing; the backend also owns a 30s fresh cache, so this
-// only kicks in when it's actually unreachable. A genuinely-removed domain
-// stops resolving here once GRACE_MS passes or the backend recovers and
-// returns null. docs/plans/custom-domain-resolver.md Phase 6.
-const GRACE_MS = 5 * 60 * 1000;
-const lastGood = new Map<string, { subdomain: string; at: number }>();
+// host -> subdomain, with a short positive cache and last-known-good fallback
+// (lib/host-resolver.ts). Only a backend 404 means "unknown host".
+const hosts = createHostResolver({ apiUrl: API_URL, headersFor: (url, ip) => internalAuthHeaders("GET", url, ip) });
 
 // ONB-4 URL redirects: a per-shop cached map, matched in-process (see
 // lib/redirect-map.ts for why this is not a backend call per request).
-const redirects = createRedirectStore({ apiUrl: API_URL });
+const redirects = createRedirectStore({ apiUrl: API_URL, headersFor: (m, url) => internalAuthHeaders(m, url) });
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -53,46 +50,21 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  let subdomain: string | null = null;
-  let backendReached = false;
-  try {
-    const res = await fetch(
-      `${API_URL}/domains/resolve?host=${encodeURIComponent(hostname)}`,
-    );
-    backendReached = true;
-    if (res.ok) {
-      const data = (await res.json()) as { subdomain?: string };
-      subdomain = data.subdomain ?? null;
-    }
-    // res not ok (404) => genuinely unknown host; leave subdomain null.
-  } catch {
-    // Backend unreachable — see the last-known-good fallback below.
-    subdomain = null;
+  const resolved = await hosts.resolve(hostname, clientIpFromForwardedFor(request.headers.get("x-forwarded-for")));
+  if (resolved.kind === "unavailable") {
+    // The backend could not say (throttled, down, slow): a temporary condition,
+    // never a "this store does not exist" 404 that crawlers and CDNs would keep.
+    return new NextResponse("Service temporarily unavailable", {
+      status: 503,
+      headers: { "Retry-After": resolved.retryAfter, "Cache-Control": "no-store" },
+    });
   }
-
-  if (subdomain) {
-    lastGood.set(hostname, { subdomain, at: Date.now() });
-  } else if (!backendReached) {
-    // Only when the backend couldn't be reached — a real 404 from it means the
-    // host is genuinely unknown and must not be served from a stale entry.
-    const cached = lastGood.get(hostname);
-    if (cached && Date.now() - cached.at < GRACE_MS) {
-      console.warn(
-        `[proxy] /domains/resolve unreachable for "${hostname}" — serving last-known-good subdomain "${cached.subdomain}"`,
-      );
-      subdomain = cached.subdomain;
-    } else {
-      console.warn(
-        `[proxy] /domains/resolve unreachable for "${hostname}" and no fresh last-known-good — 404`,
-      );
-    }
-  }
-
-  if (!subdomain) {
+  if (resolved.kind === "unknown") {
     return NextResponse.rewrite(new URL("/store-not-found", request.url), {
       status: 404,
     });
   }
+  const subdomain = resolved.subdomain;
 
   // Old-URL redirects (ONB-4), before the page tree can 404 on them. Only for
   // page reads, never the home page, and never allowed to break the request:

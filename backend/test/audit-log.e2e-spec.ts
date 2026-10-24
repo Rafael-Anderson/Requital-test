@@ -5,6 +5,10 @@ import request from 'supertest';
 import type { Response } from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { AuthService } from '../src/auth/auth.service';
+import { AuditLogService } from '../src/audit-log/audit-log.service';
+import { DatabaseService } from '../src/database/database.service';
+import type { RowDataPacket } from 'mysql2/promise';
 import { verifySignupEmail } from './helpers/verify-signup-email';
 
 interface AuthResponse {
@@ -341,6 +345,135 @@ describe('Audit log (e2e)', () => {
     expect(actions).toContain('discount.deleted');
     expect(actions).toContain('biolink.deleted');
     void collectionId;
+  });
+
+  describe('F11: actor labels written at write time', () => {
+    const http = () => request(app.getHttpServer());
+    const list = async (token: string, qs = '') =>
+      body<AuditLogList>(
+        await http()
+          .get(`/audit-log${qs}`)
+          .set('Authorization', `Bearer ${token}`)
+          .expect(200),
+      );
+
+    it('stores a snapshot of the staff name, and a later rename does not rewrite history', async () => {
+      const { adminToken, adminEmail, collectionId } =
+        await setupShop('audit-label');
+      const db = app.get(DatabaseService);
+      const p1 = await createProduct(adminToken, collectionId);
+      await http()
+        .delete(`/products/${p1.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      const stored = await db.query<RowDataPacket[]>(
+        `SELECT al.actorLabel FROM auditlog al JOIN user u ON u.id = al.actorUserId
+         WHERE u.email = ? AND al.action = 'product.deleted'`,
+        [adminEmail],
+      );
+      expect(stored[0].actorLabel).toBe('Audit Test Admin');
+
+      await db.execute(`UPDATE user SET name = 'Renamed Admin' WHERE email = ?`, [
+        adminEmail,
+      ]);
+      const p2 = await createProduct(adminToken, collectionId);
+      await http()
+        .delete(`/products/${p2.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+
+      const names = (await list(adminToken, '?entityType=product')).data
+        .filter((l) => l.action === 'product.deleted')
+        .map((l) => l.actorName);
+      // newest first: the new action carries the new name, the old row keeps the old one
+      expect(names.slice(0, 2)).toEqual(['Renamed Admin', 'Audit Test Admin']);
+    });
+
+    it('labels an impersonated session as Requital support, naming the user', async () => {
+      const { adminToken, adminEmail, collectionId } =
+        await setupShop('audit-label-imp');
+      const db = app.get(DatabaseService);
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT shopId FROM user WHERE email = ?`,
+        [adminEmail],
+      );
+      const imp = await app
+        .get(AuthService)
+        .issueImpersonationTokenForShop(rows[0].shopId as number, 987654);
+      const p = await createProduct(adminToken, collectionId);
+      await http()
+        .delete(`/products/${p.id}`)
+        .set('Authorization', `Bearer ${imp.accessToken}`)
+        .expect(200);
+      const entry = (await list(adminToken, '?entityType=product')).data.find(
+        (l) => l.action === 'product.deleted',
+      );
+      expect(entry?.actorName).toBe(
+        'Requital support (impersonating Audit Test Admin)',
+      );
+    });
+
+    it('lists label-only actors in the filter and filters by label; system rows have no user', async () => {
+      const { adminToken, adminEmail } = await setupShop('audit-label-actors');
+      const db = app.get(DatabaseService);
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT shopId FROM user WHERE email = ?`,
+        [adminEmail],
+      );
+      const shopId = rows[0].shopId as number;
+      const audit = app.get(AuditLogService);
+      await audit.log(
+        { shopId, actorUserId: null, actorLabel: 'system (payment gateway)' },
+        { action: 'order.status_changed', entityType: 'order', entityId: 1 },
+      );
+      await audit.log(
+        { shopId, actorUserId: null, actorLabel: 'driver Ahmed' },
+        { action: 'order.status_changed', entityType: 'order', entityId: 2 },
+      );
+
+      const actors = body<{ id: number | null; name: string }[]>(
+        await http()
+          .get('/audit-log/actors')
+          .set('Authorization', `Bearer ${adminToken}`)
+          .expect(200),
+      );
+      expect(actors).toEqual(
+        expect.arrayContaining([
+          { id: null, name: 'system (payment gateway)' },
+          { id: null, name: 'driver Ahmed' },
+        ]),
+      );
+
+      const filtered = await list(
+        adminToken,
+        `?actorLabel=${encodeURIComponent('system (payment gateway)')}`,
+      );
+      expect(filtered.data).toHaveLength(1);
+      expect(filtered.data[0].actorName).toBe('system (payment gateway)');
+    });
+
+    it('a label filter cannot reach another shop', async () => {
+      const a = await setupShop('audit-label-iso-a');
+      const b = await setupShop('audit-label-iso-b');
+      const db = app.get(DatabaseService);
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT shopId FROM user WHERE email = ?`,
+        [a.adminEmail],
+      );
+      await app.get(AuditLogService).log(
+        {
+          shopId: rows[0].shopId as number,
+          actorUserId: null,
+          actorLabel: 'system (payment gateway)',
+        },
+        { action: 'order.status_changed', entityType: 'order', entityId: 1 },
+      );
+      const seen = await list(
+        b.adminToken,
+        `?actorLabel=${encodeURIComponent('system (payment gateway)')}`,
+      );
+      expect(seen.data).toHaveLength(0);
+    });
   });
 
   describe('list endpoint: filters, pagination, tenant isolation, role gate', () => {

@@ -167,7 +167,11 @@ describe('CustomerAccountService.exportData', () => {
       [expect.any(Date), ctx.customerId],
     );
     expect(auditLog.log).toHaveBeenCalledWith(
-      { shopId: ctx.shopId, actorUserId: 99 },
+      {
+        shopId: ctx.shopId,
+        actorUserId: null,
+        actorLabel: 'customer (self-service)',
+      },
       expect.objectContaining({
         action: 'CUSTOMER_DATA_EXPORT',
         entityId: ctx.customerId,

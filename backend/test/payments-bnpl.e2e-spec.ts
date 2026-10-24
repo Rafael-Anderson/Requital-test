@@ -215,6 +215,17 @@ describe('Tabby & Tamara payment webhooks (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
       expect(body<{ status: string }>(detail).status).toBe('cancelled');
+
+      // F11: the gateway-driven cancel is attributed to the system, not to the
+      // shop admin it borrowed a context from.
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT actorUserId, actorLabel FROM auditlog
+         WHERE entityType = 'order' AND entityId = ? AND action = 'order.status_changed'`,
+        [order.id],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].actorUserId).toBeNull();
+      expect(rows[0].actorLabel).toBe('system (payment gateway)');
     });
 
     it('a tampered signature is rejected — the order is never touched', async () => {
