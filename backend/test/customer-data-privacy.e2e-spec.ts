@@ -239,6 +239,17 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
       expect(exportRes.headers['content-disposition']).toContain(
         'my-data.json',
       );
+
+      // F11: recorded as the customer's own action, with no staff user borrowed.
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT al.actorUserId, al.actorLabel FROM auditlog al
+         JOIN shop s ON s.id = al.shopId
+         WHERE s.subdomain = ? AND al.action = 'CUSTOMER_DATA_EXPORT'`,
+        [shopA.shopSlug],
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].actorUserId).toBeNull();
+      expect(rows[0].actorLabel).toBe('customer (self-service)');
     });
 
     it('rejects a second export within 24h', async () => {

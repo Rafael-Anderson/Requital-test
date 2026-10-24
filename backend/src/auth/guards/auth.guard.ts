@@ -92,7 +92,7 @@ export class AuthGuard implements CanActivate {
     }
     const sid = isImpersonation ? null : payload.sid!;
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT u.id, u.shopId, u.role, u.outletId, s.suspendedAt,
+      `SELECT u.id, u.name, u.shopId, u.role, u.outletId, s.suspendedAt,
               EXISTS(SELECT 1 FROM refreshtoken r
                      WHERE r.familyId = ? AND r.userId = u.id
                        AND r.revokedAt IS NULL AND r.expiresAt > ?) AS sessionLive,
@@ -152,6 +152,7 @@ export class AuthGuard implements CanActivate {
       shopId: user.shopId,
       role: user.role as UserRole,
       outletId: user.outletId,
+      userName: user.name as string,
       ...(payload.imp !== undefined
         ? { impersonatedByPlatformAdminId: payload.imp }
         : {}),

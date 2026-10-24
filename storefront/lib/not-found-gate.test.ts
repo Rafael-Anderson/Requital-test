@@ -36,6 +36,13 @@ describe("notFoundIfMissing", () => {
     expect(notFound).not.toHaveBeenCalled();
   });
 
+  it("fails open on a throttled (429) probe or shop read: a busy backend is never a 404", async () => {
+    await notFoundIfMissing("s", () => Promise.reject(new HttpError("slow down", 429)));
+    getShop.mockRejectedValue(new HttpError("slow down", 429));
+    await notFoundIfMissing("s", () => Promise.reject(new HttpError("slow down", 404)));
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
   it("skips an unpublished shop (theme-builder preview reads 404 without its token)", async () => {
     getShop.mockResolvedValue({ published: false });
     await notFoundIfMissing("s", () => Promise.reject(new HttpError("nope", 404)));

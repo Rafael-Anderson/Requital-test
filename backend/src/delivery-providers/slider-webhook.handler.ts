@@ -127,6 +127,7 @@ export class SliderWebhookJobHandler implements OnModuleInit {
       shopId,
       role: 'admin',
       outletId: null,
+      systemActorLabel: 'system (Slider delivery)',
     };
     try {
       await this.ordersService.collectCash(ctx, orderId);

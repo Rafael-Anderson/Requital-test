@@ -461,26 +461,16 @@ export class CustomerAccountService {
     await this.logCustomerAction(shopId, customerId, 'CUSTOMER_DATA_DELETION');
   }
 
-  // AuditLog.actorUserId is a required FK to `user` (staff) — there's no
-  // actor-is-a-customer shape in that schema, so a customer-triggered
-  // action is attributed to the shop's own admin (every shop always has at
-  // least one — the last remaining admin can never be demoted/deleted),
-  // same synthesized-system-actor pattern as
-  // PaymentsService.applyAdvanceOrderStatus. metadata makes clear in the
-  // audit trail that the admin didn't personally do this.
+  // A customer is not a staff user, and auditlog.actorUserId is nullable, so a
+  // customer-triggered action is recorded with NO user and the label "customer
+  // (self-service)" rather than being attributed to a borrowed shop admin.
   private async logCustomerAction(
     shopId: number,
     customerId: number,
     action: 'CUSTOMER_DATA_EXPORT' | 'CUSTOMER_DATA_DELETION',
   ) {
-    const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT id FROM user WHERE shopId = ? AND role = 'admin' ORDER BY id ASC LIMIT 1`,
-      [shopId],
-    );
-    const admin = rows[0];
-    if (!admin) return;
     await this.auditLogService.log(
-      { shopId, actorUserId: admin.id as number },
+      { shopId, actorUserId: null, actorLabel: 'customer (self-service)' },
       {
         action,
         entityType: 'customer',

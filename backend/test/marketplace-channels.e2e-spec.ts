@@ -1122,6 +1122,16 @@ describe('Marketplace channels (E1)', () => {
       const after = await link(ca, o.externalOrderId);
       expect(after.state).toBe('cancelled_upstream');
       expect((await f.orderRow(co.orderId)).status).toBe('cancelled');
+      // F11/M2: the system cancel is attributed to the sync, not a real admin.
+      const cancelRows = await db.query<RowDataPacket[]>(
+        `SELECT actorUserId, actorLabel FROM auditlog
+         WHERE shopId = ? AND entityType = 'order' AND entityId = ? AND action = 'order.status_changed'
+           AND JSON_UNQUOTE(JSON_EXTRACT(\`after\`, '$.status')) = 'cancelled'`,
+        [a.shopId, co.orderId],
+      );
+      expect(cancelRows).toHaveLength(1);
+      expect(cancelRows[0].actorUserId).toBeNull();
+      expect(cancelRows[0].actorLabel).toBe('system (channel sync)');
       expect(await f.productStock(a.outletId, p.id)).toBe(10);
       expect(await f.ledgerSum(a.outletId, ing)).toBe(
         await f.stockOf(a.outletId, ing),

@@ -996,6 +996,8 @@ export class ChannelIngestionService {
       shopId,
       role: 'admin',
       outletId: null,
+      // Recorded as the sync, never as the admin whose id it borrows.
+      systemActorLabel: 'system (channel sync)',
     };
   }
 
