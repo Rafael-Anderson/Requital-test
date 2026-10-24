@@ -10,7 +10,10 @@ import { storefrontUrl } from '../common/storefront-url';
 import { isMarketplaceChannel } from '../channels/marketplace-channels';
 import { hasMarketingConsent, parseAttribution } from './attribution';
 import { ShopAnalyticsService } from './shop-analytics.service';
+import type { MetaCapiCredentials } from './shop-analytics.service';
 import { MetaCapiClient } from './meta-capi.client';
+import { TiktokEventsClient, buildTiktokPurchaseEvent } from './tiktok-events';
+import { SnapCapiClient, buildSnapPurchaseEvent } from './snap-capi';
 import {
   buildMetaPurchaseEvent,
   conversionValue,
@@ -25,6 +28,15 @@ const logger = createLogger('ConversionEvents');
 // job.idempotencyKey makes enqueue() return the existing row on a repeat.
 export function capiPurchaseIdempotencyKey(orderId: number): string {
   return `capi:purchase:${orderId}`;
+}
+
+// One key per platform. Meta's stays exactly as it was (jobs already queued
+// under it must still dedupe); the others are namespaced by platform.
+export type ConversionPlatform = SendConversionEventJobPayload['platform'];
+export function conversionIdempotencyKey(platform: ConversionPlatform, orderId: number): string {
+  return platform === 'meta'
+    ? capiPurchaseIdempotencyKey(orderId)
+    : `capi:${platform}:purchase:${orderId}`;
 }
 
 // Where Meta is told the conversion happened: the shop's own storefront home.
@@ -50,6 +62,8 @@ export class ConversionEventsService implements OnModuleInit {
     private readonly jobsWorkerService: JobsWorkerService,
     private readonly shopAnalyticsService: ShopAnalyticsService,
     private readonly metaCapiClient: MetaCapiClient,
+    private readonly tiktokEventsClient: TiktokEventsClient,
+    private readonly snapCapiClient: SnapCapiClient,
   ) {}
 
   onModuleInit(): void {
@@ -66,7 +80,22 @@ export class ConversionEventsService implements OnModuleInit {
   // Queues NOTHING unless (a) the shop has a pixel id AND a CAPI token and (b)
   // this order recorded marketing consent. Consent that is NULL (unknown) counts
   // as "no": silence is not permission.
-  async enqueuePurchase(orderId: number): Promise<number | null> {
+  //
+  // `paid: true` is passed ONLY by the paid-transition call sites in
+  // PaymentsService. TikTok and Snap are queued only then. What the browser does
+  // (storefront/lib/analytics.ts guardTokenUrls, lib/purchase-tracking.ts):
+  //  - pay on delivery / pickup: track("purchase") fires from the checkout page
+  //    (no token in the URL), so a server TikTok/Snap event would count it twice;
+  //  - online payment: the purchase is stashed at checkout and fired on
+  //    /orders/<token> once the server reports paid. That URL carries a bearer
+  //    token, so the browser sends it to GA4/Google Ads only (redacted) and SKIPS
+  //    Meta, TikTok and Snap. For those three the server event is the only
+  //    record of an online-payment order. Whether event_id / client_dedup_id
+  //    dedupes a pair when both do arrive is UNVERIFIED for TikTok and Snap.
+  async enqueuePurchase(
+    orderId: number,
+    opts: { paid?: boolean } = {},
+  ): Promise<number | null> {
     try {
       const rows = await this.db.query<RowDataPacket[]>(
         `SELECT id, shopId, channel, total, currency, attributionJson
@@ -80,26 +109,41 @@ export class ConversionEventsService implements OnModuleInit {
       if (isMarketplaceChannel(order.channel as string | null)) return null;
       if (!hasMarketingConsent(order.attributionJson)) return null;
       const shopId = order.shopId as number;
-      const creds =
-        await this.shopAnalyticsService.resolveMetaCapiCredentials(shopId);
-      if (!creds) return null;
-
       const currency = order.currency as string;
-      const job = await this.jobsService.enqueue(
+      const base = {
         shopId,
-        'send_conversion_event',
-        {
-          platform: 'meta',
-          shopId,
-          orderId,
-          eventId: purchaseEventId(orderId),
-          eventTime: Math.floor(Date.now() / 1000),
-          value: conversionValue(trimDecimal(order.total as string), currency),
-          currency,
-        } satisfies SendConversionEventJobPayload,
-        capiPurchaseIdempotencyKey(orderId),
-      );
-      return job.id;
+        orderId,
+        eventId: purchaseEventId(orderId),
+        eventTime: Math.floor(Date.now() / 1000),
+        value: conversionValue(trimDecimal(order.total as string), currency),
+        currency,
+      };
+      const wanted: ConversionPlatform[] = opts.paid
+        ? ['meta', 'tiktok', 'snap']
+        : ['meta'];
+      // The Meta job id is returned for compatibility (null when Meta is not
+      // configured); the other platforms are queued independently so one
+      // platform's failure cannot block another.
+      let metaJobId: number | null = null;
+      for (const platform of wanted) {
+        try {
+          if (!(await this.resolveCredentials(platform, shopId))) continue;
+          const job = await this.jobsService.enqueue(
+            shopId,
+            'send_conversion_event',
+            { platform, ...base } satisfies SendConversionEventJobPayload,
+            conversionIdempotencyKey(platform, orderId),
+          );
+          if (platform === 'meta') metaJobId = job.id;
+        } catch (error) {
+          logger.error('failed to enqueue conversion event', {
+            orderId,
+            platform,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      return metaJobId;
     } catch (error) {
       // Message only: never the error object, which could carry a decrypted
       // value if a future change widens what is in scope above.
@@ -111,11 +155,23 @@ export class ConversionEventsService implements OnModuleInit {
     }
   }
 
+  private resolveCredentials(platform: ConversionPlatform, shopId: number) {
+    switch (platform) {
+      case 'meta':
+        return this.shopAnalyticsService.resolveMetaCapiCredentials(shopId);
+      case 'tiktok':
+        return this.shopAnalyticsService.resolveTiktokCredentials(shopId);
+      case 'snap':
+        return this.shopAnalyticsService.resolveSnapCredentials(shopId);
+    }
+  }
+
   // The job handler. Throws on a real delivery failure so the worker retries with
   // backoff and eventually dead-letters; returns quietly when there is simply
   // nothing (any longer) to send.
   async sendConversion(payload: SendConversionEventJobPayload): Promise<void> {
-    if (payload.platform !== 'meta') return;
+    const platform = payload.platform;
+    if (platform !== 'meta' && platform !== 'tiktok' && platform !== 'snap') return;
     if (!Number.isInteger(payload.shopId) || !Number.isInteger(payload.orderId)) {
       return;
     }
@@ -137,9 +193,7 @@ export class ConversionEventsService implements OnModuleInit {
     // Re-checked at send time, not just at enqueue: the guard has to hold on the
     // path that actually talks to the third party.
     if (!hasMarketingConsent(order.attributionJson)) return;
-    const creds = await this.shopAnalyticsService.resolveMetaCapiCredentials(
-      payload.shopId,
-    );
+    const creds = await this.resolveCredentials(platform, payload.shopId);
     if (!creds) return;
 
     const items = await this.db.query<RowDataPacket[]>(
@@ -147,8 +201,9 @@ export class ConversionEventsService implements OnModuleInit {
       [payload.orderId],
     );
 
-    const event = buildMetaPurchaseEvent({
-      eventId: payload.eventId,
+    const input = {
+      // Recomputed, never trusted from the job payload.
+      eventId: purchaseEventId(payload.orderId),
       eventTimeSeconds: payload.eventTime,
       value: payload.value,
       currency: payload.currency,
@@ -163,13 +218,31 @@ export class ConversionEventsService implements OnModuleInit {
       })),
       attribution: parseAttribution(order.attributionJson),
       eventSourceUrl: capiEventSourceUrl(order),
-    });
+    };
 
-    await this.metaCapiClient.send({
-      pixelId: creds.pixelId,
-      accessToken: creds.accessToken,
-      events: [event],
-      testEventCode: creds.testEventCode,
-    });
+    if (platform === 'meta') {
+      const meta = creds as MetaCapiCredentials;
+      await this.metaCapiClient.send({
+        pixelId: meta.pixelId,
+        accessToken: meta.accessToken,
+        events: [buildMetaPurchaseEvent(input)],
+        testEventCode: meta.testEventCode,
+      });
+      return;
+    }
+    // TikTok / Snap: queued from the paid transition alone (see enqueuePurchase).
+    if (platform === 'tiktok') {
+      await this.tiktokEventsClient.send({
+        pixelCode: creds.pixelId,
+        accessToken: creds.accessToken,
+        events: [buildTiktokPurchaseEvent(input)],
+      });
+    } else {
+      await this.snapCapiClient.send({
+        pixelId: creds.pixelId,
+        accessToken: creds.accessToken,
+        events: [buildSnapPurchaseEvent(input)],
+      });
+    }
   }
 }

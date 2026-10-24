@@ -90,7 +90,7 @@ export interface RecomputeCustomerMetricsJobPayload {
 // moment-of-event data - when it happened and what the order was worth - so a
 // retry hours later still reports the original event.
 export interface SendConversionEventJobPayload {
-  platform: 'meta';
+  platform: 'meta' | 'tiktok' | 'snap';
   shopId: number;
   orderId: number;
   eventId: string;
