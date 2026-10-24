@@ -749,18 +749,16 @@ describe('Gateway failure recovery and idempotent checkout (e2e)', () => {
       const res = await place(shop, onlinePayload(product.id)).expect(201);
       const id = body<{ order: { id: number } }>(res).order.id;
       await f.cancelOrder(shop, id).expect(201);
-      await app
-        .get(PaymentsService)
-        .applyWebhookResult(
-          'stripe',
-          'stripe',
-          {
-            providerReference: `evt_h1d_${f.runId}`,
-            orderId: id,
-            status: 'failed',
-          },
-          shop.shopId,
-        );
+      await app.get(PaymentsService).applyWebhookResult(
+        'stripe',
+        'stripe',
+        {
+          providerReference: `evt_h1d_${f.runId}`,
+          orderId: id,
+          status: 'failed',
+        },
+        shop.shopId,
+      );
       expect(await lateJobs(id)).toHaveLength(0);
     });
   });
@@ -772,9 +770,16 @@ describe('Gateway failure recovery and idempotent checkout (e2e)', () => {
       }
       expect(stripe.calls.length).toBeGreaterThanOrEqual(n);
     };
+    // Every gate opened by a test is released afterwards even if the test failed
+    // part way, so a failing assertion cannot leave a request hanging.
+    const releases: (() => void)[] = [];
+    afterEach(() => {
+      releases.splice(0).forEach((r) => r());
+    });
     const open = () => {
       let release!: () => void;
       const gate = new Promise<void>((r) => (release = r));
+      releases.push(() => release());
       return { gate, release };
     };
     const payload = (productId: number) => ({
@@ -881,18 +886,16 @@ describe('Gateway failure recovery and idempotent checkout (e2e)', () => {
 
       // The shopper pays S2: the order settles.
       stripe.mode = 'ok';
-      await app
-        .get(PaymentsService)
-        .applyWebhookResult(
-          'stripe',
-          'stripe',
-          {
-            providerReference: `evt_m1c_${f.runId}`,
-            orderId: id,
-            status: 'paid',
-          },
-          shop.shopId,
-        );
+      await app.get(PaymentsService).applyWebhookResult(
+        'stripe',
+        'stripe',
+        {
+          providerReference: `evt_m1c_${f.runId}`,
+          orderId: id,
+          status: 'paid',
+        },
+        shop.shopId,
+      );
       const paid = await db.query<RowDataPacket[]>(
         `SELECT status, paymentStatus FROM \`order\` WHERE id = ?`,
         [id],
