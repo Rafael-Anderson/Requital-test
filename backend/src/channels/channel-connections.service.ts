@@ -297,11 +297,14 @@ export class ChannelConnectionsService {
       dto.externalSiteId !== undefined ||
       dto.credentials !== undefined
     ) {
-      sets.push(
-        'locationVerifiedAt = NULL',
-        'locationVerifiedBy = NULL',
-        'verificationRequestedAt = NULL',
-      );
+      sets.push('locationVerifiedAt = NULL', 'locationVerifiedBy = NULL');
+      // The merchant's pending request is withdrawn only when an id ACTUALLY
+      // changed (or credentials were replaced, which cannot be compared): a PATCH
+      // that repeats the stored values must not drop it from the staff queue. The
+      // once-a-day cooldown is separate (verificationNotifiedAt) and never cleared.
+      if (idChange || dto.credentials !== undefined) {
+        sets.push('verificationRequestedAt = NULL');
+      }
     }
     if (dto.autoConfirmScheduled !== undefined) {
       // Only a marketplace that has a confirm step can have it automated.
@@ -568,11 +571,15 @@ export class ChannelConnectionsService {
       );
     }
     const now = new Date();
+    // The gate is verificationNotifiedAt, which only a request writes: a PATCH
+    // (even one that repeats the same id) clears verificationRequestedAt but can
+    // never reset the cooldown or re-trigger the staff notification.
     const res = await this.db.execute(
-      `UPDATE channelconnection SET verificationRequestedAt = ?, updatedAt = ?
+      `UPDATE channelconnection SET verificationRequestedAt = ?, verificationNotifiedAt = ?, updatedAt = ?
         WHERE id = ? AND shopId = ? AND locationVerifiedAt IS NULL AND externalLocationId IS NOT NULL
-          AND (verificationRequestedAt IS NULL OR verificationRequestedAt < ?)`,
+          AND (verificationNotifiedAt IS NULL OR verificationNotifiedAt < ?)`,
       [
+        now,
         now,
         now,
         id,

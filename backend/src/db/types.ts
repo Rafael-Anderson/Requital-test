@@ -1703,6 +1703,8 @@ export interface ChannelconnectionRow {
   locationVerifiedBy: number | null;
   // The merchant asked staff to verify (once a day); cleared with the ids.
   verificationRequestedAt: Date | null;
+  // Once-a-day gate for the request; only a request writes it, a PATCH never clears it.
+  verificationNotifiedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   // Generated: non-NULL only while enabled with a location id (UNIQUE).
@@ -1750,6 +1752,8 @@ export interface ChannelorderRow {
   confirmBy: Date | null;
   confirmedAt: Date | null;
   confirmClaimedAt: Date | null;
+  confirmAttempts: number;
+  readyClaimedAt: Date | null;
   // Set when a person marked the order ready for collection.
   readyAt: Date | null;
   currency: string;

@@ -644,6 +644,127 @@ describe('Marketplace follow-ups (E5)', () => {
       }
     });
 
+    it('L2: orders at an outlet with no number to alert never starve the others out of the alert batch', async () => {
+      const bare = body<{ id: number }>(
+        await r()
+          .post('/outlets')
+          .set(h(a))
+          .send({ name: `NoNumber ${f.uniq()}` })
+          .expect(201),
+      );
+      await db.execute(
+        `UPDATE outlet SET whatsapp = NULL, phone = NULL WHERE id = ?`,
+        [bare.id],
+      );
+      const tmpl = await orderFor(ca, { confirmInMin: 12, accept: true });
+      // 60 earlier-deadline orders at the number-less outlet (more than one batch).
+      for (let i = 0; i < 60; i++) {
+        await db.execute(
+          `INSERT INTO channelorder (shopId, connectionId, outletId, provider, externalOrderId, displayId, orderId, state, externalStatus,
+             scheduledFor, confirmBy, currency, payloadHash, receivedAt, updatedAt)
+           SELECT shopId, connectionId, ?, provider, CONCAT('starve-', ?, '-', ?), displayId, NULL, state, externalStatus,
+             scheduledFor, DATE_SUB(confirmBy, INTERVAL 5 MINUTE), currency, CONCAT('h-starve-', ?, '-', ?), receivedAt, updatedAt
+           FROM channelorder WHERE id = ?`,
+          [bare.id, f.runId, i, f.runId, i, tmpl.co.id],
+        );
+      }
+      await sweep.runOnce();
+      expect(
+        await jobsLike(a.shopId, `channelorder:${tmpl.co.id}:confirm-alert`),
+      ).toHaveLength(1);
+      await db.execute(
+        `DELETE FROM channelorder WHERE externalOrderId LIKE ?`,
+        [`starve-${f.runId}-%`],
+      );
+    });
+
+    it('L3: automatic confirm gives up after 5 attempts and then ONE escalation alert goes out', async () => {
+      await db.execute(
+        `UPDATE channelconnection SET autoConfirmScheduled = 1 WHERE id = ?`,
+        [ca.id],
+      );
+      const spy = jest
+        .spyOn(stub, 'confirmScheduledOrder')
+        .mockResolvedValue({ ok: false, message: 'down' });
+      try {
+        const { co } = await orderFor(ca, { confirmInMin: 10, accept: true });
+        for (let i = 0; i < 8; i++) {
+          await db.execute(
+            `UPDATE channelorder SET confirmClaimedAt = NULL WHERE id = ?`,
+            [co.id],
+          );
+          await sweep.runOnce();
+        }
+        expect(
+          spy.mock.calls.filter((c) => c[1] === co.externalOrderId),
+        ).toHaveLength(5);
+        const row = await linkById(co.id);
+        expect(row.confirmAttempts).toBe(5);
+        expect(row.confirmedAt).toBeNull();
+        expect(
+          await jobsLike(a.shopId, `channelorder:${co.id}:confirm-alert`),
+        ).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+        await db.execute(
+          `UPDATE channelconnection SET autoConfirmScheduled = 0 WHERE id = ?`,
+          [ca.id],
+        );
+      }
+    });
+
+    it('L4: an order of a provider without the confirm step is not selected, so it cannot hold a batch slot or burn attempts', async () => {
+      await db.execute(
+        `UPDATE channelconnection SET autoConfirmScheduled = 1 WHERE id = ?`,
+        [ca.id],
+      );
+      try {
+        const { co } = await orderFor(ca, { confirmInMin: 10, accept: true });
+        stub.scheduledConfirm = false;
+        await sweep.runOnce();
+        const row = await linkById(co.id);
+        expect(row.confirmAttempts).toBe(0);
+        expect(row.confirmClaimedAt).toBeNull();
+        expect(
+          stub.calls.filter((c) => c.method === 'confirmScheduledOrder'),
+        ).toEqual([]);
+      } finally {
+        stub.scheduledConfirm = true;
+        await db.execute(
+          `UPDATE channelconnection SET autoConfirmScheduled = 0 WHERE id = ?`,
+          [ca.id],
+        );
+      }
+    });
+
+    it('L5: a suspended shop is neither auto-confirmed nor alerted', async () => {
+      await db.execute(
+        `UPDATE channelconnection SET autoConfirmScheduled = 1 WHERE id = ?`,
+        [ca.id],
+      );
+      const { co } = await orderFor(ca, { confirmInMin: 10, accept: true });
+      await db.execute(`UPDATE shop SET suspendedAt = NOW() WHERE id = ?`, [
+        a.shopId,
+      ]);
+      try {
+        await sweep.runOnce();
+        expect(
+          stub.calls.filter((c) => c.method === 'confirmScheduledOrder'),
+        ).toEqual([]);
+        expect(
+          await jobsLike(a.shopId, `channelorder:${co.id}:confirm-alert`),
+        ).toHaveLength(0);
+      } finally {
+        await db.execute(`UPDATE shop SET suspendedAt = NULL WHERE id = ?`, [
+          a.shopId,
+        ]);
+        await db.execute(
+          `UPDATE channelconnection SET autoConfirmScheduled = 0 WHERE id = ?`,
+          [ca.id],
+        );
+      }
+    });
+
     it('the opt-in is a merchant-admin setting: another shop gets 404, a provider without the step is refused, a non-admin gets 403', async () => {
       await r()
         .patch(`/channels/connections/${ca.id}`)
@@ -756,14 +877,50 @@ describe('Marketplace follow-ups (E5)', () => {
       expect((await linkById(co.id)).readyAt).toBeNull();
     });
 
-    it('two simultaneous presses both succeed and leave a single readyAt', async () => {
+    it('two simultaneous presses call the marketplace once, audit once and leave a single readyAt (the loser gets the settled answer or a 409)', async () => {
       const { co } = await orderFor(ca, { accept: true });
       const out = await Promise.all([
         r().post(`/channels/orders/${co.id}/ready`).set(h(a)),
         r().post(`/channels/orders/${co.id}/ready`).set(h(a)),
       ]);
-      expect(out.every((x) => x.status === 201)).toBe(true);
+      expect(out.map((x) => x.status).sort()).toEqual(
+        expect.arrayContaining([201]),
+      );
+      expect(out.every((x) => [201, 409].includes(x.status))).toBe(true);
       expect((await linkById(co.id)).readyAt).not.toBeNull();
+      expect(stub.calls.filter((c) => c.method === 'markReady')).toHaveLength(
+        1,
+      );
+      expect(
+        await auditRows(a.shopId, 'channel_order.marked_ready', co.id),
+      ).toHaveLength(1);
+    });
+
+    it('a failed press gives the claim back so the next press can retry at once', async () => {
+      const { co } = await orderFor(ca, { accept: true });
+      stub.failNext.add('markReady');
+      await r().post(`/channels/orders/${co.id}/ready`).set(h(a)).expect(502);
+      expect((await linkById(co.id)).readyClaimedAt).toBeNull();
+      await r().post(`/channels/orders/${co.id}/ready`).set(h(a)).expect(201);
+      expect(
+        await auditRows(a.shopId, 'channel_order.marked_ready', co.id),
+      ).toHaveLength(1);
+    });
+
+    it('two simultaneous confirm presses call the marketplace once and audit once', async () => {
+      const { co } = await orderFor(ca, { confirmInMin: 120, accept: true });
+      const out = await Promise.all([
+        r().post(`/channels/orders/${co.id}/confirm-scheduled`).set(h(a)),
+        r().post(`/channels/orders/${co.id}/confirm-scheduled`).set(h(a)),
+      ]);
+      expect(out.every((x) => [201, 409].includes(x.status))).toBe(true);
+      expect(out.some((x) => x.status === 201)).toBe(true);
+      expect(
+        stub.calls.filter((c) => c.method === 'confirmScheduledOrder'),
+      ).toHaveLength(1);
+      expect(
+        await auditRows(a.shopId, 'channel_order.scheduled_confirmed', co.id),
+      ).toHaveLength(1);
     });
   });
 
@@ -1010,8 +1167,12 @@ describe('Marketplace follow-ups (E5)', () => {
       expect(mine.webhookSecret).toBeUndefined();
       // A day later it may be asked again.
       await db.execute(
-        `UPDATE channelconnection SET verificationRequestedAt = ? WHERE id = ?`,
-        [new Date(Date.now() - 25 * 3_600_000), c.id],
+        `UPDATE channelconnection SET verificationRequestedAt = ?, verificationNotifiedAt = ? WHERE id = ?`,
+        [
+          new Date(Date.now() - 25 * 3_600_000),
+          new Date(Date.now() - 25 * 3_600_000),
+          c.id,
+        ],
       );
       await r()
         .post(`/channels/connections/${c.id}/request-verification`)
@@ -1028,12 +1189,26 @@ describe('Marketplace follow-ups (E5)', () => {
         .expect(409);
     });
 
-    it('is cleared in the same statement as an id or credential change, and not by a secret-free edit', async () => {
+    it('a PATCH that repeats the stored id changes nothing, and no PATCH can reset the once-a-day cooldown (M1)', async () => {
       const c = await unverified(a);
+      captured.mockClear();
       await r()
         .post(`/channels/connections/${c.id}/request-verification`)
         .set(h(a))
         .expect(201);
+      // The SAME id again: not a change, so the request stays and the cooldown holds.
+      await r()
+        .patch(`/channels/connections/${c.id}`)
+        .set(h(a))
+        .send({ externalLocationId: c.locationId })
+        .expect(200);
+      expect((await connRow(c.id)).verificationRequestedAt).not.toBeNull();
+      await r()
+        .post(`/channels/connections/${c.id}/request-verification`)
+        .set(h(a))
+        .expect(429);
+      // Even an ACTUAL id or credential change withdraws the request but cannot
+      // buy a second staff notification inside the day.
       await r()
         .patch(`/channels/connections/${c.id}`)
         .set(h(a))
@@ -1049,13 +1224,17 @@ describe('Marketplace follow-ups (E5)', () => {
       await r()
         .post(`/channels/connections/${c.id}/request-verification`)
         .set(h(a))
-        .expect(201);
+        .expect(429);
       await r()
         .patch(`/channels/connections/${c.id}`)
         .set(h(a))
         .send({ credentials: { token: `t-${f.uniq()}` } })
         .expect(200);
-      expect((await connRow(c.id)).verificationRequestedAt).toBeNull();
+      await r()
+        .post(`/channels/connections/${c.id}/request-verification`)
+        .set(h(a))
+        .expect(429);
+      expect(captured).toHaveBeenCalledTimes(1);
     });
 
     it('is admin only, flag gated, needs a location id, and is invisible across shops', async () => {

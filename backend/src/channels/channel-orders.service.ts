@@ -25,6 +25,9 @@ import type {
 
 const logger = createLogger('ChannelOrders');
 
+// A press's claim on an order is reclaimable after this (a crashed request).
+export const CLAIM_STALE_SECONDS = 120;
+
 // Which capability flag guards which provider method.
 const PROVIDER_METHOD_CAPABILITY = {
   acceptOrder: 'acceptReject',
@@ -206,11 +209,47 @@ export class ChannelOrdersService {
     return this.one(ctx, id);
   }
 
+  // A press claims the order BEFORE the marketplace is called (one CAS, stale
+  // after CLAIM_STALE_SECONDS), so two simultaneous presses call the marketplace
+  // once and audit once. false = somebody else holds a fresh claim.
+  private async claim(
+    co: ChannelorderRow,
+    column: 'readyClaimedAt' | 'confirmClaimedAt',
+    done: 'readyAt' | 'confirmedAt',
+  ): Promise<Date | false> {
+    const at = new Date();
+    const res = await this.db.execute(
+      `UPDATE channelorder SET ${column} = ?, updatedAt = ?
+        WHERE id = ? AND shopId = ? AND state = 'accepted' AND ${done} IS NULL
+          AND (${column} IS NULL OR ${column} < ?)`,
+      [
+        at,
+        at,
+        co.id,
+        co.shopId,
+        new Date(at.getTime() - CLAIM_STALE_SECONDS * 1000),
+      ],
+    );
+    return res.affectedRows > 0 ? at : false;
+  }
+
+  // Failure changes nothing: give the claim back so the next press can retry.
+  private async release(
+    co: ChannelorderRow,
+    column: 'readyClaimedAt' | 'confirmClaimedAt',
+    at: Date,
+  ): Promise<void> {
+    await this.db.execute(
+      `UPDATE channelorder SET ${column} = NULL WHERE id = ? AND shopId = ? AND ${column} = ?`,
+      [co.id, co.shopId, at],
+    );
+  }
+
   // "Ready for collection": a deliberate HUMAN action (the marketplace docs say
   // it must never be automatic), so nothing in the sweep calls it. Only an
-  // accepted order with a Requital order behind it. The marketplace is told first;
-  // readyAt is then set by CAS (a repeat finds it set and is a no-op, so the
-  // marketplace is not told twice).
+  // accepted order with a Requital order behind it. Claim, tell the marketplace,
+  // then set readyAt by CAS; the audit row is written only by the press whose CAS
+  // affected the row.
   async markReady(ctx: TenantContext, id: number) {
     const co = await this.load(ctx, id);
     if (co.readyAt) return this.one(ctx, id);
@@ -219,28 +258,38 @@ export class ChannelOrdersService {
         'Only an accepted order can be marked ready for collection',
       );
     }
-    await this.callProvider(
-      co,
-      'mark it ready',
-      'markReady',
-      (provider, conn) => provider.markReady!(conn, co.externalOrderId),
-    );
-    await this.db.execute(
-      `UPDATE channelorder SET readyAt = ?, updatedAt = ?
+    const at = await this.claim(co, 'readyClaimedAt', 'readyAt');
+    if (!at) return this.settledOrBusy(ctx, id, 'readyAt');
+    try {
+      await this.callProvider(
+        co,
+        'mark it ready',
+        'markReady',
+        (provider, conn) => provider.markReady!(conn, co.externalOrderId),
+      );
+    } catch (e) {
+      await this.release(co, 'readyClaimedAt', at);
+      throw e;
+    }
+    const res = await this.db.execute(
+      `UPDATE channelorder SET readyAt = ?, readyClaimedAt = NULL, updatedAt = ?
         WHERE id = ? AND shopId = ? AND state = 'accepted' AND readyAt IS NULL`,
       [new Date(), new Date(), co.id, co.shopId],
     );
-    await this.audit.logCtx(ctx, {
-      action: 'channel_order.marked_ready',
-      entityType: 'channelorder',
-      entityId: co.id,
-      after: { provider: co.provider, externalOrderId: co.externalOrderId },
-    });
+    if (res.affectedRows > 0) {
+      await this.audit.logCtx(ctx, {
+        action: 'channel_order.marked_ready',
+        entityType: 'channelorder',
+        entityId: co.id,
+        after: { provider: co.provider, externalOrderId: co.externalOrderId },
+      });
+    }
     return this.one(ctx, id);
   }
 
-  // The second step of a SCHEDULED order. Same shape as accept: marketplace
-  // first, then a CAS on confirmedAt IS NULL; confirming twice is safe.
+  // The second step of a SCHEDULED order. Same shape: claim, marketplace, CAS on
+  // confirmedAt IS NULL, audit only for the winner. It shares confirmClaimedAt
+  // with the sweep, so a press and an automatic confirm cannot both call out.
   async confirmScheduled(ctx: TenantContext, id: number) {
     const co = await this.load(ctx, id);
     if (co.confirmedAt) return this.one(ctx, id);
@@ -252,25 +301,51 @@ export class ChannelOrdersService {
     if (co.confirmBy === null && co.scheduledFor === null) {
       throw new ConflictException('This is not a scheduled order');
     }
-    await this.callProvider(
-      co,
-      'confirm',
-      'confirmScheduledOrder',
-      (provider, conn) =>
-        provider.confirmScheduledOrder!(conn, co.externalOrderId),
-    );
-    await this.db.execute(
+    const at = await this.claim(co, 'confirmClaimedAt', 'confirmedAt');
+    if (!at) return this.settledOrBusy(ctx, id, 'confirmedAt');
+    try {
+      await this.callProvider(
+        co,
+        'confirm',
+        'confirmScheduledOrder',
+        (provider, conn) =>
+          provider.confirmScheduledOrder!(conn, co.externalOrderId),
+      );
+    } catch (e) {
+      await this.release(co, 'confirmClaimedAt', at);
+      throw e;
+    }
+    const res = await this.db.execute(
       `UPDATE channelorder SET confirmedAt = ?, confirmClaimedAt = NULL, updatedAt = ?
         WHERE id = ? AND shopId = ? AND state = 'accepted' AND confirmedAt IS NULL`,
       [new Date(), new Date(), co.id, co.shopId],
     );
-    await this.audit.logCtx(ctx, {
-      action: 'channel_order.scheduled_confirmed',
-      entityType: 'channelorder',
-      entityId: co.id,
-      after: { provider: co.provider, externalOrderId: co.externalOrderId },
-    });
+    if (res.affectedRows > 0) {
+      await this.audit.logCtx(ctx, {
+        action: 'channel_order.scheduled_confirmed',
+        entityType: 'channelorder',
+        entityId: co.id,
+        after: { provider: co.provider, externalOrderId: co.externalOrderId },
+      });
+    }
     return this.one(ctx, id);
+  }
+
+  // The claim was refused: either a concurrent press already finished (answer
+  // idempotently, nothing is sent or audited here) or one is still in flight.
+  private async settledOrBusy(
+    ctx: TenantContext,
+    id: number,
+    done: 'readyAt' | 'confirmedAt',
+  ) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT ${done} AS doneAt FROM channelorder WHERE id = ? AND shopId = ?`,
+      [id, ctx.shopId],
+    );
+    if (rows[0]?.doneAt) return this.one(ctx, id);
+    throw new ConflictException(
+      'Another request for this order is in progress; try again in a moment',
+    );
   }
 
   // accept/reject: a provider that cannot do it over an API (capability off) is

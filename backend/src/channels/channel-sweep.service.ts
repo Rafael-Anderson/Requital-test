@@ -42,6 +42,12 @@ export const CONFIRM_CLAIM_STALE_SECONDS = 120;
 // Provider calls hold the 55 s sweep lock (each may retry with sleeps), so few
 // per tick and a wall-clock budget.
 const CONFIRM_BATCH = 3;
+// Automatic confirm gives up after this many attempts for one order; the single
+// alert (job key channelorder:<id>:confirm-alert) then tells the merchant to do it.
+export const CONFIRM_MAX_ATTEMPTS = 5;
+// Candidate window scanned for alerts, so orders that cannot be alerted never
+// starve later ones out of the BATCH.
+const ALERT_SCAN = 200;
 const CONFIRM_BUDGET_MS = 30_000;
 
 // Everything that makes "accepted orders are never lost" true when a webhook did
@@ -252,17 +258,26 @@ export class ChannelSweepService {
     let alerted = 0;
     let confirmed = 0;
 
+    // Only orders whose outlet has a number to alert (the rest could never be
+    // alerted and would otherwise sit at the front of the queue), whose shop is
+    // not suspended, and which are not already alerted. The scan is wider than
+    // the batch so an order whose number fails to normalise cannot starve the
+    // others either.
     const toAlert = await this.db.query<(ChannelorderRow & RowDataPacket)[]>(
       `SELECT co.* FROM channelorder co
          JOIN channelconnection c ON c.id = co.connectionId AND c.shopId = co.shopId
+         JOIN shop s ON s.id = co.shopId AND s.suspendedAt IS NULL
+         JOIN outlet ou ON ou.id = co.outletId AND ou.shopId = co.shopId
         WHERE co.state = 'accepted' AND co.confirmedAt IS NULL AND co.confirmBy IS NOT NULL
           AND co.confirmBy <= ? AND co.confirmBy > ?
-          AND (c.autoConfirmScheduled = 0 OR co.confirmBy < ?)
+          AND (c.autoConfirmScheduled = 0 OR co.confirmBy < ? OR co.confirmAttempts >= ?)
+          AND ((ou.whatsapp IS NOT NULL AND ou.whatsapp <> '') OR (ou.phone IS NOT NULL AND ou.phone <> ''))
           AND NOT EXISTS (SELECT 1 FROM job j WHERE j.idempotencyKey = CONCAT('channelorder:', co.id, ':confirm-alert'))
         ORDER BY co.confirmBy ASC LIMIT ?`,
-      [horizon, giveUp, now, BATCH],
+      [horizon, giveUp, now, CONFIRM_MAX_ATTEMPTS, ALERT_SCAN],
     );
     for (const co of toAlert) {
+      if (alerted >= BATCH) break;
       const to = await this.notifications.resolveMerchantAlertRecipient(
         co.shopId,
         co.outletId,
@@ -280,41 +295,57 @@ export class ChannelSweepService {
       alerted += 1;
     }
 
+    // Automatic confirm. Only providers that can confirm (so an order of a
+    // provider without the step cannot hold a batch slot forever), not a
+    // suspended shop, and at most CONFIRM_MAX_ATTEMPTS tries per order.
+    // NOTE: the marketplace_channels flag does NOT stop this (an accepted order
+    // is never abandoned because the flag was switched off), same as polling.
+    const capable = this.registry.names().filter((n) => {
+      const p = this.registry.find(n);
+      return !!p?.capabilities.scheduledConfirm && 'confirmScheduledOrder' in p;
+    });
     const started = Date.now();
-    const due = await this.db.query<(ChannelorderRow & RowDataPacket)[]>(
-      `SELECT co.* FROM channelorder co
-         JOIN channelconnection c ON c.id = co.connectionId AND c.shopId = co.shopId
-        WHERE co.state = 'accepted' AND co.confirmedAt IS NULL AND co.confirmBy IS NOT NULL
-          AND co.confirmBy <= ? AND co.confirmBy > ?
-          AND c.autoConfirmScheduled = 1 AND c.enabled = 1
-          AND (co.confirmClaimedAt IS NULL OR co.confirmClaimedAt < ?)
-        ORDER BY co.confirmBy ASC LIMIT ?`,
-      [
-        horizon,
-        giveUp,
-        new Date(now.getTime() - CONFIRM_CLAIM_STALE_SECONDS * 1000),
-        CONFIRM_BATCH,
-      ],
-    );
+    const due =
+      capable.length === 0
+        ? []
+        : await this.db.query<(ChannelorderRow & RowDataPacket)[]>(
+            `SELECT co.* FROM channelorder co
+               JOIN channelconnection c ON c.id = co.connectionId AND c.shopId = co.shopId
+               JOIN shop s ON s.id = co.shopId AND s.suspendedAt IS NULL
+              WHERE co.state = 'accepted' AND co.confirmedAt IS NULL AND co.confirmBy IS NOT NULL
+                AND co.confirmBy <= ? AND co.confirmBy > ?
+                AND co.provider IN (${capable.map(() => '?').join(', ')})
+                AND co.confirmAttempts < ?
+                AND c.autoConfirmScheduled = 1 AND c.enabled = 1
+                AND (co.confirmClaimedAt IS NULL OR co.confirmClaimedAt < ?)
+              ORDER BY co.confirmBy ASC LIMIT ?`,
+            [
+              horizon,
+              giveUp,
+              ...capable,
+              CONFIRM_MAX_ATTEMPTS,
+              new Date(now.getTime() - CONFIRM_CLAIM_STALE_SECONDS * 1000),
+              CONFIRM_BATCH,
+            ],
+          );
     for (const co of due) {
       if (Date.now() - started > CONFIRM_BUDGET_MS) break;
       const provider = this.registry.find(co.provider);
-      if (
-        !provider?.capabilities.scheduledConfirm ||
-        !provider.confirmScheduledOrder
-      )
-        continue;
-      // Claim BEFORE the provider call. A lost claim sends nothing; a claim that
-      // is never released (crash, failure) is retried after the stale window.
+      if (!provider?.confirmScheduledOrder) continue;
+      // Claim BEFORE the provider call, counting the attempt. A lost claim sends
+      // nothing; a claim that is never released (crash, failure) is retried after
+      // the stale window, up to CONFIRM_MAX_ATTEMPTS.
       const claim = await this.db.execute(
-        `UPDATE channelorder SET confirmClaimedAt = ?, updatedAt = ?
+        `UPDATE channelorder SET confirmClaimedAt = ?, confirmAttempts = confirmAttempts + 1, updatedAt = ?
           WHERE id = ? AND shopId = ? AND state = 'accepted' AND confirmedAt IS NULL
+            AND confirmAttempts < ?
             AND (confirmClaimedAt IS NULL OR confirmClaimedAt < ?)`,
         [
           new Date(),
           new Date(),
           co.id,
           co.shopId,
+          CONFIRM_MAX_ATTEMPTS,
           new Date(Date.now() - CONFIRM_CLAIM_STALE_SECONDS * 1000),
         ],
       );
@@ -333,8 +364,11 @@ export class ChannelSweepService {
           channelOrderId: co.id,
           shopId: co.shopId,
           provider: co.provider,
+          attempt: co.confirmAttempts + 1,
           error: e instanceof Error ? e.message.slice(0, 200) : String(e),
         });
+        // The last attempt: stop retrying, and the alert query above (which now
+        // matches confirmAttempts >= max) sends the single escalation next tick.
         continue;
       }
       const done = await this.db.execute(

@@ -4,12 +4,16 @@
 --                    (Deliveroo confirm_at; which field is the real deadline is UNVERIFIED)
 --   confirmedAt      when the scheduled order was confirmed (by us or on the tablet)
 --   confirmClaimedAt CAS claim taken before the provider call (stale after 2 minutes)
+--   confirmAttempts  automatic confirm attempts so far (capped, then one escalation alert)
+--   readyClaimedAt   CAS claim taken before the "ready" provider call (stale after 2 minutes)
 --   readyAt          when a person marked the order ready for collection
 ALTER TABLE `channelorder`
   ADD COLUMN `confirmBy` DATETIME(3) NULL AFTER `scheduledFor`,
   ADD COLUMN `confirmedAt` DATETIME(3) NULL AFTER `confirmBy`,
   ADD COLUMN `confirmClaimedAt` DATETIME(3) NULL AFTER `confirmedAt`,
-  ADD COLUMN `readyAt` DATETIME(3) NULL AFTER `confirmClaimedAt`;
+  ADD COLUMN `confirmAttempts` INT NOT NULL DEFAULT 0 AFTER `confirmClaimedAt`,
+  ADD COLUMN `readyClaimedAt` DATETIME(3) NULL AFTER `confirmAttempts`,
+  ADD COLUMN `readyAt` DATETIME(3) NULL AFTER `readyClaimedAt`;
 
 -- Per-connection opt-in: when 1 the sweep may confirm accepted scheduled orders
 -- itself. OFF by default: confirming commits the merchant to prepare the order.
