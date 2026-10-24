@@ -322,6 +322,57 @@ export function resetShopUserTwoFactor(shopId: number, userId: number) {
   );
 }
 
+// Marketplace channel connections of one shop, for staff verification. The API
+// never sends a credential or secret. The three ids are shown read-only and are
+// RESTATED to verify (the server matches only if they are still the stored ones).
+export interface PlatformChannelConnection {
+  id: number;
+  shopId: number;
+  outletId: number;
+  outletName: string | null;
+  provider: string;
+  providerDisplayName: string;
+  externalLocationId: string | null;
+  externalBrandId: string | null;
+  externalSiteId: string | null;
+  enabled: boolean;
+  locationVerifiedAt: string | null;
+  locationVerifiedBy: number | null;
+  verificationRequestedAt: string | null;
+}
+
+export interface PendingChannelVerification extends PlatformChannelConnection {
+  shopName: string | null;
+  shopSubdomain: string | null;
+}
+
+export function listPlatformChannelConnections(shopId: number) {
+  return platformFetch<PlatformChannelConnection[]>(`/platform-admin/shops/${shopId}/channel-connections`);
+}
+
+export function listPendingChannelVerifications() {
+  return platformFetch<PendingChannelVerification[]>("/platform-admin/channel-connections/pending-verification");
+}
+
+export function verifyChannelLocation(
+  shopId: number,
+  id: number,
+  ids: { externalLocationId: string; externalBrandId: string | null; externalSiteId: string | null },
+) {
+  return platformFetch<PlatformChannelConnection>(
+    `/platform-admin/shops/${shopId}/channel-connections/${id}/verify-location`,
+    { method: "POST", body: JSON.stringify(ids) },
+  );
+}
+
+// Also DISABLES the connection (the backend does both in one statement).
+export function unverifyChannelLocation(shopId: number, id: number) {
+  return platformFetch<PlatformChannelConnection>(
+    `/platform-admin/shops/${shopId}/channel-connections/${id}/unverify-location`,
+    { method: "POST" },
+  );
+}
+
 export interface SliderQuoteVehicle {
   vehicleType: string;
   deliveryFee: number;

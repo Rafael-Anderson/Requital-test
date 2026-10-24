@@ -62,11 +62,17 @@ export class StubChannelProvider implements ChannelProvider {
   // default, so the stub exercises the real path (platform staff verify the
   // location); tests flip it to cover the merchant-bound branch.
   merchantBoundProof = false;
+  // Scheduled-order confirm and prep-time adjust, switchable so the 409 path of a
+  // provider without them is testable.
+  scheduledConfirm = true;
+  prepTimeAdjust = false;
   get capabilities() {
     return {
       ...NO_CAPABILITIES,
       acceptReject: true,
       markReady: true,
+      scheduledConfirm: this.scheduledConfirm,
+      prepTimeAdjust: this.prepTimeAdjust,
       itemAvailability: true,
       fetchOrderStatus: true,
       pollOrders: true,
@@ -98,6 +104,8 @@ export class StubChannelProvider implements ChannelProvider {
     this.statuses.clear();
     this.testConnectionOk = true;
     this.merchantBoundProof = false;
+    this.scheduledConfirm = true;
+    this.prepTimeAdjust = false;
     this.onTestConnection = undefined;
   }
 
@@ -209,6 +217,23 @@ export class StubChannelProvider implements ChannelProvider {
   ): Promise<ProviderCallResult> {
     this.record('rejectOrder', externalOrderId, { reason });
     this.statuses.set(externalOrderId, 'rejected');
+    return Promise.resolve({ ok: true });
+  }
+
+  confirmScheduledOrder(
+    _conn: BoundChannelConnection,
+    externalOrderId: string,
+  ): Promise<ProviderCallResult> {
+    this.record('confirmScheduledOrder', externalOrderId);
+    this.statuses.set(externalOrderId, 'accepted');
+    return Promise.resolve({ ok: true });
+  }
+
+  adjustPrepTime(
+    _conn: BoundChannelConnection,
+    minutes: number,
+  ): Promise<ProviderCallResult> {
+    this.record('adjustPrepTime', undefined, { minutes });
     return Promise.resolve({ ok: true });
   }
 

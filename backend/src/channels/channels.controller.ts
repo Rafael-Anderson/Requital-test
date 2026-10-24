@@ -24,7 +24,9 @@ import {
   ListChannelOrdersQueryDto,
   RejectChannelOrderDto,
   ResolveUnmappedItemDto,
+  SetChannelAvailabilityDto,
   SetChannelEnabledDto,
+  SetChannelPrepTimeDto,
   UpdateChannelConnectionDto,
 } from './dto/channels.dto';
 
@@ -47,6 +49,9 @@ export class ChannelsController {
     private readonly registry: ChannelProviderRegistry,
   ) {}
 
+  // Names, labels and capabilities only (no secret): the orders desk needs the
+  // capabilities to know which buttons to offer, so desk roles may read it too.
+  @Roles('admin', 'branch', 'order_manager')
   @Get('providers')
   providers() {
     return this.registry.names().map((n) => {
@@ -98,6 +103,33 @@ export class ChannelsController {
     @Body() dto: SetChannelEnabledDto,
   ) {
     return this.connections.setEnabled(ctx, id, dto.enabled);
+  }
+
+  // Admin only. Item ids are checked against this shop's mappings.
+  @Post('connections/:id/availability')
+  setAvailability(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SetChannelAvailabilityDto,
+  ) {
+    return this.connections.setAvailability(ctx, id, dto);
+  }
+
+  @Post('connections/:id/prep-time')
+  setPrepTime(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SetChannelPrepTimeDto,
+  ) {
+    return this.connections.setPrepTime(ctx, id, dto.minutes);
+  }
+
+  @Post('connections/:id/request-verification')
+  requestVerification(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.connections.requestVerification(ctx, id);
   }
 
   @Post('connections/:id/test')
@@ -173,6 +205,24 @@ export class ChannelsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.orders.accept(ctx, id);
+  }
+
+  @Roles('admin', 'branch', 'order_manager')
+  @Post('orders/:id/ready')
+  ready(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.orders.markReady(ctx, id);
+  }
+
+  @Roles('admin', 'branch', 'order_manager')
+  @Post('orders/:id/confirm-scheduled')
+  confirmScheduled(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.orders.confirmScheduled(ctx, id);
   }
 
   @Roles('admin', 'branch', 'order_manager')

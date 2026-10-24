@@ -957,12 +957,14 @@ describe('Deliveroo marketplace channel (E2)', () => {
       expect(await f.productStock(ca.shop.outletId, p.id)).toBe(10);
     });
 
-    it('S07 scheduled order: scheduledFor is kept, no deadline is invented, accept works (the later "confirmed" step is NOT built)', async () => {
+    it('S07 scheduled order: scheduledFor and confirmBy are kept, no acceptance deadline is invented, accept works, and the desk then CONFIRMS it (PATCH confirmed, 409 counts as success only if Deliveroo shows confirmed)', async () => {
       const at = new Date(Date.now() + 86_400_000).toISOString();
+      const confirmAt = new Date(Date.now() + 80_000_000).toISOString();
       const { o } = await fresh(ca, 10, {
         asap: false,
         prepare_for: at,
         start_preparing_at: at,
+        confirm_at: confirmAt,
       });
       await newOrder(ca, o);
       const co = await link(ca, o.id);
@@ -970,8 +972,76 @@ describe('Deliveroo marketplace channel (E2)', () => {
       expect(new Date(co.scheduledFor).toISOString()).toBe(
         new Date(at).toISOString(),
       );
+      // confirm_at is read first (UNVERIFIED that it is the real deadline).
+      expect(new Date(co.confirmBy).toISOString()).toBe(
+        new Date(confirmAt).toISOString(),
+      );
       await r().post(`/channels/orders/${co.id}/accept`).set(h(a)).expect(201);
       expect(patches().map((c) => c.body)).toEqual([{ status: 'accepted' }]);
+      // 409 while Deliveroo does not show `confirmed` is a failure.
+      patchHandler = () => ({
+        status: 409,
+        json: { error: { code: 'invalid_status_transition' } },
+      });
+      orderStatus.set(o.id, 'accepted');
+      await r()
+        .post(`/channels/orders/${co.id}/confirm-scheduled`)
+        .set(h(a))
+        .expect(502);
+      expect((await link(ca, o.id)).confirmedAt).toBeNull();
+      // ... and a success once Deliveroo already has it confirmed.
+      orderStatus.set(o.id, 'confirmed');
+      await r()
+        .post(`/channels/orders/${co.id}/confirm-scheduled`)
+        .set(h(a))
+        .expect(201);
+      expect((await link(ca, o.id)).confirmedAt).not.toBeNull();
+      expect(patches().map((c) => c.body)).toEqual([
+        { status: 'accepted' },
+        { status: 'confirmed' },
+        { status: 'confirmed' },
+      ]);
+    });
+
+    it('S07b a scheduled confirm that answers 503 order_not_ready is retried; the sweep does NOT confirm by default but alerts once', async () => {
+      const at = new Date(Date.now() + 3_600_000).toISOString();
+      const { o } = await fresh(ca, 10, {
+        asap: false,
+        prepare_for: at,
+        start_preparing_at: at,
+        confirm_at: new Date(Date.now() + 600_000).toISOString(),
+      });
+      await newOrder(ca, o);
+      const co = await link(ca, o.id);
+      await r().post(`/channels/orders/${co.id}/accept`).set(h(a)).expect(201);
+      calls.length = 0;
+      await sweep.runOnce();
+      await sweep.runOnce();
+      expect(patches()).toHaveLength(0);
+      expect(
+        await jobsOf(
+          a.shopId,
+          'send_merchant_whatsapp_alert',
+          `channelorder:${co.id}:confirm-alert`,
+        ),
+      ).toHaveLength(1);
+      let n = 0;
+      patchHandler = () =>
+        ++n < 2
+          ? {
+              status: 503,
+              json: { error: { code: 'order_not_ready' } },
+              retryAfter: 1,
+            }
+          : { status: 204 };
+      await r()
+        .post(`/channels/orders/${co.id}/confirm-scheduled`)
+        .set(h(a))
+        .expect(201);
+      expect(patches().map((c) => c.body)).toEqual([
+        { status: 'confirmed' },
+        { status: 'confirmed' },
+      ]);
     });
 
     it('S08 the same delivery twice (same GUID) is one inbox row and one order, both answered 200', async () => {
@@ -1347,6 +1417,21 @@ describe('Deliveroo marketplace channel (E2)', () => {
       await newOrder(ca, o);
       const co = await link(ca, o.id);
       expect((await f.orderItems(co.orderId))[0].note).toBe('Weight 1.2 kg');
+    });
+
+    it('S28b the desk "ready" press posts prep_stage once for an accepted order and records readyAt; a repeat does not post again', async () => {
+      const { o } = await fresh(ca);
+      await newOrder(ca, o);
+      const co = await link(ca, o.id);
+      await r().post(`/channels/orders/${co.id}/ready`).set(h(a)).expect(409);
+      await r().post(`/channels/orders/${co.id}/accept`).set(h(a)).expect(201);
+      calls.length = 0;
+      await r().post(`/channels/orders/${co.id}/ready`).set(h(a)).expect(201);
+      await r().post(`/channels/orders/${co.id}/ready`).set(h(a)).expect(201);
+      const posts = calls.filter((c) => c.url.includes('prep_stage'));
+      expect(posts).toHaveLength(1);
+      expect(posts[0].body).toMatchObject({ stage: 'ready_for_collection' });
+      expect((await link(ca, o.id)).readyAt).not.toBeNull();
     });
 
     it('S28 ready_for_collection is a human action: accepting and processing never send it, and the method posts the documented body', async () => {

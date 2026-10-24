@@ -9,8 +9,10 @@ import {
   listChannelConnections,
   listChannelProviders,
   listOutlets,
+  requestChannelVerification,
   setChannelConnectionEnabled,
   testChannelConnection,
+  updateChannelConnection,
 } from "@/lib/api";
 import { providerLabel } from "@/lib/channels";
 import type { ChannelAvailability, ChannelConnection, ChannelProviderInfo, Outlet } from "@/lib/types";
@@ -25,6 +27,7 @@ import { CardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import SettingsContentSkeleton, { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 import ConnectionCard from "@/components/channels/ConnectionCard";
+import AvailabilityModal from "@/components/channels/AvailabilityModal";
 import ConnectionFormModal from "@/components/channels/ConnectionFormModal";
 import UnmappedItemsQueue from "@/components/channels/UnmappedItemsQueue";
 
@@ -91,6 +94,9 @@ function Channels({ flagOn, toast }: { flagOn: boolean; toast: (m: string, t?: "
   const [busyId, setBusyId] = useState<number | null>(null);
   const [checkingId, setCheckingId] = useState<number | null>(null);
   const [rowError, setRowError] = useState<{ id: number; message: string } | null>(null);
+  const [requestingId, setRequestingId] = useState<number | null>(null);
+  const [askAuto, setAskAuto] = useState<ChannelConnection | null>(null);
+  const [availabilityFor, setAvailabilityFor] = useState<ChannelConnection | null>(null);
 
   // Three independent reads: a slow or failed one never keeps the others hidden.
   const latest = useRef(0);
@@ -138,6 +144,36 @@ function Channels({ flagOn, toast }: { flagOn: boolean; toast: (m: string, t?: "
       listChannelConnections().then(setConnections, () => undefined);
     } catch (err) {
       setRowError({ id: c.id, message: err instanceof Error ? err.message : "Connection test failed" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function requestVerification(c: ChannelConnection) {
+    setRequestingId(c.id);
+    setRowError(null);
+    try {
+      replace(await requestChannelVerification(c.id));
+      toast("Requested. Requital will confirm your location with the marketplace.");
+    } catch (err) {
+      setRowError({ id: c.id, message: err instanceof Error ? err.message : "Could not send the request" });
+    } finally {
+      setRequestingId(null);
+    }
+  }
+
+  // Turning automatic confirmation ON asks first (it is a commitment to prepare);
+  // turning it off does not.
+  async function setAuto(c: ChannelConnection, next: boolean) {
+    setBusyId(c.id);
+    setRowError(null);
+    try {
+      replace(await updateChannelConnection(c.id, { autoConfirmScheduled: next }));
+      toast(next ? "Scheduled orders will be confirmed automatically" : "Automatic confirmation is off");
+      setAskAuto(null);
+    } catch (err) {
+      setRowError({ id: c.id, message: err instanceof Error ? err.message : "Could not change the setting" });
+      setAskAuto(null);
     } finally {
       setBusyId(null);
     }
@@ -226,6 +262,10 @@ function Channels({ flagOn, toast }: { flagOn: boolean; toast: (m: string, t?: "
                   onToggle={toggle}
                   onTest={test}
                   onEdit={setFormFor}
+                  requestingVerification={requestingId === c.id}
+                  onRequestVerification={requestVerification}
+                  onAutoConfirm={(x, next) => (next ? setAskAuto(x) : void setAuto(x, false))}
+                  onAvailability={setAvailabilityFor}
                   onDelete={(x) => {
                     setDeleteError(null);
                     setDeleting(x);
@@ -265,6 +305,32 @@ function Channels({ flagOn, toast }: { flagOn: boolean; toast: (m: string, t?: "
             toast(formFor === "new" ? "Connection added. It is off until you turn it on." : "Connection saved");
           }}
         />
+      )}
+
+      {availabilityFor && providers && (
+        <AvailabilityModal connection={availabilityFor} providers={providers} onClose={() => setAvailabilityFor(null)} />
+      )}
+
+      {askAuto && (
+        <Modal size="sm" title="Confirm scheduled orders automatically?" onClose={() => setAskAuto(null)}>
+          {(requestClose) => (
+            <div className="space-y-4">
+              <p className="text-sm text-text-secondary dark:text-zinc-300">
+                Requital will confirm accepted scheduled {providerLabel(askAuto.provider, providers ?? undefined)} orders for you,
+                shortly before the marketplace&apos;s deadline. Confirming tells the marketplace you will prepare the order, so only
+                turn this on if you are happy to prepare every scheduled order you accept. You can turn it off at any time.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={requestClose}>
+                  Keep it off
+                </Button>
+                <Button variant="primary" loading={busyId === askAuto.id} onClick={() => void setAuto(askAuto, true)}>
+                  Turn on
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal>
       )}
 
       {deleting && (

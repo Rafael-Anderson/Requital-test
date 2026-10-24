@@ -8,6 +8,9 @@ const api = vi.hoisted(() => ({
   listChannelOrders: vi.fn(),
   acceptChannelOrder: vi.fn(),
   rejectChannelOrder: vi.fn(),
+  listChannelProviders: vi.fn(),
+  markChannelOrderReady: vi.fn(),
+  confirmScheduledChannelOrder: vi.fn(),
 }));
 vi.mock("@/lib/api", () => api);
 const toast = vi.hoisted(() => vi.fn());
@@ -35,6 +38,9 @@ const order = (over: Partial<ChannelOrder> = {}): ChannelOrder => ({
   externalStatus: "placed",
   acceptBy: new Date(Date.now() + 5 * 60_000).toISOString(),
   scheduledFor: null,
+  confirmBy: null,
+  confirmedAt: null,
+  readyAt: null,
   orderId: 77,
   shopOrderNumber: 12,
   orderStatus: "pending",
@@ -56,6 +62,14 @@ beforeEach(() => {
   resetChannelAvailabilityCache();
   role = "admin";
   api.getChannelAvailability.mockResolvedValue({ enabled: true, hasConnections: true });
+  api.listChannelProviders.mockResolvedValue([
+    {
+      name: "deliveroo",
+      displayName: "Deliveroo",
+      credentialFields: [],
+      capabilities: { acceptReject: true, platformWebhookSecret: false, provesLocationOwnership: false, markReady: true, scheduledConfirm: true },
+    },
+  ]);
 });
 afterEach(cleanup);
 
@@ -193,5 +207,92 @@ describe("Marketplace orders desk", () => {
     render(<Page />);
     expect(await screen.findByRole("link", { name: "View order #12" })).toHaveAttribute("href", "/orders?orderId=77");
     expect(screen.getByText(/WhatsApp alert queued for the outlet/)).toBeInTheDocument();
+  });
+
+  describe("ready for collection and the scheduled confirm step", () => {
+    const accepted = (over: Partial<ChannelOrder> = {}) =>
+      order({ state: "accepted", ...over });
+    const scheduled = (over: Partial<ChannelOrder> = {}) =>
+      accepted({
+        scheduledFor: new Date(Date.now() + 86_400_000).toISOString(),
+        confirmBy: new Date(Date.now() + 3_600_000).toISOString(),
+        ...over,
+      });
+
+    it("an accepted scheduled order offers Confirm scheduled order; it asks first and only the dialog calls the API", async () => {
+      const user = userEvent.setup();
+      api.listChannelOrders.mockResolvedValue(list([scheduled()]));
+      api.confirmScheduledChannelOrder.mockResolvedValue(scheduled({ confirmedAt: new Date().toISOString() }));
+      render(<Page />);
+      const card = await screen.findByRole("article", { name: "deliveroo order A100" });
+      expect(within(card).getByText(/Confirm it by/)).toBeInTheDocument();
+      await user.click(await within(card).findByRole("button", { name: "Confirm scheduled order" }));
+      expect(api.confirmScheduledChannelOrder).not.toHaveBeenCalled();
+      const dialog = await screen.findByRole("dialog");
+      await user.click(within(dialog).getByRole("button", { name: "Not yet" }));
+      expect(api.confirmScheduledChannelOrder).not.toHaveBeenCalled();
+      await user.click(await screen.findByRole("button", { name: "Confirm scheduled order" }));
+      await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Confirm order" }));
+      await waitFor(() => expect(api.confirmScheduledChannelOrder).toHaveBeenCalledWith(1));
+      await waitFor(() => expect(toast).toHaveBeenCalledWith("Scheduled order confirmed"));
+    });
+
+    it("Ready for collection asks first, warns it cannot be undone, then calls", async () => {
+      const user = userEvent.setup();
+      api.listChannelOrders.mockResolvedValue(list([accepted()]));
+      api.markChannelOrderReady.mockResolvedValue(accepted({ readyAt: new Date().toISOString() }));
+      render(<Page />);
+      await user.click(await screen.findByRole("button", { name: "Ready for collection" }));
+      expect(api.markChannelOrderReady).not.toHaveBeenCalled();
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText(/cannot be undone/)).toBeInTheDocument();
+      await user.click(within(dialog).getByRole("button", { name: "Mark ready" }));
+      await waitFor(() => expect(api.markChannelOrderReady).toHaveBeenCalledWith(1));
+    });
+
+    it("a marketplace refusal shows the API's words in the dialog and keeps it open", async () => {
+      const user = userEvent.setup();
+      api.listChannelOrders.mockResolvedValue(list([accepted()]));
+      api.markChannelOrderReady.mockRejectedValue(new Error("The marketplace did not accept the mark it ready. Nothing was changed; try again."));
+      render(<Page />);
+      await user.click(await screen.findByRole("button", { name: "Ready for collection" }));
+      await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Mark ready" }));
+      expect(await within(screen.getByRole("dialog")).findByText(/Nothing was changed/)).toBeInTheDocument();
+    });
+
+    it("no button for a plain order, a confirmed or ready one, a pending one, or a provider without the capability", async () => {
+      api.listChannelOrders.mockResolvedValue(
+        list([
+          accepted({ id: 1, displayId: "P1" }),
+          scheduled({ id: 2, displayId: "S1", confirmedAt: new Date().toISOString(), readyAt: new Date().toISOString() }),
+          order({ id: 3, displayId: "W1" }),
+        ]),
+      );
+      api.listChannelProviders.mockResolvedValue([
+        { name: "deliveroo", displayName: "Deliveroo", credentialFields: [], capabilities: { acceptReject: true, platformWebhookSecret: false, provesLocationOwnership: false, markReady: false, scheduledConfirm: false } },
+      ]);
+      render(<Page />);
+      await screen.findByRole("article", { name: "deliveroo order P1" });
+      expect(screen.queryByRole("button", { name: "Ready for collection" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Confirm scheduled order" })).not.toBeInTheDocument();
+      expect(screen.getByText(/Marked ready for collection/)).toBeInTheDocument();
+      expect(screen.getByText(/Confirmed/, { selector: "span" })).toBeInTheDocument();
+    });
+
+    it("if the capabilities cannot be loaded the desk still works and simply offers no extra buttons", async () => {
+      api.listChannelProviders.mockRejectedValue(new Error("no"));
+      api.listChannelOrders.mockResolvedValue(list([scheduled(), order({ id: 9, displayId: "W9" })]));
+      render(<Page />);
+      expect(await screen.findByRole("button", { name: "Accept order" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Confirm scheduled order" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Ready for collection" })).not.toBeInTheDocument();
+    });
+
+    it("non-admin desk roles get the same buttons", async () => {
+      role = "order_manager";
+      api.listChannelOrders.mockResolvedValue(list([accepted()]));
+      render(<Page />);
+      expect(await screen.findByRole("button", { name: "Ready for collection" })).toBeInTheDocument();
+    });
   });
 });

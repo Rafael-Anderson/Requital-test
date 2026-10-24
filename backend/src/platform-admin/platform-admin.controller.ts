@@ -215,6 +215,12 @@ export class PlatformAdminController {
   // Marketplace channels: the ids a merchant typed are only a claim. Staff
   // confirm them with the marketplace's integration team, then record it here;
   // enabling a connection needs it (see ChannelConnectionsService.setEnabled).
+  // Cross-shop queue: connections a merchant asked staff to verify.
+  @Get('channel-connections/pending-verification')
+  pendingChannelVerification() {
+    return this.channelConnections.listPendingVerification();
+  }
+
   @Get('shops/:shopId/channel-connections')
   listChannelConnections(@Param('shopId', ParseIntPipe) shopId: number) {
     return this.channelConnections.listForShop(shopId);

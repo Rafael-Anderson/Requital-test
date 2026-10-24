@@ -61,6 +61,7 @@ export function assertCanonicalOrder(o: CanonicalChannelOrder): void {
   nullableIso(o.placedAt, 'placedAt');
   nullableIso(o.acceptBy, 'acceptBy');
   nullableIso(o.scheduledFor, 'scheduledFor');
+  nullableIso(o.confirmBy ?? null, 'confirmBy');
   if (typeof o.currency !== 'string' || !/^[A-Z]{3}$/.test(o.currency))
     fail('currency must be a 3-letter upper-case ISO code');
   if (!HANDOVERS.includes(o.handover)) fail('handover is not recognised');

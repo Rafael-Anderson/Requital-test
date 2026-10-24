@@ -3839,7 +3839,20 @@ export interface ChannelConnection {
   lastError: string | null;
   // Set only by Requital staff; read-only for merchants.
   locationVerified: boolean;
+  // When the merchant last asked Requital staff to verify (null = never).
+  verificationRequestedAt: string | null;
+  // Opt-in, off by default: Requital confirms accepted scheduled orders itself.
+  autoConfirmScheduled: boolean;
   createdAt: string;
+}
+
+// One of this shop's marketplace item mappings (GET /channels/mappings).
+export interface ChannelItemMapping {
+  id: number;
+  provider: string;
+  externalItemId: string;
+  externalName: string | null;
+  productName: string;
 }
 
 export interface ChannelConnectionInput {
@@ -3858,6 +3871,7 @@ export interface ChannelConnectionUpdate {
   externalSiteId?: string | null;
   credentials?: Record<string, string>;
   webhookSecret?: string;
+  autoConfirmScheduled?: boolean;
 }
 
 export type ChannelOrderState =
@@ -3877,6 +3891,12 @@ export interface ChannelOrder {
   externalStatus: string;
   acceptBy: string | null;
   scheduledFor: string | null;
+  // Scheduled orders: the marketplace's confirm deadline (which payload field it
+  // comes from is unverified), when it was confirmed, and when a person marked
+  // the order ready for collection.
+  confirmBy: string | null;
+  confirmedAt: string | null;
+  readyAt: string | null;
   orderId: number | null;
   shopOrderNumber: number | null;
   orderStatus: string | null;

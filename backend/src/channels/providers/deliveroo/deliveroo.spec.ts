@@ -366,6 +366,29 @@ describe('Deliveroo order mapping', () => {
     expect(o.acceptBy).toBeNull();
     expect(o.scheduledFor).toBe('2026-10-22T09:00:00Z');
   });
+  it('reads confirm_at as the confirm deadline of a scheduled order (falling back to start_preparing_at), and an ASAP order has none', () => {
+    const at = '2026-10-22T09:00:00Z';
+    const sched = (over: Record<string, unknown>) =>
+      mapDeliverooOrder(
+        fakeOrder({
+          asap: false,
+          prepare_for: at,
+          start_preparing_at: at,
+          ...over,
+        }),
+      );
+    expect(sched({ confirm_at: '2026-10-22T08:00:00Z' }).confirmBy).toBe(
+      '2026-10-22T08:00:00Z',
+    );
+    expect(sched({ confirm_at: null }).confirmBy).toBe(at);
+    expect(
+      mapDeliverooOrder(fakeOrder({ confirm_at: '2026-10-22T08:00:00Z' }))
+        .confirmBy,
+    ).toBeNull();
+    expect(
+      sched({ confirm_at: 'not a date', start_preparing_at: null }).confirmBy,
+    ).toBeNull();
+  });
   it('maps every fulfillment type to a handover', () => {
     const h = (t: string) =>
       mapDeliverooOrder(fakeOrder({ fulfillment_type: t })).handover;
@@ -803,6 +826,34 @@ describe('Deliveroo outbound calls', () => {
         delete process.env.DELIVEROO_SANDBOX_CLIENT_SECRET;
       else process.env.DELIVEROO_SANDBOX_CLIENT_SECRET = oldSecret;
     }
+  });
+  it('confirmScheduledOrder -> PATCH status confirmed; 409 is success only when Deliveroo already shows confirmed', async () => {
+    let n = 0;
+    const http = setup((c) => {
+      if (c.method === 'PATCH')
+        return n++ === 0
+          ? { status: 204 }
+          : {
+              status: 409,
+              json: { error: { code: 'invalid_status_transition' } },
+            };
+      return { status: 200, json: { status: 'confirmed' } };
+    });
+    expect(p.capabilities.scheduledConfirm).toBe(true);
+    expect((await p.confirmScheduledOrder(conn(), 'ae:cf')).ok).toBe(true);
+    expect(http.calls.find((x) => x.method === 'PATCH')!.body).toEqual({
+      status: 'confirmed',
+    });
+    expect((await p.confirmScheduledOrder(conn(), 'ae:cf')).ok).toBe(true);
+    setup((c) =>
+      c.method === 'PATCH'
+        ? {
+            status: 409,
+            json: { error: { code: 'invalid_status_transition' } },
+          }
+        : { status: 200, json: { status: 'accepted' } },
+    );
+    expect((await p.confirmScheduledOrder(conn(), 'ae:cf2')).ok).toBe(false);
   });
   it('markReady -> POST prep_stage ready_for_collection (a human action; nothing calls it automatically)', async () => {
     const http = setup(() => ({ status: 200 }));

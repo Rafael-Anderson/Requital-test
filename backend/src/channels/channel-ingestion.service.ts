@@ -422,9 +422,9 @@ export class ChannelIngestionService {
         const [res] = await c.query(
           `INSERT INTO channelorder
              (shopId, connectionId, outletId, provider, externalOrderId, displayId, state, externalStatus,
-              acceptBy, scheduledFor, currency, commissionAmount, cashDueAmount, priceMismatch, canonical,
+              acceptBy, scheduledFor, confirmBy, currency, commissionAmount, cashDueAmount, priceMismatch, canonical,
               payloadHash, receivedAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             conn.shopId,
             conn.id,
@@ -436,6 +436,7 @@ export class ChannelIngestionService {
             order.externalStatus.slice(0, 32),
             acceptBy,
             order.scheduledFor ? new Date(order.scheduledFor) : null,
+            order.confirmBy ? new Date(order.confirmBy) : null,
             order.currency,
             decimalOrNull(order.totals.commissionMinor, order.currency),
             decimalOrNull(order.totals.cashDueMinor, order.currency),
@@ -843,6 +844,17 @@ export class ChannelIngestionService {
 
     if (ev.status === 'accepted') {
       await this.markAcceptedExternally(co, ev.externalStatus);
+      // The marketplace says a scheduled order is confirmed (done on its tablet,
+      // or echoing our own confirm): record it so no alert or auto-confirm follows.
+      // Keyed on confirmedAt, never on externalStatus, which a late 'accepted'
+      // event overwrites.
+      if (ev.externalStatus === 'confirmed') {
+        await this.db.execute(
+          `UPDATE channelorder SET confirmedAt = ?, updatedAt = ?
+            WHERE id = ? AND shopId = ? AND state = 'accepted' AND confirmedAt IS NULL`,
+          [new Date(), new Date(), co.id, co.shopId],
+        );
+      }
     } else if (ev.status === 'rejected' || ev.status === 'cancelled') {
       await this.closeUpstream(
         co,

@@ -213,6 +213,13 @@ export function mapDeliverooOrder(o: unknown): CanonicalChannelOrder {
   const scheduledFor = asap
     ? null
     : (iso(o.prepare_for) ?? iso(o.start_preparing_at));
+  // Scheduled orders must be CONFIRMED after acceptance (VERIFIED: the confirm step
+  // exists). UNVERIFIED which field carries the deadline: `confirm_at` is read
+  // first; `start_preparing_at` (confirm before it) is the fallback, so the
+  // merchant is alerted early rather than never. An ASAP order has none.
+  const confirmBy = asap
+    ? null
+    : (iso(o.confirm_at) ?? iso(o.start_preparing_at));
 
   const delivery = isObj(o.delivery) ? o.delivery : null;
   const cust = isObj(o.customer) ? o.customer : null;
@@ -238,6 +245,7 @@ export function mapDeliverooOrder(o: unknown): CanonicalChannelOrder {
     placedAt,
     acceptBy,
     scheduledFor,
+    confirmBy,
     currency: cur,
     handover: handoverOf(o.fulfillment_type),
     lines: items.map((i) => mapLine(i, cur)),
