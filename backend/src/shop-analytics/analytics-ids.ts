@@ -19,3 +19,9 @@ export const GOOGLE_ADS_CONVERSION_LABEL = /^[A-Za-z0-9_-]{6,64}$/;
 // only bounds the alphabet and length; it can say nothing about validity.
 export const META_CAPI_TOKEN = /^[A-Za-z0-9_|.-]{20,512}$/;
 export const META_TEST_EVENT_CODE = /^TEST[A-Za-z0-9]{1,20}$/;
+// Server-side TikTok Events API / Snap Conversions API tokens. UNVERIFIED shapes:
+// like META_CAPI_TOKEN these only bound the alphabet and length (Snap's looks
+// JWT-like, hence the dot and the longer cap); neither can say anything about
+// validity. Re-check against a real token before tightening.
+export const TIKTOK_EVENTS_TOKEN = /^[A-Za-z0-9_.-]{20,256}$/;
+export const SNAP_CAPI_TOKEN = /^[A-Za-z0-9_.-]{20,2048}$/;

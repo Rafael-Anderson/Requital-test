@@ -6,7 +6,9 @@ import {
   META_CAPI_TOKEN,
   META_PIXEL_ID,
   META_TEST_EVENT_CODE,
+  SNAP_CAPI_TOKEN,
   SNAP_PIXEL_ID,
+  TIKTOK_EVENTS_TOKEN,
   TIKTOK_PIXEL_ID,
 } from '../analytics-ids';
 
@@ -45,6 +47,19 @@ export class UpdateAnalyticsSettingsDto {
     message: 'tiktokPixelId must be the TikTok pixel code (upper-case letters and digits)',
   })
   tiktokPixelId?: string | null;
+
+  // WRITE-ONLY, like metaCapiToken.
+  @IsOptional()
+  @Matches(TIKTOK_EVENTS_TOKEN, {
+    message: 'tiktokEventsToken does not look like a TikTok Events API access token',
+  })
+  tiktokEventsToken?: string | null;
+
+  @IsOptional()
+  @Matches(SNAP_CAPI_TOKEN, {
+    message: 'snapCapiToken does not look like a Snap Conversions API token',
+  })
+  snapCapiToken?: string | null;
 
   @IsOptional()
   @Matches(SNAP_PIXEL_ID, {

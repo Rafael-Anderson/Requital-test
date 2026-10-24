@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getAnalyticsSettings, updateAnalyticsSettings } from "@/lib/api";
-import type { AnalyticsSettings, AnalyticsSettingsUpdate } from "@/lib/types";
+import type { AnalyticsSettings, AnalyticsSettingsUpdate, AnalyticsTokenKey } from "@/lib/types";
 import { analyticsIdError, type AnalyticsIdField } from "@/lib/analytics-ids";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
@@ -25,6 +25,9 @@ const EMPTY: FieldValues = {
   googleAdsConversionLabel: "",
 };
 
+const TOKEN_KEYS: AnalyticsTokenKey[] = ["metaCapiToken", "tiktokEventsToken", "snapCapiToken"];
+const NO_TOKENS: Record<AnalyticsTokenKey, string> = { metaCapiToken: "", tiktokEventsToken: "", snapCapiToken: "" };
+
 function toValues(s: AnalyticsSettings): FieldValues {
   return {
     ga4MeasurementId: s.ga4MeasurementId ?? "",
@@ -37,12 +40,52 @@ function toValues(s: AnalyticsSettings): FieldValues {
   };
 }
 
+// A write-only secret: masked once saved, Replace to type a new one, Remove (with
+// a confirm) to clear it.
+function TokenField(props: {
+  label: string;
+  placeholder: string;
+  isSet: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  saving: boolean;
+  removeMessage: string;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <SecretField
+        label={props.label}
+        masked={props.isSet ? "Saved (hidden)" : null}
+        value={props.value}
+        onChange={props.onChange}
+        placeholder={props.placeholder}
+      />
+      {props.isSet && (
+        <div className="flex justify-start">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={props.saving}
+            onClick={() => {
+              if (confirm(props.removeMessage)) props.onRemove();
+            }}
+          >
+            Remove token
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AnalyticsIntegrationsPage() {
   const toast = useToast();
   const [settings, setSettings] = useState<AnalyticsSettings | null>(null);
   const [values, setValues] = useState<FieldValues>(EMPTY);
   // Write-only: only ever holds what the merchant is typing right now.
-  const [token, setToken] = useState("");
+  const [tokens, setTokens] = useState(NO_TOKENS);
+  const setToken = (key: AnalyticsTokenKey) => (v: string) => setTokens((t) => ({ ...t, [key]: v }));
   const [saving, setSaving] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
 
@@ -82,13 +125,15 @@ export default function AnalyticsIntegrationsPage() {
       // Empty means "clear it": the API takes null for that.
       body[f] = values[f].trim() === "" ? null : values[f].trim();
     }
-    if (token.trim() && body.metaCapiToken === undefined) body.metaCapiToken = token.trim();
+    for (const k of TOKEN_KEYS) {
+      if (tokens[k].trim() && body[k] === undefined) body[k] = tokens[k].trim();
+    }
     setSaving(true);
     try {
       const updated = await updateAnalyticsSettings(body);
       setSettings(updated);
       setValues(toValues(updated));
-      setToken("");
+      setTokens(NO_TOKENS);
       setShowErrors(false);
       toast("Analytics settings saved");
     } catch (e) {
@@ -128,8 +173,15 @@ export default function AnalyticsIntegrationsPage() {
           <p className="text-xs text-text-faint mt-1">
             Add your ad and analytics ids and your storefront reports page views, add to cart, checkout and
             purchases to each platform. Nothing loads for a visitor until they accept the cookie banner,
-            and only the platforms you fill in here are ever contacted. Server side purchase events to Meta
-            are sent only for orders where the shopper accepted marketing cookies.
+            and only the platforms you fill in here are ever contacted. Server side purchase events (Meta,
+            TikTok and Snapchat, each needing its own token below) are sent only for orders where the
+            shopper accepted marketing cookies. For an online card payment the shopper returns to a
+            confirmation page whose address is private, so the browser does not report that purchase to
+            Meta, TikTok or Snapchat, and the server event is the only one. TikTok and Snapchat server
+            events are sent for online card payments only; pay on delivery and pickup orders are reported
+            by the browser. Matching a browser and a server event on one order id is not yet confirmed
+            for TikTok and Snapchat, so check the test tool of each platform before relying on these
+            numbers.
           </p>
         </Card>
 
@@ -161,40 +213,60 @@ export default function AnalyticsIntegrationsPage() {
             <Input label="Pixel id" value={values.metaPixelId} onChange={set("metaPixelId")} placeholder="123456789012345" error={err("metaPixelId")} />
             <Input label="Test event code (optional)" value={values.metaTestEventCode} onChange={set("metaTestEventCode")} placeholder="TEST12345" error={err("metaTestEventCode")} tooltip="Sends server events to the Test Events tab in Meta Events Manager. Remove it when you go live." />
             <div className="sm:col-span-2">
-              <SecretField
+              <TokenField
                 label="Conversions API access token"
-                masked={settings.metaCapiTokenSet ? "Saved (hidden)" : null}
-                value={token}
-                onChange={setToken}
                 placeholder="Paste your access token"
+                isSet={settings.metaCapiTokenSet}
+                value={tokens.metaCapiToken}
+                onChange={setToken("metaCapiToken")}
+                saving={saving}
+                removeMessage="Remove the saved Meta access token? Server side purchase events will stop."
+                onRemove={() => void save({ metaCapiToken: null })}
               />
             </div>
           </div>
-          {settings.metaCapiTokenSet && (
-            <div className="flex justify-start">
-              <Button variant="secondary" size="sm" disabled={saving} onClick={() => {
-                if (confirm("Remove the saved Meta access token? Server side purchase events will stop.")) void save({ metaCapiToken: null });
-              }}>
-                Remove token
-              </Button>
-            </div>
-          )}
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card className="space-y-3">
             <div>
               <h3 className="text-sm font-semibold">TikTok</h3>
-              <p className="text-xs text-text-faint mt-1">The pixel code from TikTok Events Manager.</p>
+              <p className="text-xs text-text-faint mt-1">
+                The pixel code from TikTok Events Manager. Add an Events API access token as well to report
+                online card payments from our server. The token is stored encrypted and is never shown again.
+              </p>
             </div>
             <Input label="Pixel code" value={values.tiktokPixelId} onChange={set("tiktokPixelId")} placeholder="CXXXXXXXXXXXXXXXXXXX" error={err("tiktokPixelId")} />
+            <TokenField
+              label="Events API access token"
+              placeholder="Paste your Events API access token"
+              isSet={settings.tiktokEventsTokenSet}
+              value={tokens.tiktokEventsToken}
+              onChange={setToken("tiktokEventsToken")}
+              saving={saving}
+              removeMessage="Remove the saved TikTok access token? Server side purchase events will stop."
+              onRemove={() => void save({ tiktokEventsToken: null })}
+            />
           </Card>
           <Card className="space-y-3">
             <div>
               <h3 className="text-sm font-semibold">Snapchat</h3>
-              <p className="text-xs text-text-faint mt-1">The pixel id from Snap Ads Manager.</p>
+              <p className="text-xs text-text-faint mt-1">
+                The pixel id from Snap Ads Manager. Add a Conversions API token as well to report online card
+                payments from our server. The token is stored encrypted and is never shown again.
+              </p>
             </div>
             <Input label="Pixel id" value={values.snapPixelId} onChange={set("snapPixelId")} placeholder="1b2c3d4e-0000-4000-8000-123456789abc" error={err("snapPixelId")} />
+            <TokenField
+              label="Conversions API token"
+              placeholder="Paste your Conversions API token"
+              isSet={settings.snapCapiTokenSet}
+              value={tokens.snapCapiToken}
+              onChange={setToken("snapCapiToken")}
+              saving={saving}
+              removeMessage="Remove the saved Snapchat token? Server side purchase events will stop."
+              onRemove={() => void save({ snapCapiToken: null })}
+            />
           </Card>
         </div>
 
