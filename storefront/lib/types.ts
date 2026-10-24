@@ -509,6 +509,9 @@ export interface CreateOrderPayload {
   // CUS-6: spend the logged-in customer's store credit. A bare yes: the server
   // reads the balance and applies up to what is payable. Never an amount.
   useStoreCredit?: boolean;
+  // F8: one key per checkout ATTEMPT (lib/checkout-attempt.ts). A retry of the same
+  // attempt carries the same key and gets the same order back, never a second one.
+  idempotencyKey?: string;
   items: { productId: number; variantId?: number; quantity: number; giftCardAmount?: number; note?: string }[];
 }
 

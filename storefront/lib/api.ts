@@ -73,6 +73,10 @@ export class HttpError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    // A stable machine-readable reason some endpoints add to an error body (the
+    // checkout's "payment_unavailable", "idempotency_key_reused"), so a caller can
+    // branch without parsing the message.
+    readonly code?: string,
   ) {
     super(message);
     this.name = "HttpError";
@@ -97,8 +101,10 @@ async function post<T>(path: string, data: unknown, signal?: AbortSignal): Promi
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(
+    throw new HttpError(
       Array.isArray(body?.message) ? body.message.join(", ") : (body?.message ?? `Request failed (${res.status})`),
+      res.status,
+      typeof body?.code === "string" ? body.code : undefined,
     );
   }
   return res.json() as Promise<T>;
@@ -536,8 +542,10 @@ async function authedFetch<T>(shopSlug: string, path: string, init: RequestInit 
   }
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(
+    throw new HttpError(
       Array.isArray(body?.message) ? body.message.join(", ") : (body?.message ?? `Request failed (${res.status})`),
+      res.status,
+      typeof body?.code === "string" ? body.code : undefined,
     );
   }
   if (res.status === 204) return undefined as T;

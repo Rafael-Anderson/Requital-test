@@ -69,4 +69,21 @@ describe("resolvePaymentMethods", () => {
     expect(resolvePaymentMethods(s, "delivery")).toEqual([]);
     expect(resolvePaymentMethods(s, "pickup")).toEqual([]);
   });
+
+  // F8: the server now reports cardProcessorEnabled / enabledPaymentProviders as
+  // "usable" (toggled on AND real credentials), not merely toggled on, so a shop
+  // whose gateway has no credentials offers no online method at all and never
+  // sends the shopper to a payment that cannot be taken.
+  it("offers only the cash methods when the server reports the online gateways unusable", () => {
+    const s = shop({
+      deliveryPaymentCardOnline: true,
+      deliveryPaymentCashOnDelivery: true,
+      pickupPaymentCardOnline: true,
+      pickupPaymentCashOnPickup: true,
+      cardProcessorEnabled: false,
+      enabledPaymentProviders: [],
+    });
+    expect(resolvePaymentMethods(s, "delivery")).toEqual(["cash_on_delivery"]);
+    expect(resolvePaymentMethods(s, "pickup")).toEqual(["cash_on_pickup"]);
+  });
 });

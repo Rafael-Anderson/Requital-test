@@ -8,6 +8,7 @@ import CheckoutSteps from "@/components/checkout/CheckoutSteps";
 import AddonPrompt from "@/components/checkout/AddonPrompt";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import EmptyCartState from "@/components/EmptyCartState";
+import PaymentReturnNotice from "@/components/checkout/PaymentReturnNotice";
 
 // Dispatches on theme.checkoutLayout — both presets share the exact same
 // state/validation/submission logic (useCheckoutForm), so a layout switch
@@ -47,6 +48,7 @@ export default function CheckoutPage() {
 
   return (
     <StorefrontPageShell variant="medium">
+      <PaymentReturnNotice shopSlug={state.shopSlug} />
       {state.shop?.checkoutLayout === "step_by_step" ? <CheckoutSteps {...state} /> : <CheckoutSinglePage {...state} />}
     </StorefrontPageShell>
   );

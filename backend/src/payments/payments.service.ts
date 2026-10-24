@@ -17,6 +17,8 @@ import { PaymentSettingsService } from './payment-settings.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { OrdersService } from '../orders/orders.service';
+import { OrderNotificationsService } from '../orders/order-notifications.service';
+import { resolveErrorTrackingProvider } from '../common/error-tracking/error-tracking.provider';
 import { WebhookLogService } from '../webhook-log/webhook-log.service';
 import { ConversionEventsService } from '../shop-analytics/conversion-events.service';
 import { createLogger } from '../common/logging/logger';
@@ -49,6 +51,7 @@ export class PaymentsService {
     private readonly ordersService: OrdersService,
     private readonly webhookLogService: WebhookLogService,
     private readonly conversionEventsService: ConversionEventsService,
+    private readonly orderNotificationsService: OrderNotificationsService,
   ) {}
 
   async generateLink(ctx: TenantContext, orderId: number) {
@@ -342,6 +345,7 @@ export class PaymentsService {
       return { received: true };
     }
 
+    let lateOnCancelled = false;
     try {
       // The paymenttransaction insert and the order update live in one
       // transaction, guarded by a unique (gateway, gatewayReference) index —
@@ -350,7 +354,18 @@ export class PaymentsService {
       // If the insert violates the unique constraint, the whole transaction
       // (including the order update) rolls back, so a duplicate delivery
       // can't re-apply the paymentStatus change or insert a second row.
-      await this.db.transaction(async (conn) => {
+      lateOnCancelled = await this.db.transaction(async (conn) => {
+        // The order row is locked FIRST (the same order a cancel takes it in),
+        // so the cancelled check and the paid write below cannot interleave with
+        // a cancel.
+        let cancelled = false;
+        if (result.status === 'paid') {
+          const [rows] = await conn.query<RowDataPacket[]>(
+            `SELECT status FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
+            [order.id, order.shopId],
+          );
+          cancelled = rows[0]?.status === 'cancelled';
+        }
         await conn.query(
           `INSERT INTO paymenttransaction (orderId, gateway, gatewayReference, providerChargeReference, amount, status, currency)
            VALUES (?, ?, ?, ?, ?, ?, (SELECT currency FROM \`order\` WHERE id = ?))`,
@@ -367,12 +382,19 @@ export class PaymentsService {
             order.id, // the currency subselect above
           ],
         );
-        if (result.status === 'paid') {
+        // A payment for an order that is ALREADY cancelled (a staff cancel, or
+        // a gateway session that outlived an auto-cancel) is recorded as the
+        // transaction it is, but the order is NOT marked paid and stays
+        // cancelled: its stock, discount and tenders were already given back, so
+        // calling it paid would be false. The money is real, so it is raised
+        // loudly below for the merchant to refund by hand (no auto-refund).
+        if (result.status === 'paid' && !cancelled) {
           await conn.query(
             `UPDATE \`order\` SET paymentStatus = 'paid' WHERE id = ?`,
             [order.id],
           );
         }
+        return cancelled;
       });
     } catch (error) {
       // Duplicate key (errno 1062): the unique (gateway, gatewayReference)
@@ -396,9 +418,14 @@ export class PaymentsService {
         // that here. Idempotent (job key capi:purchase:<orderId>), so this can
         // never produce a second job.
         if (result.status === 'paid') {
-          await this.conversionEventsService.enqueuePurchase(
-            order.id as number,
-          );
+          if (order.status === 'cancelled') {
+            // The delivery that recorded it may have died before alerting.
+            await this.raiseLatePayment(order, gateway, result);
+          } else {
+            await this.conversionEventsService.enqueuePurchase(
+              order.id as number,
+            );
+          }
         }
         return { received: true };
       }
@@ -410,6 +437,11 @@ export class PaymentsService {
       result.status,
       'success',
     );
+
+    if (lateOnCancelled) {
+      await this.raiseLatePayment(order, gateway, result);
+      return { received: true };
+    }
 
     if (result.status === 'paid') {
       await this.affiliateService.syncOrderStatus(order.id as number, {
@@ -431,6 +463,44 @@ export class PaymentsService {
     }
 
     return { received: true };
+  }
+
+  // Money arrived for an order that is cancelled. There is deliberately no
+  // auto-refund (owner decision), so the only safe thing is to make sure a human
+  // knows, once: a structured error line (and the error-tracking sink when one is
+  // configured), plus a merchant WhatsApp alert whose job key makes it once per
+  // order however many events or redeliveries arrive. Never throws (the payment
+  // is already recorded; a failing alert must not turn the webhook into a retry
+  // storm).
+  private async raiseLatePayment(
+    order: RowDataPacket,
+    gateway: string,
+    result: WebhookResult,
+  ) {
+    const context = { orderId: order.id, shopId: order.shopId, gateway };
+    logger.error(
+      'payment received for a CANCELLED order, refund it in the payment provider',
+      { ...context, providerReference: result.providerReference },
+    );
+    try {
+      resolveErrorTrackingProvider().captureException(
+        new Error('payment received for a cancelled order'),
+        { shopId: order.shopId as number, route: `payment webhook ${gateway}` },
+      );
+      await this.orderNotificationsService.alertLatePayment(
+        order.shopId as number,
+        {
+          id: order.id as number,
+          shopOrderNumber: order.shopOrderNumber as number,
+          outletId: order.outletId as number,
+        },
+      );
+    } catch (err) {
+      logger.error('late-payment alert failed', {
+        ...context,
+        error: err instanceof Error ? err.name : 'non-error',
+      });
+    }
   }
 
   // BNPL-specific (Tabby/Tamara — see WebhookResult.advanceOrderStatus).

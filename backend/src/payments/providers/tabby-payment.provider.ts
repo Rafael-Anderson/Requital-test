@@ -53,6 +53,13 @@ interface TabbyWebhookPayload {
 export class TabbyPaymentProvider implements PaymentProvider {
   readonly name = 'tabby';
 
+  isUsable(credentials: Record<string, string> | null): boolean {
+    return !!(
+      (credentials?.secretKey ?? process.env.TABBY_SECRET_KEY) &&
+      (credentials?.publicKey ?? process.env.TABBY_PUBLIC_KEY)
+    );
+  }
+
   async createCheckoutSession(
     params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {

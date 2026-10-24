@@ -197,10 +197,18 @@ export function attributionAdminView(value: unknown): {
 // ANY client. `SELECT *` over `order` is spread into responses all over the
 // backend, so a new column would otherwise leak by default; every such spot
 // strips it with this and the isolation e2e asserts none of them leak.
+// F8: also removes the checkout idempotency key and request fingerprint, which
+// are the same kind of column (internal, on the `order` row, never for a client).
 export function stripAttribution<T extends object>(
   row: T,
-): Omit<T, 'attributionJson'> {
-  const copy = { ...row } as T & { attributionJson?: unknown };
+): Omit<T, 'attributionJson' | 'idempotencyKey' | 'idempotencyFingerprint'> {
+  const copy = { ...row } as T & {
+    attributionJson?: unknown;
+    idempotencyKey?: unknown;
+    idempotencyFingerprint?: unknown;
+  };
   delete copy.attributionJson;
+  delete copy.idempotencyKey;
+  delete copy.idempotencyFingerprint;
   return copy;
 }

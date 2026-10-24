@@ -41,6 +41,10 @@ interface TamaraWebhookPayload {
 export class TamaraPaymentProvider implements PaymentProvider {
   readonly name = 'tamara';
 
+  isUsable(credentials: Record<string, string> | null): boolean {
+    return !!(credentials?.apiToken ?? process.env.TAMARA_TOKEN);
+  }
+
   async createCheckoutSession(
     params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {

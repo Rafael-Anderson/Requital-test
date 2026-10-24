@@ -207,6 +207,61 @@ export class GiftCardsService {
     );
   }
 
+  // A CANCEL gives back every gift card balance the order drew (F8: the one tender
+  // a cancel never returned; store credit, stock and the discount use all were).
+  // Runs on the caller's transaction, after the cancel's status CAS won, so the
+  // order is locked and only one cancel can be here. Shop-scoped through the card
+  // (the order id alone is never trusted). Idempotent: each redemption record is
+  // zeroed as it is released, so a second pass (a retried cancel, or an order that
+  // an edit had already part-released) gives back only what is still held.
+  async releaseAllForOrder(
+    conn: PoolConnection,
+    shopId: number,
+    orderId: number,
+  ) {
+    const [held] = await conn.query<RowDataPacket[]>(
+      `SELECT r.giftCardId, r.amountUsed
+         FROM giftcardredemption r
+         JOIN giftcard g ON g.id = r.giftCardId
+        WHERE r.orderId = ? AND g.shopId = ? AND r.amountUsed > 0
+        ORDER BY r.giftCardId, r.id
+          FOR UPDATE`,
+      [orderId, shopId],
+    );
+    for (const r of held) {
+      await this.releaseForOrderEdit(
+        conn,
+        r.giftCardId as number,
+        orderId,
+        Number(trimDecimal(r.amountUsed as string)),
+      );
+    }
+  }
+
+  // F8: the order that SOLD gift cards is being cancelled before it was ever paid
+  // (the payment gateway never took it), so the codes it issued must not work and
+  // the email that carries them must not go out. The cards are disabled (an admin
+  // can see them and re-enable), and the queued delivery email is dismissed while
+  // still pending; one already sent cannot be recalled, which is why the card is
+  // disabled as well. Only a card still 'active' and untouched is changed.
+  async voidIssuedForOrder(
+    conn: PoolConnection,
+    shopId: number,
+    orderId: number,
+  ) {
+    await conn.query(
+      `UPDATE giftcard SET status = 'disabled', updatedAt = ?
+        WHERE purchaseOrderId = ? AND shopId = ? AND status = 'active'
+          AND remainingBalance = initialValue`,
+      [new Date(), orderId, shopId],
+    );
+    await conn.query(
+      `UPDATE job SET status = 'dismissed', updatedAt = ?
+        WHERE shopId = ? AND idempotencyKey = ? AND status = 'pending'`,
+      [new Date(), shopId, `gift-card-issued-email:${orderId}`],
+    );
+  }
+
   // One unit issued per quantity — e.g. quantity 3 of a 200 AED gift card
   // product creates three independent 200-balance cards, each individually
   // redeemable (not one 600-balance card), matching how a shopper buying 3

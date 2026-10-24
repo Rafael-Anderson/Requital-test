@@ -66,6 +66,15 @@ export interface OrderRow {
   // Never spread this row into a response without stripping it: it can hold
   // click ids / fbp / fbc / user agent (see stripAttribution).
   attributionJson: unknown;
+  // F8 (migration 20261120100000): the storefront checkout's per-attempt key and a
+  // fingerprint of the request it arrived with. NULL for every other channel and
+  // for orders placed before this existed. Never returned to a client
+  // (stripAttribution removes both).
+  idempotencyKey: string | null;
+  idempotencyFingerprint: string | null;
+  // Lease held while a request asks a payment gateway for a session for this order
+  // (same migration). NULL when nobody is.
+  paymentSessionClaimedAt: Date | null;
 }
 
 export interface OrdernoteRow {

@@ -95,6 +95,13 @@ export interface PaymentProvider {
   ): Promise<CheckoutSessionOutcome | null>;
 
   readonly name: string;
+  // F8: can this provider create a session at all for a shop with these resolved
+  // credentials (the shop's own, else null = platform env fallback)? Mirrors the
+  // provider's own MANDATORY GUARD in createCheckoutSession, which stays: this is
+  // only the pre-commit/storefront-visibility answer, never a replacement for it.
+  // OPTIONAL: a provider that does not say is treated as usable (test doubles);
+  // every structural stub answers false.
+  isUsable?(credentials: Record<string, string> | null): boolean;
   createCheckoutSession(
     params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession>;

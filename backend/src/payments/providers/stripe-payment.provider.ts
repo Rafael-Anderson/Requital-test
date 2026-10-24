@@ -55,6 +55,10 @@ export class StripePaymentProvider implements PaymentProvider {
   // before, verifying against the platform's STRIPE_WEBHOOK_SECRET — for
   // shops that never configured their own Stripe credentials and stayed on
   // the platform account.
+  isUsable(credentials: Record<string, string> | null): boolean {
+    return !!(credentials?.secretKey ?? process.env.STRIPE_SECRET_KEY);
+  }
+
   async createCheckoutSession(
     params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {

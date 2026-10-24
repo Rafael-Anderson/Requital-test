@@ -9,6 +9,7 @@ import type {
   WebhookResult,
 } from './payment-provider.interface';
 import type { BranchRolesService } from '../branch-roles/branch-roles.service';
+import type { OrderNotificationsService } from '../orders/order-notifications.service';
 import type { OrdersService } from '../orders/orders.service';
 import type { WebhookLogService } from '../webhook-log/webhook-log.service';
 import type { ConversionEventsService } from '../shop-analytics/conversion-events.service';
@@ -122,6 +123,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockOrdersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
     );
 
     const result = await service.handleWebhook(
@@ -158,6 +160,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockOrdersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
     );
 
     const result = await service.handleWebhook(
@@ -197,6 +200,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockOrdersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
     );
 
     await expect(
@@ -225,6 +229,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockOrdersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
     );
 
     const result = await service.handleWebhook(
@@ -248,6 +253,7 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockOrdersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
     );
 
     await expect(
@@ -291,6 +297,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       ordersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
     );
 
     await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
@@ -334,6 +341,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       ordersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
     );
 
     await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
@@ -376,6 +384,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       ordersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
     );
 
     const result = await service.handleWebhook(
@@ -420,6 +429,7 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       ordersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
     );
 
     await expect(

@@ -91,6 +91,13 @@ async function getAccessToken(
 export class PayPalPaymentProvider implements PaymentProvider {
   readonly name = 'paypal';
 
+  isUsable(credentials: Record<string, string> | null): boolean {
+    return !!(
+      (credentials?.clientId ?? process.env.PAYPAL_CLIENT_ID) &&
+      (credentials?.clientSecret ?? process.env.PAYPAL_CLIENT_SECRET)
+    );
+  }
+
   async createCheckoutSession(
     params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {

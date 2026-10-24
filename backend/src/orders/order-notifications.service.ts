@@ -520,6 +520,38 @@ export class OrderNotificationsService {
     }
   }
 
+  // F8: a payment arrived for an order that is already cancelled. The merchant must
+  // refund it by hand, so tell them, once per order (the job key). Never throws.
+  async alertLatePayment(
+    shopId: number,
+    order: { id: number; shopOrderNumber: number; outletId: number },
+  ) {
+    try {
+      const to = await this.resolveMerchantAlertRecipient(
+        shopId,
+        order.outletId,
+        order.id,
+      );
+      if (!to) return;
+      await this.jobsService.enqueue(
+        shopId,
+        'send_merchant_whatsapp_alert',
+        {
+          to,
+          body: `Payment received for cancelled order #${order.shopOrderNumber}. Refund it in the payment provider.`,
+          orderId: order.id,
+        },
+        `order:${order.id}:late-payment`,
+      );
+    } catch (err) {
+      logger.error(`order #${order.id}: late-payment alert enqueue failed`, {
+        orderId: order.id,
+        shopId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   // The E.164 number that receives merchant alerts for an outlet (its WhatsApp,
   // else its phone), or null. Shared with the marketplace channels, which alert
   // the merchant about an order waiting for acceptance. A pool read: call it

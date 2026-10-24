@@ -18,6 +18,11 @@ const logger = createLogger('TelrPaymentProvider');
 export class TelrPaymentProvider implements PaymentProvider {
   readonly name = 'telr';
 
+  // Structural stub: never usable, whatever credentials a shop saved.
+  isUsable(): boolean {
+    return false;
+  }
+
   createCheckoutSession(
     _params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {
