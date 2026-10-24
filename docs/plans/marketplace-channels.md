@@ -219,7 +219,7 @@ Deliveroo publishes no go-live list in its public docs, so this is **our own** l
 | 4 | No answer within 7 minutes (UAE) → `rejected` arrives; order cancelled, stock released | auto-reject | S04 no answer within the UAE 7-minute window |
 | 5 | Customer cancel before accept | cancellation while pending | S05 customer cancel before accept cancels the order and restocks |
 | 6 | Cancel after accept; `200` acknowledged | upstream cancel after accept | S06 cancel after accept is acknowledged with 200 |
-| 7 | Scheduled order: accept, then `confirmed` before `start_preparing_at`; `confirm_at` deadline | not covered (no scheduled-confirm path in E1) | S07 scheduled order (accept only; the `confirmed` step is NOT built) |
+| 7 | Scheduled order: accept, then `confirmed` before `start_preparing_at`; `confirm_at` deadline | stub: `scheduledConfirm` desk, sweep and opt-in tests in `marketplace-followups.e2e-spec.ts` | S07 scheduled order: accept, then the desk confirm sends `PATCH confirmed` (409 is success only if Deliveroo shows `confirmed`); S07b 503 retry and the default alert-only sweep (section 14) |
 | 8 | Same delivery twice (same GUID) | same delivery twice | S08 the same delivery twice (same GUID) |
 | 9 | Redelivery with a new GUID | NEW delivery id | S09 a redelivery with a new GUID |
 | 10 | Concurrent duplicates | concurrent duplicate | S10 eight concurrent duplicates |
@@ -249,7 +249,7 @@ Deliveroo publishes no go-live list in its public docs, so this is **our own** l
 1. Enable the **Sites API** and give the `brand_id`, `site_id` and the `location_id` of each, for sandbox and production (the owner's blocker).
 2. Confirm which suite a florist / gift retailer belongs to (Partner Platform Order API or Retail Platform Picking API) and enable it.
 3. The webhook secret model: one per integration or per brand/site, rotation, and separate sandbox and production secrets.
-4. Which OAuth token URL is correct (the docs list two), and the scopes.
+4. ~~Which OAuth token URL is correct (the docs list two), and the scopes.~~ Resolved for the sandbox (section 14.1): the `auth-sandbox` host is correct. Still ask for the production token URL and the exact scope list.
 5. Whether the order payload can carry **tax (VAT) and commission**, which total to use (`total_price` or `partner_order_total`), how fees are attributed, and where commission is reported (statement or reports API). The v2 schema has neither.
 6. The acceptance window per market (docs say 7 minutes in UAE and Kuwait), what exactly happens on timeout, the "three auto-rejections close the site" rule, and whether auto-accept is permitted.
 7. Whether the sequence GUID repeats on a retry, the response timeout they apply, and how "up to 6 minutes (ASAP) / 30 minutes (scheduled)" relate to the circuit breaker.
@@ -271,7 +271,7 @@ Deliveroo publishes no go-live list in its public docs, so this is **our own** l
 - **Q1** Which Deliveroo suite applies to the merchants (Order API for restaurants, or Picking for retail)? The framework supports both; E2 must pick one first.
 - **Q2** How is a sandbox test order tied to a location when the request has no `location_id`?
 - **Q3** Auto-accept: should a connection accept orders automatically? E1 builds none: acceptance is always a person, with an alert. Auto-accept would remove the 7-minute risk but also remove the merchant's ability to refuse.
-- **Q4** Two different OAuth token URLs in the docs.
+- **Q4** Two different OAuth token URLs in the docs. **Resolved for the sandbox (2026-10-22, section 14.1):** the documented `auth-sandbox.developers.deliveroo.com` host accepted the owner's new sandbox credentials; the Cognito URL was never needed and the earlier `invalid_client` (13.8) was the old credentials. The production token URL is still unconfirmed.
 - **Q5** Tax and commission: until Deliveroo supplies them, orders have NULL tax and commission, and invoices for them would show no tax breakdown. Is that acceptable, or must Requital derive VAT (which the rules forbid us to fabricate)?
 - **Q6** Cash-due orders are marked `unpaid`; is that how the merchant wants them reconciled?
 - **Q7** Reports and the dashboard include marketplace orders in sales and AOV (they are ordinary order rows). Should they be separated by channel, and should commission reduce reported revenue?
@@ -422,7 +422,7 @@ Hosts: `https://auth-sandbox.developers.deliveroo.com/oauth2/token`, `https://ap
 | item availability | `POST /menu/v1/brands/{brand}/menus/{menu}/item_unavailabilities/{site}` `{item_unavailabilities:[{item_id,status}]}` | VERIFIED (menu id `requital-c<connection id>`, stable) |
 | catalogue push | `PUT /menu/v1/brands/{brand}/menus/{menu}` | path and required fields VERIFIED; empty `mealtimes` and the **omitted `tax_rate`** are INFERRED (a tax rate is never invented, so Deliveroo may refuse the push) |
 
-Nothing in the E1 core or an admin route calls `pushCatalogue`, `setItemAvailability` or `markReady` yet (E4/later); they are provider methods with unit tests.
+Since the E5 follow-up (section 14), `markReady` and `setItemAvailability` have desk and admin routes; `pushCatalogue` is still not called by anything (deferred, section 14.5).
 
 ### 13.4 Order mapping (`body.order`)
 
@@ -432,7 +432,7 @@ VERIFIED fields as in section 2. Choices: `totalMinor` = `total_price` (Q5, INFE
 
 - **Item removal and substitution** (`removeItem`, `substituteItems` stay false): documented only in the Picking API (Retail suite, Q1), keyed on order-item ids the Order API webhook does not carry. Not guessed.
 - **Branch status, prep-time adjustment** (Site API not enabled for the owner).
-- **Scheduled `confirmed` step** (`accepted` to `confirmed` before `start_preparing_at`, S07): no scheduler hook exists in the E1 core; a scheduled order that is accepted but never confirmed may be auto-rejected by Deliveroo (Q: request 17).
+- **Scheduled `confirmed` step**: built in the E5 follow-up, see section 14.2. What Deliveroo does with an accepted scheduled order that is never confirmed is still unknown (request 17).
 - **Refund webhook** (S30).
 - Auto-accept (Q3), unchanged.
 - Poll-failure staff alerting beyond a structured `error` log line (there is no platform notification channel); the merchant gets one WhatsApp alert per streak of 5 failed polls.
@@ -454,5 +454,55 @@ VERIFIED fields as in section 2. Choices: `totalMinor` = `total_price` (Q5, INFE
 
 ### 13.8 Live sandbox smoke (2026-10-21, one call, no secret printed)
 
-One form-encoded client-credentials POST to `https://auth-sandbox.developers.deliveroo.com/oauth2/token` with the owner's sandbox client id and secret (a script that printed only presence booleans and the HTTP status): **HTTP 400, error code `invalid_client`**, no token. Both values were checked for stray whitespace, quotes and newlines (none). So the request shape and host answer, but **these credentials are not accepted by that host**. Most likely candidates, none verified: they belong to the other token URL the docs list (`deliveroo-api.auth.eu-west-1.amazoncognito.com`, Q4; not called because it is not a documented sandbox host), or the sandbox client is not yet enabled for the integration. Request 4 in section 9 is therefore blocking for any outbound sandbox call; inbound (webhook) handling does not depend on it. No order, accept or menu call was made against the real sandbox.
+One form-encoded client-credentials POST to `https://auth-sandbox.developers.deliveroo.com/oauth2/token` with the owner's sandbox client id and secret (a script that printed only presence booleans and the HTTP status): **HTTP 400, error code `invalid_client`**, no token. Both values were checked for stray whitespace, quotes and newlines (none). So the request shape and host answer, but **these credentials are not accepted by that host**. Most likely candidates, none verified: they belong to the other token URL the docs list (`deliveroo-api.auth.eu-west-1.amazoncognito.com`, Q4; not called because it is not a documented sandbox host), or the sandbox client is not yet enabled for the integration. Request 4 in section 9 is therefore blocking for any outbound sandbox call; inbound (webhook) handling does not depend on it. No order, accept or menu call was made against the real sandbox. **Superseded by section 14.1: the owner then supplied new credentials and the same host answered 200.**
 
+## 14. F/E5: Deliveroo follow-ups (still disabled by default, fakes only)
+
+Branch `feat/deliveroo-followups`. Nothing here makes a real call: every outbound path is exercised against the stub provider or the fake `fetch` the Deliveroo e2e already injects. The feature flag, staff verification and `enabled = 0` defaults are unchanged.
+
+### 14.1 Step 0: sandbox token retest (2026-10-22)
+
+ONE client-credentials request to the documented sandbox token host `https://auth-sandbox.developers.deliveroo.com/oauth2/token` with the owner's new sandbox credentials returned **HTTP 200**, `token_type` `Bearer`, `expires_in` 300, and **no `scope` field in the response body**. The JWT's `scope` claim is `https://api-dp.deliveroo.net/api_access`. No credential or token is recorded here or anywhere in the repository.
+
+- **Q4 is resolved for the sandbox:** the `auth-sandbox` host is the right one. The earlier `invalid_client` (section 13.8) was therefore the old credentials, not the token URL; the Cognito URL was never needed and was never called. The production token URL is still not confirmed.
+- The scope names are not in the body, so which API suites the client is enabled for cannot be read from the token response; only the single claim above is known.
+- The supported read-only calls (`listOpenOrders`, the list inside `testConnection`) need a **brand id and a location or site id, which we still do not have** (the Sites API is not enabled for the integration). Nothing further was called: no order, accept, menu or site request.
+
+Requests list (section 9) after this: item 4 is answered for the sandbox; item 1 (brand, site and location ids) is now the blocker for every further sandbox step.
+
+### 14.2 Scheduled-order confirm
+
+A scheduled order has a second step after acceptance: `PATCH /v1/orders/{id}` with `{"status": "confirmed"}` (the `confirmed` status and the accepted-then-confirmed transition are VERIFIED, section 2). Requital naming trap: `order.status = 'confirmed'` on OUR order is set at **acceptance**, not at this step; the marketplace confirm is recorded only on `channelorder.confirmedAt`.
+
+- **Data** (migration `20261121100000`, additive): `channelorder.confirmBy`, `confirmedAt`, `confirmClaimedAt`, `readyAt` (all NULL = unknown or not done) and `channelconnection.autoConfirmScheduled` (default 0). `CanonicalChannelOrder.confirmBy` is optional; the ingestion INSERT stores it.
+- **Mapper:** `confirmBy = confirm_at`, falling back to `start_preparing_at`, for a non-ASAP order only; an ASAP order has none. **UNVERIFIED: which payload field is the real deadline** (the docs say "confirm before `start_preparing_at`" and also mention `confirm_at`). The fallback errs towards alerting early.
+- **Provider:** capability `scheduledConfirm` and `confirmScheduledOrder`, implemented on Deliveroo with the existing `patchStatus(..., {status: 'confirmed'}, ['confirmed'])`, so 409 `invalid_status_transition` is success only if `GET /v2/orders/{id}` already shows `confirmed`, and 503 `order_not_ready` keeps its `Retry-After` retry.
+- **DEFAULT behaviour (owner decision): alert, do not confirm.** The sweep step `confirmScheduled` sends ONE WhatsApp alert to the outlet (job key `channelorder:<id>:confirm-alert`, so once however often it runs) when an accepted, unconfirmed scheduled order is within `CONFIRM_LEAD_MINUTES` (30) of `confirmBy`, and the merchant presses **Confirm scheduled order** on the desk (`POST /channels/orders/:id/confirm-scheduled`: marketplace first, then a CAS on `confirmedAt IS NULL`, audit `channel_order.scheduled_confirmed`, 502 and no change on a provider failure, 409 without the capability). The lead time, the 24 hour give-up window and the claim back-off are **UNVERIFIED** numbers (Deliveroo publishes none).
+- **Opt-in `autoConfirmScheduled` (OFF):** per connection, set by the merchant admin (`PATCH /channels/connections/:id`, refused for a provider without the capability, confirm dialog in the UI because it is a commitment to prepare the order). When on, the same step confirms instead of alerting, on an enabled connection only, at most 3 orders and 30 seconds per tick (provider calls hold the 55 second sweep lock). If it keeps failing and the deadline passes, the single alert goes out.
+- **Keyed on `confirmedAt`, never on `externalStatus`** (a late `accepted` event overwrites `externalStatus`). A CAS claim (`confirmClaimedAt`, stale after 120 seconds, which is also the back-off after a failure) is taken BEFORE the provider call; a `confirmed` status event from the tablet also sets `confirmedAt`.
+- UNVERIFIED and open: what Deliveroo does with an accepted scheduled order that is never confirmed (request 17), and the lead time.
+
+### 14.3 Desk and admin routes
+
+All copy the `accept`/`reject` pattern: `load()` is shop-scoped, a branch user of another outlet gets 404 by an explicit comparison, `orders.manage` is asserted at the order's outlet, the provider is called first and a failure (502) changes nothing, and every success writes an audit row.
+
+| Route | Roles | Behaviour |
+|---|---|---|
+| `POST /channels/orders/:id/ready` | admin, branch, order_manager | Accepted order with a Requital order only; calls `markReady`, sets `readyAt` by CAS, audit `channel_order.marked_ready`; a repeat does not call again. **A deliberate human action** (confirm dialog in the UI); nothing in the sweep calls it. Capability gate: 409 for a provider without `markReady`. |
+| `POST /channels/orders/:id/confirm-scheduled` | same | Section 14.2. |
+| `POST /channels/connections/:id/availability` | admin | `{items: [{externalItemId, available}]}`, 1 to 200. Needs the flag, an enabled connection, brand AND site ids, the `itemAvailability` capability, and every item id must be one of THIS shop's `channelitemmapping` rows for the provider (400 otherwise, nothing sent). Audit `channel.availability_set`. **The Sites API is not enabled, so this is exercised against the fake only.** |
+| `POST /channels/connections/:id/prep-time` | admin | Capability-gated: 409 for a provider without `prepTimeAdjust` (Deliveroo has none we can use). |
+| `GET /channels/providers` | admin, branch, order_manager | Now readable by the desk roles (names and capabilities only) so the desk knows which buttons to draw. |
+
+### 14.4 Staff verification
+
+- **Merchant:** `POST /channels/connections/:id/request-verification` (admin, flag required, a location id required, 409 if already verified). One UPDATE decides "once per 24 hours" (`verificationRequestedAt` is NULL or older than a day); the loser gets 429. `verificationRequestedAt` (migration `20261121110000`) is cleared in the SAME statement that clears `locationVerifiedAt` on any id or credential change. Audit `channel.verification_requested`.
+- **Staff notification (owner decision: no new channel):** `GET /platform-admin/channel-connections/pending-verification` is a cross-shop list (connections requested and not verified, oldest first, capped at 100, no secrets) shown at the top of Platform > Shops, plus one structured `error` log line and one capture through the existing `ERROR_TRACKING_WEBHOOK_URL` provider per accepted request (ids only).
+- **Platform view:** `GET /platform-admin/shops/:shopId/channel-connections` now returns outlet name, provider display name, `locationVerifiedAt/By` and `verificationRequestedAt` on top of the merchant fields; the merchant view only gained `verificationRequestedAt` and `autoConfirmScheduled`.
+- **Admin UI** (`ChannelConnectionsCard` on `/platform/shops/[shopId]`): the three ids are read-only text, a required "I confirmed these ids with the marketplace" tick enables Verify, the call restates ALL THREE ids exactly as displayed, a 409 says the ids changed and offers Reload (nothing is verified), and removing a verification asks first because it also turns the connection off.
+
+### 14.5 Deferred
+
+- **`pushCatalogue`** stays unrouted: the Menu API call replaces the whole menu (destructive) and is limited to 1 request per minute per site, and the empty-`mealtimes` and omitted-`tax_rate` assumptions in 13.3 are unverified. It needs the owner's decision on tax and a dry-run design first.
+- Prep-time: the route exists but no provider implements it.
+- Item removal and substitution, refunds and branch status are as in 13.5.
