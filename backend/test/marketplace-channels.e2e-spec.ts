@@ -469,7 +469,10 @@ describe('Marketplace channels (E1)', () => {
 
     it('unknown location, wrong secret, other tenant secret, disabled connection and garbage all get the SAME response and write nothing', async () => {
       const before = await db.query<RowDataPacket[]>(
-        `SELECT COUNT(*) AS n FROM channelinboundevent WHERE provider = 'stub_marketplace'`,
+        // scoped to THIS test's two shops: other specs run in parallel and
+        // insert stub_marketplace rows of their own
+        `SELECT COUNT(*) AS n FROM channelinboundevent WHERE shopId IN (?, ?)`,
+        [a.shopId, b.shopId],
       );
       const order = canon([{ id: 'i', priceMinor: 100 }]);
       const payload = { type: 'order.new', order };
@@ -532,7 +535,10 @@ describe('Marketplace channels (E1)', () => {
       const d = await reject(deliver(dis, payload));
       expect(d).toEqual(results[0]);
       const after = await db.query<RowDataPacket[]>(
-        `SELECT COUNT(*) AS n FROM channelinboundevent WHERE provider = 'stub_marketplace'`,
+        // scoped to THIS test's two shops: other specs run in parallel and
+        // insert stub_marketplace rows of their own
+        `SELECT COUNT(*) AS n FROM channelinboundevent WHERE shopId IN (?, ?)`,
+        [a.shopId, b.shopId],
       );
       expect(Number(after[0].n)).toBe(Number(before[0].n));
     });
@@ -592,7 +598,11 @@ describe('Marketplace channels (E1)', () => {
         .set(h(b))
         .send({ enabled: true })
         .expect(409);
-      expect(JSON.stringify(res.body)).not.toContain(String(a.shopId));
+      // whole-number match: a fresh DB gives shop A a tiny id such as 4, and a
+      // plain substring check then trips on "statusCode":409
+      expect(JSON.stringify(res.body)).not.toMatch(
+        new RegExp(`(?<![0-9])${a.shopId}(?![0-9])`),
+      );
 
       const p = await product(a, 5);
       await mapItem(a, 'iso-sku', p.id);
