@@ -750,6 +750,21 @@ describe('Billing PLT-1 first slice (e2e)', () => {
           percent: 200,
           level: 120,
         });
+        // Tenant isolation: A's plan change is invisible to B.
+        const b = body<Usage>(
+          await request(app.getHttpServer())
+            .get('/billing/usage')
+            .set(auth('B'))
+            .expect(200),
+        );
+        expect(b.ceiling).toBeNull();
+        const bSub = body<Sub>(
+          await request(app.getHttpServer())
+            .get('/billing/subscription')
+            .set(auth('B'))
+            .expect(200),
+        );
+        expect(bSub.plan?.code).not.toBe(`cap-${runId}`);
         // Over 120%, checkout and admin order creation still succeed.
         await request(app.getHttpServer())
           .post(`/public/${tenants.A.slug}/orders`)
@@ -817,6 +832,17 @@ describe('Billing PLT-1 first slice (e2e)', () => {
           .send({ [field]: 'platform' })
           .expect(400);
       }
+      // The suspension reason is platform data: it is in neither the merchant's
+      // own shop payload nor the public one.
+      const own = await request(app.getHttpServer())
+        .get('/shop')
+        .set(auth('A'))
+        .expect(200);
+      const pub = await request(app.getHttpServer())
+        .get(`/public/${tenants.A.slug}`)
+        .expect(200);
+      expect(JSON.stringify(own.body)).not.toContain('suspensionReason');
+      expect(JSON.stringify(pub.body)).not.toContain('suspensionReason');
       const [r] = await db.query<RowDataPacket[]>(
         `SELECT suspensionReason FROM shop WHERE id = ?`,
         [tenants.A.id],
