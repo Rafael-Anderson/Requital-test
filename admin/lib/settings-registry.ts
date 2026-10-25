@@ -33,6 +33,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       { href: "/settings/business/domain", label: "Domain", description: "Your store address and custom domain" },
       { href: "/settings/business/store-configuration", label: "Store Configuration", description: "Business type, language, cart and checkout behaviour" },
       { href: "/settings/business/custom-fields", label: "Custom fields", description: "Extra fields on products and other records" },
+      { href: "/settings/business/plan-billing", label: "Plan & Billing", description: "Your plan, this month's order usage and what the plan includes" },
     ],
   },
   {
