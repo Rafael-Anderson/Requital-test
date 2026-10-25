@@ -146,7 +146,7 @@ export class ShopService {
             .map((m, i) => (i === 0 ? m : m[0].toLowerCase() + m.slice(1)))
             .join(' and ');
           throw new BadRequestException(
-            `Cannot publish yet — ${sentence} before publishing.`,
+            `Cannot publish yet: ${sentence} before publishing.`,
           );
         }
       }

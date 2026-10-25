@@ -33,7 +33,7 @@ export class StripePaymentProvider implements PaymentProvider {
     const key = secretKey ?? process.env.STRIPE_SECRET_KEY;
     if (!key) {
       throw new InternalServerErrorException(
-        "No Stripe secret key configured — set it on the shop's Payment Gateways settings, or STRIPE_SECRET_KEY as a platform fallback",
+        "No Stripe secret key configured: set it on the shop's Payment Gateways settings, or STRIPE_SECRET_KEY as a platform fallback",
       );
     }
     let client = this.clients.get(key);
@@ -128,7 +128,7 @@ export class StripePaymentProvider implements PaymentProvider {
     const secret = webhookSecret ?? this.webhookSecret;
     if (!secret) {
       throw new InternalServerErrorException(
-        "No Stripe webhook secret configured — set one on the shop's Payment Gateways settings, or STRIPE_WEBHOOK_SECRET as a platform fallback",
+        "No Stripe webhook secret configured: set one on the shop's Payment Gateways settings, or STRIPE_WEBHOOK_SECRET as a platform fallback",
       );
     }
     // Stripe.webhooks (static, not this.clientFor(...).webhooks) — pure

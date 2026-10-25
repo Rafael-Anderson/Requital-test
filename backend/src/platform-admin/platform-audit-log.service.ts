@@ -38,7 +38,7 @@ export class PlatformAuditLogService {
       else await this.db.execute(sql, params);
     } catch (error) {
       logger.error(
-        'failed to write platform audit log entry — action blocked',
+        'failed to write platform audit log entry: action blocked',
         {
           platformAdminId,
           action,

@@ -57,7 +57,7 @@ const SPECS: EnvVarSpec[] = [
   {
     name: 'CUSTOMER_JWT_SECRET',
     required: true,
-    hint: 'must be a non-empty string — genuinely separate from JWT_SECRET (staff/order tokens), see CustomerAuthModule',
+    hint: 'must be a non-empty string: genuinely separate from JWT_SECRET (staff/order tokens), see CustomerAuthModule',
   },
   {
     name: 'CREDENTIAL_ENCRYPTION_KEY',
@@ -67,7 +67,7 @@ const SPECS: EnvVarSpec[] = [
   {
     name: 'CSRF_SECRET',
     required: true,
-    hint: 'must be a non-empty string — used to HMAC-sign the double-submit CSRF cookie (see common/csrf.ts)',
+    hint: 'must be a non-empty string: used to HMAC-sign the double-submit CSRF cookie (see common/csrf.ts)',
   },
   {
     name: 'PORT',
@@ -169,18 +169,18 @@ export function validateEnv(logger: LoggerService): void {
     const value = process.env[spec.name];
     if (!value) {
       if (spec.required) {
-        errors.push(`Missing required environment variable ${spec.name} — ${spec.hint}`);
+        errors.push(`Missing required environment variable ${spec.name}: ${spec.hint}`);
       }
       continue;
     }
     if (spec.validate && !spec.validate(value)) {
-      errors.push(`Invalid environment variable ${spec.name} — ${spec.hint}`);
+      errors.push(`Invalid environment variable ${spec.name}: ${spec.hint}`);
     }
   }
 
   if (errors.length > 0) {
     logger.error(
-      `Fatal: invalid environment configuration —\n${errors.map((e) => `  - ${e}`).join('\n')}`,
+      `Fatal: invalid environment configuration:\n${errors.map((e) => `  - ${e}`).join('\n')}`,
     );
     process.exit(1);
   }

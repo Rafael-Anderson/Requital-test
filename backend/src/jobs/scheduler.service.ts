@@ -49,7 +49,7 @@ export class SchedulerService {
       [lockedUntil, name, now],
     );
     if (claimed.affectedRows === 0) {
-      logger.debug(`schedule "${name}" already locked elsewhere — skipping`, {
+      logger.debug(`schedule "${name}" already locked elsewhere, skipping`, {
         name,
       });
       return;

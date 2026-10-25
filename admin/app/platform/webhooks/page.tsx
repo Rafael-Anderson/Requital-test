@@ -33,7 +33,7 @@ export default function PlatformWebhooksPage() {
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-slate-100">Webhook activity</h1>
       <p className="text-sm text-slate-500">
-        Platform-wide, across every shop — the first place to check when a merchant asks
+        Platform-wide, across every shop; the first place to check when a merchant asks
         &quot;why didn&apos;t my order update.&quot;
       </p>
 

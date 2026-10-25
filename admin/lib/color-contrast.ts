@@ -73,5 +73,5 @@ const WCAG_AAA_NORMAL_TEXT = 7;
 export function getContrastWarning(hex: string | null | undefined): string | null {
   const ratio = bestContrastRatio(hex);
   if (ratio === null || ratio >= WCAG_AAA_NORMAL_TEXT) return null;
-  return `This color has borderline contrast (${ratio.toFixed(1)}:1) — buttons and large text stay readable, but avoid it for small body text. Consider a darker or more saturated shade for stronger contrast.`;
+  return `This color has borderline contrast (${ratio.toFixed(1)}:1): buttons and large text stay readable, but avoid it for small body text. Consider a darker or more saturated shade for stronger contrast.`;
 }

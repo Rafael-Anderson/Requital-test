@@ -141,7 +141,7 @@ export class ReturnsService {
           (orderItem.quantity as number) - Number(orderItem.returned);
         if (line.quantity > remaining) {
           throw new BadRequestException(
-            `Cannot return ${line.quantity} of order item ${line.orderItemId} — only ${remaining} remaining unreturned`,
+            `Cannot return ${line.quantity} of order item ${line.orderItemId}: only ${remaining} remaining unreturned`,
           );
         }
       }
@@ -214,7 +214,7 @@ export class ReturnsService {
       // order must never exceed the order's original total.
       if (alreadyMinor + refundMinor > totalMinor) {
         throw new BadRequestException(
-          `Refund amount would exceed the order total — ${alreadyRefunded} already refunded of ${locked.total}`,
+          `Refund amount would exceed the order total: ${alreadyRefunded} already refunded of ${locked.total}`,
         );
       }
 

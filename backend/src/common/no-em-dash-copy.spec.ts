@@ -2,28 +2,33 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
 
-// House rule: no em dash (U+2014) in text a customer or merchant reads. These
-// are the files whose strings reach people (emails, WhatsApp, errors the
-// storefront shows). Comments are exempt, so this reads the syntax tree and
-// looks at string and template text only.
-const FILES = [
-  'orders/order-notifications.service.ts',
-  'notify-subscriptions/notify-subscriptions.service.ts',
-  'abandoned-carts/abandoned-carts.service.ts',
-  'customer-account/customer-account.service.ts',
-  'customer-auth/customer-auth.service.ts',
-  'gift-cards/gift-cards.service.ts',
-  'public/public.service.ts',
-  'common/nominatim.ts',
-  'auth/auth.service.ts',
-];
+// House rule: no em dash (U+2014) in text a person reads (errors staff see,
+// WhatsApp/email text, invoice text). Comments are exempt, so this reads the
+// syntax tree and looks at string and template text only. It walks EVERY
+// non-spec file in backend/src; tools/check-no-em-dash.js is the CI twin that
+// also covers admin and storefront.
+const SRC = path.join(__dirname, '..');
+// relative path -> why a string there may keep an em dash (logger/startup only).
+const ALLOWLIST: Record<string, string> = {};
 
-describe('customer-facing copy', () => {
-  it('has no em dash in a string or template literal', () => {
+function walk(dir: string, out: string[] = []): string[] {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walk(p, out);
+    else if (/\.ts$/.test(e.name) && !/\.(spec|e2e-spec)\.ts$/.test(e.name))
+      out.push(p);
+  }
+  return out;
+}
+
+describe('user-facing copy', () => {
+  it('has no em dash in a string or template literal anywhere in backend/src', () => {
     const hits: string[] = [];
-    for (const f of FILES) {
-      const file = path.join(__dirname, '..', f);
+    for (const file of walk(SRC)) {
+      const rel = path.relative(SRC, file).split(path.sep).join('/');
+      if (ALLOWLIST[rel]) continue;
       const src = fs.readFileSync(file, 'utf8');
+      if (!src.includes('—')) continue;
       const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true);
       const visit = (n: ts.Node) => {
         if (
@@ -35,7 +40,7 @@ describe('customer-facing copy', () => {
           n.text.includes('—')
         ) {
           hits.push(
-            `${f}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1}`,
+            `${rel}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1}`,
           );
         }
         ts.forEachChild(n, visit);

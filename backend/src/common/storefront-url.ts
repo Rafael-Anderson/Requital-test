@@ -71,7 +71,7 @@ function devPathBase(): string | null {
     const { hostname } = new URL(STOREFRONT_URL);
     return isLocalHostname(hostname) ? STOREFRONT_URL.replace(/\/+$/, '') : null;
   } catch {
-    logger.warn('STOREFRONT_URL is not a valid URL — ignoring it', {
+    logger.warn('STOREFRONT_URL is not a valid URL, ignoring it', {
       value: STOREFRONT_URL,
     });
     return null;

@@ -177,7 +177,7 @@ export default function HeaderSettings({
         </p>
 
         {rows.length === 0 ? (
-          <p className="text-xs text-zinc-400">No rows — the header renders as one row.</p>
+          <p className="text-xs text-zinc-400">No rows: the header renders as one row.</p>
         ) : (
           <ul className="space-y-2">
             {rows.map((row, i) => (

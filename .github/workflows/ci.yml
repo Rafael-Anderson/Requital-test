@@ -238,6 +238,11 @@ jobs:
         working-directory: backend
         run: npm test -- email-callsites --ci
 
+      - name: No-em-dash guardrail (no U+2014 in user-facing strings, all three apps)
+        run: |
+          node tools/check-no-em-dash.js --self-test
+          node tools/check-no-em-dash.js
+
   e2e:
     name: e2e (playwright)
     runs-on: ubuntu-latest

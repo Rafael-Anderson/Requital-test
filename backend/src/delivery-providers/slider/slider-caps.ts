@@ -67,7 +67,7 @@ export function assertVehicleDistanceOk(
 ): void {
   if (vehicleType === 'bike' && distanceKm > SLIDER_BIKE_MAX_DISTANCE_KM) {
     throw new BadRequestException(
-      `Bike deliveries are limited to ${SLIDER_BIKE_MAX_DISTANCE_KM}km (this delivery is ${distanceKm.toFixed(1)}km) — choose "car" or "any" instead`,
+      `Bike deliveries are limited to ${SLIDER_BIKE_MAX_DISTANCE_KM}km (this delivery is ${distanceKm.toFixed(1)}km): choose "car" or "any" instead`,
     );
   }
 }

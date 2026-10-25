@@ -941,7 +941,7 @@ export class ProductCatalogService {
     );
     if (totalVariants > MAX_VARIANTS_PER_PRODUCT) {
       throw new BadRequestException(
-        `These options would create ${totalVariants} variants — the maximum is ${MAX_VARIANTS_PER_PRODUCT}. Remove some values or options.`,
+        `These options would create ${totalVariants} variants: the maximum is ${MAX_VARIANTS_PER_PRODUCT}. Remove some values or options.`,
       );
     }
 
@@ -1500,7 +1500,7 @@ export class ProductCatalogService {
       (error as { errno: number }).errno === 1451
     ) {
       throw new ConflictException(
-        'This product has order history and cannot be deleted — mark it Unavailable instead',
+        'This product has order history and cannot be deleted: mark it Unavailable instead',
       );
     }
     throw error;

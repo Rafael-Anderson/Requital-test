@@ -396,7 +396,7 @@ export class AffiliateService {
     }
     if (row.status !== 'pending') {
       throw new BadRequestException(
-        `Cannot change status — commission is already '${row.status as string}'`,
+        `Cannot change status: commission is already '${row.status as string}'`,
       );
     }
     await this.db.execute(`UPDATE affiliateorder SET status = ? WHERE id = ?`, [

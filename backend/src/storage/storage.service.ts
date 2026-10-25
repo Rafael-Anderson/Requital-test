@@ -65,7 +65,7 @@ export class StorageService {
     const sniffed = sniffImageType(file.buffer);
     if (!sniffed) {
       throw new BadRequestException(
-        'Unrecognized or unsupported image format — only JPEG, PNG, WebP, and GIF are allowed',
+        'Unrecognized or unsupported image format: only JPEG, PNG, WebP, and GIF are allowed',
       );
     }
 

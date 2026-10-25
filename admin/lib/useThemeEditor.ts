@@ -612,7 +612,7 @@ export function useThemeEditor(themeId: number) {
     updateConfig((prev) => ({ ...prev, sections: newSections }));
     setSelectedId(null);
     void save();
-    toast(`"${preset.label}" applied — check the Sections tab`, "success");
+    toast(`"${preset.label}" applied: check the Sections tab`, "success");
   }
 
   // C1 — header/footer layout presets. Same one-time apply-then-diverge

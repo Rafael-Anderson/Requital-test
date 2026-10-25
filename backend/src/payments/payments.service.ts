@@ -335,7 +335,7 @@ export class PaymentsService {
     // arrived on, never silently applied to a different shop's order.
     if (shopId !== undefined && order.shopId !== shopId) {
       logger.warn(
-        `webhook for order ${order.id as number} received on the wrong shop's webhook URL — ignoring`,
+        `webhook for order ${order.id as number} received on the wrong shop's webhook URL: ignoring`,
         { orderId: order.id, orderShopId: order.shopId, webhookShopId: shopId },
       );
       await this.webhookLogService.log(shopId, gateway, 'mismatch', 'rejected');
@@ -469,7 +469,7 @@ export class PaymentsService {
     const admin = adminRows[0];
     if (!admin) {
       logger.warn(
-        `webhook-driven order ${action} skipped — shop has no admin user to attribute it to`,
+        `webhook-driven order ${action} skipped: shop has no admin user to attribute it to`,
         { orderId, shopId, action },
       );
       return;

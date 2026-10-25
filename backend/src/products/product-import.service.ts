@@ -514,7 +514,7 @@ export class ProductImportService {
       // absolute-set rather than routing through consumeForOrderItems.
       if (existing?.usesIngredients && raw['Stock']?.trim()) {
         errors.push(
-          'This product uses a recipe — set ingredient stock directly instead',
+          'This product uses a recipe: set ingredient stock directly instead',
         );
       }
 
@@ -578,7 +578,7 @@ export class ProductImportService {
           vErrors.push('Parent product row was rejected');
         } else if (finalAction === 'create') {
           vErrors.push(
-            "Can't attach variants to a new product via CSV import — add the variant in the product editor first, then re-export to update it",
+            "Can't attach variants to a new product via CSV import: add the variant in the product editor first, then re-export to update it",
           );
         } else if (!variantSku) {
           vErrors.push('Variant SKU is required');
@@ -592,7 +592,7 @@ export class ProductImportService {
           const found = foundRows[0];
           if (!found) {
             vErrors.push(
-              'No existing variant with this SKU — creating new variants via CSV import is not supported yet',
+              'No existing variant with this SKU: creating new variants via CSV import is not supported yet',
             );
           } else if (found.productId !== existing?.id) {
             vErrors.push('This SKU belongs to a different product');
@@ -619,7 +619,7 @@ export class ProductImportService {
           vErrors.push('Stock is not a number');
         if (existing?.usesIngredients && vraw['Stock']?.trim()) {
           vErrors.push(
-            'This product uses a recipe — set ingredient stock directly instead',
+            'This product uses a recipe: set ingredient stock directly instead',
           );
         }
 

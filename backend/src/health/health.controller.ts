@@ -35,7 +35,7 @@ export class HealthController {
       await this.db.query('SELECT 1');
       return { status: 'ok' };
     } catch (err) {
-      logger.error('readiness check failed — database unreachable', {
+      logger.error('readiness check failed, database unreachable', {
         error: err instanceof Error ? err.message : String(err),
       });
       throw new ServiceUnavailableException({ status: 'error' });

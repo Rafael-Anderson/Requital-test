@@ -27,7 +27,7 @@ function PlatformChrome({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="border-b border-amber-500/30 bg-amber-500 px-6 py-1.5 text-center text-xs font-bold tracking-wide text-black">
-        PLATFORM ADMIN — this manages every shop on Requital, not one shop&apos;s own settings
+        PLATFORM ADMIN: this manages every shop on Requital, not one shop&apos;s own settings
       </div>
       <header className="flex items-center justify-between gap-4 border-b border-slate-800 px-8 py-4">
         <div className="flex items-center gap-8">
