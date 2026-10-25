@@ -23,7 +23,7 @@ function deriveKey(): Buffer {
   const passphrase = process.env.CREDENTIAL_ENCRYPTION_KEY;
   if (!passphrase) {
     throw new Error(
-      'CREDENTIAL_ENCRYPTION_KEY is not configured — required to store/read payment gateway credentials',
+      'CREDENTIAL_ENCRYPTION_KEY is not configured: required to store/read payment gateway credentials',
     );
   }
   return scryptSync(passphrase, SALT, 32);

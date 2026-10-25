@@ -33,7 +33,7 @@ export default function ImpersonationBanner() {
   return (
     <div className="sticky top-0 z-50 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 border-b-2 border-amber-700 bg-amber-500 px-4 py-2.5 text-sm font-bold text-black shadow-md">
       <span>
-        ⚠ Viewing as <strong>{user.shopName ?? "this shop"}</strong> — you are impersonating this
+        ⚠ Viewing as <strong>{user.shopName ?? "this shop"}</strong>. You are impersonating this
         merchant. Every action is audit-logged.
       </span>
       <button

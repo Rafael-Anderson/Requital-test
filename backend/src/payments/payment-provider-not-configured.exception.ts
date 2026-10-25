@@ -8,7 +8,7 @@ import { InternalServerErrorException } from '@nestjs/common';
 export class PaymentProviderNotConfiguredException extends InternalServerErrorException {
   constructor(provider: string) {
     super(
-      `${provider} is not configured for this shop — missing or empty credentials`,
+      `${provider} is not configured for this shop: missing or empty credentials`,
     );
   }
 }

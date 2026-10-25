@@ -116,7 +116,7 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
   const itemRows = data.order.orderitem
     .map((item) => {
       const baseName = item.variantLabel
-        ? `${item.productName} — ${item.variantLabel}`
+        ? `${item.productName} - ${item.variantLabel}`
         : item.productName;
       const hasAutoDiscount =
         item.autoDiscountAmount !== null && Number(item.autoDiscountAmount) > 0;

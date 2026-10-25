@@ -320,7 +320,7 @@ export default function BlockSettingsForm({
     case "language_switcher":
       return (
         <p className="text-xs text-zinc-500">
-          Placeholder — shows a language menu on the storefront once multi-language support ships. No configuration yet.
+          Placeholder: shows a language menu on the storefront once multi-language support ships. No configuration yet.
         </p>
       );
 
@@ -381,14 +381,14 @@ export default function BlockSettingsForm({
 
     case "collection_header":
     case "product_card":
-      return <p className="text-xs text-zinc-500">Contains the blocks below — use the eye icon to show/hide the whole group.</p>;
+      return <p className="text-xs text-zinc-500">Contains the blocks below; use the eye icon to show/hide the whole group.</p>;
 
     case "product_media":
     case "product_title":
     case "product_price":
     case "product_vendor":
     case "product_stock":
-      return <p className="text-xs text-zinc-500">Shows live product data — use the eye icon to show or hide it on every card.</p>;
+      return <p className="text-xs text-zinc-500">Shows live product data; use the eye icon to show or hide it on every card.</p>;
 
     default:
       return null;

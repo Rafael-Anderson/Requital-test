@@ -100,7 +100,7 @@ export class WhatsAppSettingsService {
     }
     await this.metaWhatsAppProvider.sendMessage({
       to,
-      body: 'This is a test message from your Requital store — WhatsApp Business API is connected correctly.',
+      body: 'This is a test message from your Requital store: WhatsApp Business API is connected correctly.',
       credentials,
     });
     return { sent: true };

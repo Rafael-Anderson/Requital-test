@@ -89,7 +89,7 @@ export class CurrencyRatesService {
     if (rows.length === 0) {
       // Worth a log line: it means a shop is trading in a currency the platform
       // has no rate for, which is a configuration gap someone should close.
-      logger.warn('no exchange rate stored for currency — capturing null', {
+      logger.warn('no exchange rate stored for currency, capturing null', {
         currency: quote,
         baseCurrency: PLATFORM_BASE_CURRENCY,
       });

@@ -14,7 +14,7 @@ export default function PlatformAuditLogPage() {
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-slate-100">Audit log</h1>
       <p className="text-sm text-slate-500">
-        Every platform admin action, impersonation sessions especially — who, what, which shop,
+        Every platform admin action, impersonation sessions especially: who, what, which shop,
         when.
       </p>
 
@@ -34,7 +34,7 @@ export default function PlatformAuditLogPage() {
                 <td className="p-3 text-slate-400">{new Date(entry.createdAt).toLocaleString()}</td>
                 <td className="p-3 text-slate-300">#{entry.platformAdminId}</td>
                 <td className="p-3 font-mono text-slate-200">{entry.action}</td>
-                <td className="p-3 text-slate-300">{entry.shopId ?? "—"}</td>
+                <td className="p-3 text-slate-300">{entry.shopId ?? "-"}</td>
               </tr>
             ))}
           </tbody>

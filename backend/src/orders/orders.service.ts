@@ -883,7 +883,7 @@ export class OrdersService {
       );
       if ((result as { affectedRows: number }).affectedRows === 0) {
         throw new ConflictException(
-          'Order status changed before this update could be applied — refresh and retry',
+          'Order status changed before this update could be applied: refresh and retry',
         );
       }
 
@@ -1704,7 +1704,7 @@ export class OrdersService {
       }
 
       throw new ConflictException(
-        'Order status changed before this cancellation could be applied — refresh and retry',
+        'Order status changed before this cancellation could be applied: refresh and retry',
       );
     });
 

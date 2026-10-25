@@ -372,7 +372,7 @@ export class ProductStockService {
     }
     if (product.usesIngredients) {
       throw new BadRequestException(
-        'This product uses a recipe — adjust the individual ingredient stock instead',
+        'This product uses a recipe: adjust the individual ingredient stock instead',
       );
     }
     if (target.variantId) {

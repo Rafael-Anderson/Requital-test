@@ -246,7 +246,7 @@ export default function ManageDeliveryModal({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Customer Delivery</span>
-                  <span className="text-end">{customerDelivery ? formatDateTimeDisplay(customerDelivery) : "—"}</span>
+                  <span className="text-end">{customerDelivery ? formatDateTimeDisplay(customerDelivery) : "-"}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-muted">Total ETA</span>

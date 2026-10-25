@@ -19,7 +19,7 @@ import type { TenantContext } from '../common/tenant-context';
 function assertValidType(type: string): asserts type is PolicyPageType {
   if (!(POLICY_PAGE_TYPES as readonly string[]).includes(type)) {
     throw new BadRequestException(
-      `Unknown policy page type '${type}' — must be one of ${POLICY_PAGE_TYPES.join(', ')}`,
+      `Unknown policy page type '${type}': must be one of ${POLICY_PAGE_TYPES.join(', ')}`,
     );
   }
 }

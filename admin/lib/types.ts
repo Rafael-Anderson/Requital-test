@@ -1078,7 +1078,7 @@ export const STAFF_ROLE_LABELS: Record<UserRole, string> = {
   admin: "Admin (full access)",
   branch: "Branch (one outlet, day-to-day orders/inventory)",
   order_manager: "Order manager (orders only, no pricing/settings)",
-  viewer: "Viewer (read-only — reports, orders, customers)",
+  viewer: "Viewer (read-only: reports, orders, customers)",
 };
 
 // GET /auth/2fa (staff) and, normalised by the platform adapter, the platform tier.
@@ -2078,7 +2078,7 @@ export const HOMEPAGE_LAYOUT_OPTIONS: HomepageLayoutOption[] = [
   {
     key: "classic",
     label: "Classic",
-    description: "A single hero banner above your product grid — simple and familiar.",
+    description: "A single hero banner above your product grid, simple and familiar.",
   },
   {
     key: "slideshow",
@@ -2093,7 +2093,7 @@ export const HOMEPAGE_LAYOUT_OPTIONS: HomepageLayoutOption[] = [
   {
     key: "grid_first",
     label: "Grid First",
-    description: "Skip the hero — products start right below the header.",
+    description: "Skip the hero; products start right below the header.",
   },
 ];
 
@@ -2103,15 +2103,15 @@ export const HOMEPAGE_LAYOUT_OPTIONS: HomepageLayoutOption[] = [
 export const TOP_BAR_LAYOUTS = ["logo_left", "logo_center", "minimal"] as const;
 export type TopBarLayout = (typeof TOP_BAR_LAYOUTS)[number];
 export const TOP_BAR_LAYOUT_OPTIONS: { key: TopBarLayout; label: string; description: string }[] = [
-  { key: "logo_left", label: "Logo left", description: "Logo on the left, icons on the right — the current default." },
+  { key: "logo_left", label: "Logo left", description: "Logo on the left, icons on the right, the current default." },
   { key: "logo_center", label: "Logo centered", description: "Logo centered, icons split to either side." },
-  { key: "minimal", label: "Minimal", description: "Logo and cart only — everything else tucked into a menu." },
+  { key: "minimal", label: "Minimal", description: "Logo and cart only, everything else tucked into a menu." },
 ];
 
 export const ICON_STYLES = ["outline", "solid"] as const;
 export type IconStyle = (typeof ICON_STYLES)[number];
 export const ICON_STYLE_OPTIONS: { key: IconStyle; label: string; description: string }[] = [
-  { key: "outline", label: "Outline", description: "Light, stroke-based icons — the current default." },
+  { key: "outline", label: "Outline", description: "Light, stroke-based icons, the current default." },
   { key: "solid", label: "Solid", description: "Bolder, filled icons." },
 ];
 
@@ -2133,29 +2133,29 @@ export const BUTTON_FILL_OPTIONS: { key: ButtonFill; label: string }[] = [
 export const PDP_LAYOUTS = ["gallery_left", "gallery_top"] as const;
 export type PdpLayout = (typeof PDP_LAYOUTS)[number];
 export const PDP_LAYOUT_OPTIONS: { key: PdpLayout; label: string; description: string }[] = [
-  { key: "gallery_left", label: "Gallery left", description: "Images on the left, details on the right — the current default." },
+  { key: "gallery_left", label: "Gallery left", description: "Images on the left, details on the right, the current default." },
   { key: "gallery_top", label: "Gallery top", description: "Full-width image gallery, details below." },
 ];
 
 export const CART_LAYOUTS = ["full_page", "drawer"] as const;
 export type CartLayout = (typeof CART_LAYOUTS)[number];
 export const CART_LAYOUT_OPTIONS: { key: CartLayout; label: string; description: string }[] = [
-  { key: "full_page", label: "Full page", description: "The cart icon opens a dedicated page — the current default." },
+  { key: "full_page", label: "Full page", description: "The cart icon opens a dedicated page, the current default." },
   { key: "drawer", label: "Slide-out drawer", description: "The cart icon opens a panel over the current page instead." },
 ];
 
 export const CHECKOUT_LAYOUTS = ["single_page", "step_by_step"] as const;
 export type CheckoutLayout = (typeof CHECKOUT_LAYOUTS)[number];
 export const CHECKOUT_LAYOUT_OPTIONS: { key: CheckoutLayout; label: string; description: string }[] = [
-  { key: "single_page", label: "Single page", description: "Every field on one page — the current default." },
+  { key: "single_page", label: "Single page", description: "Every field on one page, the current default." },
   { key: "step_by_step", label: "Step by step", description: "Contact, delivery, and payment as separate steps." },
 ];
 
 export const FOOTER_LAYOUTS = ["columns", "centered"] as const;
 export type FooterLayout = (typeof FOOTER_LAYOUTS)[number];
 export const FOOTER_LAYOUT_OPTIONS: { key: FooterLayout; label: string; description: string }[] = [
-  { key: "columns", label: "Columns", description: "Brand, links, and contact side by side — the current default." },
-  { key: "centered", label: "Centered", description: "A single simplified column, centered — a lighter alternative." },
+  { key: "columns", label: "Columns", description: "Brand, links, and contact side by side, the current default." },
+  { key: "centered", label: "Centered", description: "A single simplified column, centered, a lighter alternative." },
 ];
 
 // Shared by both headerDensity and footerDensity — same three sizes, two

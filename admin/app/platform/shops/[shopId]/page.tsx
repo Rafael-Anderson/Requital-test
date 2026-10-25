@@ -169,7 +169,7 @@ export default function PlatformShopDetailPage() {
             <div className="flex justify-between">
               <dt className="text-slate-500">Owner</dt>
               <dd className="text-slate-200">
-                {shop.owner ? `${shop.owner.name} · ${shop.owner.email}` : "—"}
+                {shop.owner ? `${shop.owner.name} · ${shop.owner.email}` : "-"}
               </dd>
             </div>
             <div className="flex justify-between">
@@ -187,7 +187,7 @@ export default function PlatformShopDetailPage() {
             <div className="flex justify-between">
               <dt className="text-slate-500">Outlets</dt>
               <dd className="text-slate-200">
-                {shop.outlets.map((o) => o.name).join(", ") || "—"}
+                {shop.outlets.map((o) => o.name).join(", ") || "-"}
               </dd>
             </div>
           </dl>

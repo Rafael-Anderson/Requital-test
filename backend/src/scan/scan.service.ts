@@ -204,12 +204,12 @@ export class ScanService {
           const product = ownedProductsById.get(item.matchedId)!;
           if (product.usesIngredients) {
             throw new BadRequestException(
-              'This product uses a recipe — scan its ingredients individually instead',
+              'This product uses a recipe: scan its ingredients individually instead',
             );
           }
           if (product.hasOptions && !item.variantId) {
             throw new BadRequestException(
-              `Product ${item.matchedId} has variants — select which one this line is for`,
+              `Product ${item.matchedId} has variants: select which one this line is for`,
             );
           }
           if (!product.hasOptions && item.variantId) {

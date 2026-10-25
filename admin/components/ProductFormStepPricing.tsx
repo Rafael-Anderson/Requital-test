@@ -194,7 +194,7 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
             <Toggle
               checked={form.deliveryTimeOverride}
               onChange={form.setDeliveryTimeOverride}
-              tooltip="Shown on the product page instead of the shop's default estimated delivery time — e.g. next day for a made-to-order item, or 30 minutes for a ready-stock item."
+              tooltip="Shown on the product page instead of the shop's default estimated delivery time, e.g. next day for a made-to-order item, or 30 minutes for a ready-stock item."
             />
             <span className="text-sm">Override the shop&apos;s estimated delivery time for this product</span>
           </div>

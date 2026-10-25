@@ -108,7 +108,7 @@ export function HomeTabSetting({ editor }: LayoutSettingProps) {
       {legacyTheme.homeTabMode === "templates" ? (
         <div>
           <p className="mb-2 text-xs text-zinc-500">
-            Start from a preset section arrangement — edit it further in the Sections tab afterward.
+            Start from a preset section arrangement; edit it further in the Sections tab afterward.
           </p>
           <PresetPicker
             singleColumn

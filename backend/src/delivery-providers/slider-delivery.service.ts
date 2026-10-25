@@ -205,7 +205,7 @@ export class SliderDeliveryService {
     const outlet = await this.outletsService.findOne(ctx, order.outletId);
     if (outlet.latitude === null || outlet.longitude === null) {
       throw new BadRequestException(
-        'This outlet has no map location set — set one in Outlet settings before dispatching a Slider delivery',
+        'This outlet has no map location set: set one in Outlet settings before dispatching a Slider delivery',
       );
     }
     // Manual-trigger geocode (the merchant clicking "Send to Slider"), same

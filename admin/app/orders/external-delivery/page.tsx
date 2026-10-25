@@ -217,7 +217,7 @@ export default function ExternalDeliveryOrdersTabPage() {
                     </a>
                   )}
                 </TD>
-                <TD className="text-text-muted">{row.driverName ?? "—"}</TD>
+                <TD className="text-text-muted">{row.driverName ?? "-"}</TD>
                 <TD>
                   <StatusBadge status={row.status} />
                 </TD>

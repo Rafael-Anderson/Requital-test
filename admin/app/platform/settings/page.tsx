@@ -39,7 +39,7 @@ export default function PlatformSettingsPage() {
           Environment variables
         </h2>
         <p className="mb-4 text-xs text-slate-500">
-          Configured/not-configured status only — values are never returned by this API.
+          Configured/not-configured status only: values are never returned by this API.
         </p>
         <div className="divide-y divide-slate-800">
           {settings.envVars.map((v) => (

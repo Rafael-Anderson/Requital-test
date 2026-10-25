@@ -22,7 +22,7 @@ export class PayTabsPaymentProvider implements PaymentProvider {
     _params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {
     throw new InternalServerErrorException(
-      'PayTabs integration is a structural stub — no real checkout-session API call is implemented yet',
+      'PayTabs integration is a structural stub: no real checkout-session API call is implemented yet',
     );
   }
 
@@ -30,7 +30,7 @@ export class PayTabsPaymentProvider implements PaymentProvider {
     _payload: Buffer,
     _signatureHeader: string,
   ): WebhookResult | null {
-    logger.warn('webhook received but parseWebhookEvent is a stub — ignoring');
+    logger.warn('webhook received but parseWebhookEvent is a stub, ignoring');
     return null;
   }
 }

@@ -19,7 +19,7 @@ import type { ThemeEditorState } from "@/lib/useThemeEditor";
 // deliberate near-today baseline, NOT byte-identical to Default.
 const INTENSITY_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "Default (no motion overrides)" },
-  { value: "none", label: "None — motion off" },
+  { value: "none", label: "None (motion off)" },
   { value: "subtle", label: "Subtle" },
   { value: "standard", label: "Standard" },
   { value: "expressive", label: "Expressive" },

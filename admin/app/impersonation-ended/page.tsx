@@ -22,8 +22,8 @@ function ImpersonationEndedContent() {
         Impersonation session expired
       </h1>
       <p className="mb-6 text-sm text-text-muted dark:text-zinc-400">
-        The 1-hour impersonation session has ended. You were signed out of the merchant admin —
-        this does not affect your platform admin session.
+        The 1-hour impersonation session has ended. You were signed out of the merchant admin.
+        This does not affect your platform admin session.
       </p>
       <Link
         href={returnHref}

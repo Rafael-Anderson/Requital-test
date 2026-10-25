@@ -50,6 +50,6 @@ export async function startImpersonation(shopId: number): Promise<boolean> {
 export function confirmSuspend(): boolean {
   return window.confirm(
     "Suspend this shop?\n\n" +
-      "This blocks merchant login and takes the storefront offline. It's reversible — you can unsuspend at any time.",
+      "This blocks merchant login and takes the storefront offline. It's reversible, you can unsuspend at any time.",
   );
 }

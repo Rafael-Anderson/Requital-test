@@ -33,7 +33,7 @@ export function useUnsavedChangesGuard(suppressRef: RefObject<boolean>) {
       if (url.origin !== window.location.origin) return;
       if (url.pathname === window.location.pathname && url.search === window.location.search) return;
 
-      if (!window.confirm("You have unsaved changes — leave?")) {
+      if (!window.confirm("You have unsaved changes: leave?")) {
         e.preventDefault();
       }
     }

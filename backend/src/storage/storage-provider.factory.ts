@@ -41,6 +41,6 @@ export function resolveStorageProvider(): StorageProvider {
   }
 
   throw new Error(
-    `Unknown STORAGE_PROVIDER "${provider}" — must be "local" or "s3"`,
+    `Unknown STORAGE_PROVIDER "${provider}": must be "local" or "s3"`,
   );
 }

@@ -54,8 +54,8 @@ const STATUS_MESSAGES: Record<number, string> = {
   402: 'This shop’s Slider wallet has insufficient balance',
   403: 'This delivery does not belong to this shop’s Slider account',
   404: 'Slider delivery not found',
-  422: 'Slider rejected this delivery (validation failed — check COD/schedule/area)',
-  500: 'Slider had a server error — try again shortly',
+  422: 'Slider rejected this delivery (validation failed: check COD/schedule/area)',
+  500: 'Slider had a server error: try again shortly',
 };
 
 // One retry, only on a genuinely-received 5xx response — never on a
