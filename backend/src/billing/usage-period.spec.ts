@@ -3,7 +3,10 @@ import { currentUsagePeriod, usageLevel } from './usage-period';
 describe('currentUsagePeriod', () => {
   it('uses the shop timezone for the month boundary (Dubai, UTC+4)', () => {
     // 2026-10-31 21:00 UTC is already 2026-11-01 01:00 in Dubai.
-    const p = currentUsagePeriod(new Date('2026-10-31T21:00:00Z'), 'Asia/Dubai');
+    const p = currentUsagePeriod(
+      new Date('2026-10-31T21:00:00Z'),
+      'Asia/Dubai',
+    );
     expect(p.periodKey).toBe('2026-11');
     expect(p.start.toISOString()).toBe('2026-10-31T20:00:00.000Z');
     expect(p.endExclusive.toISOString()).toBe('2026-11-30T20:00:00.000Z');
@@ -17,15 +20,19 @@ describe('currentUsagePeriod', () => {
   });
 
   it('rolls December into January', () => {
-    const p = currentUsagePeriod(new Date('2026-12-15T12:00:00Z'), 'Asia/Kuwait');
+    const p = currentUsagePeriod(
+      new Date('2026-12-15T12:00:00Z'),
+      'Asia/Kuwait',
+    );
     expect(p.periodKey).toBe('2026-12');
     expect(p.endExclusive.toISOString()).toBe('2026-12-31T21:00:00.000Z');
   });
 
   it('falls back instead of throwing on an unknown timezone', () => {
-    expect(currentUsagePeriod(new Date('2026-10-10T00:00:00Z'), 'Nope/Zone').periodKey).toBe(
-      '2026-10',
-    );
+    expect(
+      currentUsagePeriod(new Date('2026-10-10T00:00:00Z'), 'Nope/Zone')
+        .periodKey,
+    ).toBe('2026-10');
   });
 });
 

@@ -49,9 +49,11 @@ export class BillingService {
           }
         : null,
       currency: (r?.currency as string | null | undefined) ?? null,
-      billingInterval: (r?.billingInterval as string | null | undefined) ?? null,
+      billingInterval:
+        (r?.billingInterval as string | null | undefined) ?? null,
       trialEndsAt: (r?.trialEndsAt as Date | null | undefined) ?? null,
-      currentPeriodEnd: (r?.currentPeriodEnd as Date | null | undefined) ?? null,
+      currentPeriodEnd:
+        (r?.currentPeriodEnd as Date | null | undefined) ?? null,
       cancelAtPeriodEnd: r ? Boolean(r.cancelAtPeriodEnd) : false,
       // What the plan entitles, key and description only. Never the merchant's
       // own switch values or any platform override.
@@ -68,7 +70,9 @@ export class BillingService {
   // never written to order creation.
   async getUsage(shopId: number, now: Date = new Date()) {
     const [shop, plan] = await Promise.all([
-      this.db.query<RowDataPacket[]>(`SELECT timezone FROM shop WHERE id = ?`, [shopId]),
+      this.db.query<RowDataPacket[]>(`SELECT timezone FROM shop WHERE id = ?`, [
+        shopId,
+      ]),
       this.db.query<RowDataPacket[]>(
         `SELECT p.orderSoftCeiling
            FROM shopsubscription ss JOIN plan p ON p.id = ss.planId
@@ -84,7 +88,8 @@ export class BillingService {
       [shopId, period.start, period.endExclusive],
     );
     const used = Number(counted[0].n);
-    const ceiling = (plan[0]?.orderSoftCeiling as number | null | undefined) ?? null;
+    const ceiling =
+      (plan[0]?.orderSoftCeiling as number | null | undefined) ?? null;
     return {
       periodKey: period.periodKey,
       used,

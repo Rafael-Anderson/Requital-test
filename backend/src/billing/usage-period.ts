@@ -20,7 +20,14 @@ function offsetMs(instant: Date, tz: string): number {
       .formatToParts(instant)
       .map((x) => [x.type, Number(x.value)]),
   ) as Record<string, number>;
-  const local = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  const local = Date.UTC(
+    p.year,
+    p.month - 1,
+    p.day,
+    p.hour,
+    p.minute,
+    p.second,
+  );
   return local - Math.floor(instant.getTime() / 1000) * 1000;
 }
 
@@ -62,7 +69,10 @@ export function currentUsagePeriod(now: Date, timezone: string): UsagePeriod {
 
 // 0 below 80%, then the highest of 80 / 100 / 120 reached (section 8.3). Messaging
 // levels only: nothing in the backend reads this to block anything.
-export function usageLevel(used: number, ceiling: number | null): 0 | 80 | 100 | 120 {
+export function usageLevel(
+  used: number,
+  ceiling: number | null,
+): 0 | 80 | 100 | 120 {
   if (ceiling == null || ceiling <= 0) return 0;
   const pct = (used / ceiling) * 100;
   return pct >= 120 ? 120 : pct >= 100 ? 100 : pct >= 80 ? 80 : 0;

@@ -17,13 +17,32 @@ import { DatabaseService } from '../src/database/database.service';
 import { FeaturesService } from '../src/features/features.service';
 
 const SHOP_COLS = [
-  'id', 'name', 'subdomain', 'currency', 'published', 'suspendedAt',
-  'sliderEnabled', 'customerSurveyEnabled', 'notifyEmail', 'notifyCustomersWhatsapp',
-  'notifyAbandonedCart', 'notifyLowStockDigest', 'autoDeductIngredientStock',
-  'whatsappFloatingButtonEnabled', 'productImageZoomEnabled', 'showCollectionMenu',
+  'id',
+  'name',
+  'subdomain',
+  'currency',
+  'published',
+  'suspendedAt',
+  'sliderEnabled',
+  'customerSurveyEnabled',
+  'notifyEmail',
+  'notifyCustomersWhatsapp',
+  'notifyAbandonedCart',
+  'notifyLowStockDigest',
+  'autoDeductIngredientStock',
+  'whatsappFloatingButtonEnabled',
+  'productImageZoomEnabled',
+  'showCollectionMenu',
 ];
 const ORDER_COLS = [
-  'id', 'shopId', 'outletId', 'shopOrderNumber', 'currency', 'total', 'status', 'createdAt',
+  'id',
+  'shopId',
+  'outletId',
+  'shopOrderNumber',
+  'currency',
+  'total',
+  'status',
+  'createdAt',
 ];
 
 const rowHash = (cols: string[]) =>
@@ -41,7 +60,9 @@ async function main() {
       );
       return { count: Number(r.n), bitXor: String(r.x) };
     };
-    const shops = await db.query<RowDataPacket[]>(`SELECT id FROM shop ORDER BY id`);
+    const shops = await db.query<RowDataPacket[]>(
+      `SELECT id FROM shop ORDER BY id`,
+    );
     const matrix: Record<string, Record<string, boolean>> = {};
     for (const s of shops) {
       matrix[String(s.id)] = Object.fromEntries(
@@ -56,7 +77,10 @@ async function main() {
           shop: await checksum('shop', SHOP_COLS),
           order: await checksum('order', ORDER_COLS),
           shopfeatureoverride: await checksum('shopfeatureoverride', [
-            'shopId', 'featureKey', 'enabled', 'note',
+            'shopId',
+            'featureKey',
+            'enabled',
+            'note',
           ]),
           matrix,
         },

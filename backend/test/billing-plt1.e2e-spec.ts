@@ -73,7 +73,13 @@ describe('Billing PLT-1 first slice (e2e)', () => {
 
   const tenants: Record<
     'A' | 'B',
-    { id: number; slug: string; token: string; outletId: number; productId: number }
+    {
+      id: number;
+      slug: string;
+      token: string;
+      outletId: number;
+      productId: number;
+    }
   > = {
     A: { id: 0, slug: '', token: '', outletId: 0, productId: 0 },
     B: { id: 0, slug: '', token: '', outletId: 0, productId: 0 },
@@ -92,7 +98,10 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       })
       .expect(201);
     const token = body<AuthResponse>(res).accessToken;
-    await verifySignupEmail(app.getHttpServer(), body<AuthResponse>(res).devVerificationLink);
+    await verifySignupEmail(
+      app.getHttpServer(),
+      body<AuthResponse>(res).devVerificationLink,
+    );
     const me = await request(app.getHttpServer())
       .get('/auth/me')
       .set('Authorization', `Bearer ${token}`)
@@ -136,7 +145,9 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({
         outletId,
-        adjustments: [{ productId: body<{ id: number }>(product).id, delta: 100 }],
+        adjustments: [
+          { productId: body<{ id: number }>(product).id, delta: 100 },
+        ],
       })
       .expect(200);
     await request(app.getHttpServer())
@@ -153,7 +164,9 @@ describe('Billing PLT-1 first slice (e2e)', () => {
     };
   }
 
-  const auth = (t: 'A' | 'B') => ({ Authorization: `Bearer ${tenants[t].token}` });
+  const auth = (t: 'A' | 'B') => ({
+    Authorization: `Bearer ${tenants[t].token}`,
+  });
   const platformGet = (path: string) =>
     request(app.getHttpServer()).get(path).set('Cookie', platformCookie);
   const platformPost = (path: string) =>
@@ -190,7 +203,10 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       ],
     );
     const shopId = r.insertId;
-    const o = await db.execute(`INSERT INTO outlet (shopId, name) VALUES (?, 'Main')`, [shopId]);
+    const o = await db.execute(
+      `INSERT INTO outlet (shopId, name) VALUES (?, 'Main')`,
+      [shopId],
+    );
     if (i % 2 === 0) {
       await db.execute(
         `INSERT INTO \`order\` (shopId, outletId, shopOrderNumber, currency, customerName,
@@ -211,16 +227,21 @@ describe('Billing PLT-1 first slice (e2e)', () => {
 
   // The pre-billing formula, restated independently of the code under test.
   async function oracleFlags(shopId: number): Promise<Record<string, boolean>> {
-    const [shop] = await db.query<RowDataPacket[]>(`SELECT * FROM shop WHERE id = ?`, [shopId]);
+    const [shop] = await db.query<RowDataPacket[]>(
+      `SELECT * FROM shop WHERE id = ?`,
+      [shopId],
+    );
     const ov = await db.query<RowDataPacket[]>(
       `SELECT featureKey, enabled FROM shopfeatureoverride WHERE shopId = ?`,
       [shopId],
     );
-    const o = new Map(ov.map((r) => [r.featureKey as string, Boolean(r.enabled)]));
+    const o = new Map(
+      ov.map((r) => [r.featureKey as string, Boolean(r.enabled)]),
+    );
     const out: Record<string, boolean> = {};
     for (const k of FEATURE_KEY_LIST) {
       const d = FEATURE_KEYS[k];
-      const col = d.source === 'column' ? shop[d.column] : null;
+      const col: unknown = d.source === 'column' ? shop[d.column] : null;
       out[k] = o.has(k) ? o.get(k)! : col != null ? Boolean(col) : d.default;
     }
     return out;
@@ -230,10 +251,18 @@ describe('Billing PLT-1 first slice (e2e)', () => {
     'id,name,subdomain,currency,published,suspendedAt,sliderEnabled,customerSurveyEnabled,notifyEmail,notifyCustomersWhatsapp,notifyAbandonedCart,notifyLowStockDigest,autoDeductIngredientStock,whatsappFloatingButtonEnabled,productImageZoomEnabled,showCollectionMenu'.split(
       ',',
     );
-  const ORDER_COLS = 'id,shopId,outletId,shopOrderNumber,currency,total,status,createdAt'.split(',');
+  const ORDER_COLS =
+    'id,shopId,outletId,shopOrderNumber,currency,total,status,createdAt'.split(
+      ',',
+    );
   const rowHash = (cols: string[]) =>
     `CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|', ${cols.map((c) => `IFNULL(\`${c}\`, '~NULL~')`).join(', ')})), 1, 16), 16, 10) AS UNSIGNED)`;
-  async function checksum(table: string, cols: string[], where: string, ids: number[]) {
+  async function checksum(
+    table: string,
+    cols: string[],
+    where: string,
+    ids: number[],
+  ) {
     const [r] = await db.query<RowDataPacket[]>(
       `SELECT COUNT(*) AS n, CAST(BIT_XOR(${rowHash(cols)}) AS CHAR) AS x FROM \`${table}\` WHERE ${where} IN (${ph(ids)})`,
       ids,
@@ -243,7 +272,10 @@ describe('Billing PLT-1 first slice (e2e)', () => {
 
   async function runMigrationSql() {
     const sql = readFileSync(
-      join(__dirname, '../prisma/migrations/20261124110000_billing_plt1_seed_backfill/migration.sql'),
+      join(
+        __dirname,
+        '../prisma/migrations/20261124110000_billing_plt1_seed_backfill/migration.sql',
+      ),
       'utf8',
     );
     const conn = await createConnection({
@@ -258,7 +290,9 @@ describe('Billing PLT-1 first slice (e2e)', () => {
   }
 
   async function count(table: string): Promise<number> {
-    const [r] = await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM \`${table}\``);
+    const [r] = await db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS n FROM \`${table}\``,
+    );
     return Number(r.n);
   }
 
@@ -272,7 +306,13 @@ describe('Billing PLT-1 first slice (e2e)', () => {
         `INSERT INTO \`order\` (shopId, outletId, shopOrderNumber, currency, customerName,
            customerPhone, customerAddress, total, status, createdAt)
          VALUES (?, ?, ?, 'AED', 'U', '0500', 'x', 10, ?, ?)`,
-        [shopId, outletId, 900000 + Math.floor(Math.random() * 90000) + i, s.status, s.at],
+        [
+          shopId,
+          outletId,
+          900000 + Math.floor(Math.random() * 90000) + i,
+          s.status,
+          s.at,
+        ],
       );
     }
   }
@@ -283,7 +323,11 @@ describe('Billing PLT-1 first slice (e2e)', () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
     db = app.get(DatabaseService);
@@ -293,11 +337,14 @@ describe('Billing PLT-1 first slice (e2e)', () => {
     await signup('B');
 
     const email = `billing-platform-${runId}@test.com`;
-    await db.execute(`INSERT INTO platformadmin (email, passwordHash, name) VALUES (?, ?, ?)`, [
-      email,
-      await bcrypt.hash('platform-password-123', 10),
-      'Billing Platform Admin',
-    ]);
+    await db.execute(
+      `INSERT INTO platformadmin (email, passwordHash, name) VALUES (?, ?, ?)`,
+      [
+        email,
+        await bcrypt.hash('platform-password-123', 10),
+        'Billing Platform Admin',
+      ],
+    );
     const login = await request(app.getHttpServer())
       .post('/platform-auth/login')
       .send({ email, password: 'platform-password-123' })
@@ -318,17 +365,28 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       const plans = await db.query<RowDataPacket[]>(
         `SELECT code, kind, isSelectable, orderSoftCeiling FROM plan ORDER BY sortOrder`,
       );
-      expect(plans.map((p) => p.code)).toEqual(['legacy_free', 'tier1', 'tier2', 'tier3']);
-      expect(plans[0]).toMatchObject({ kind: 'legacy', isSelectable: false, orderSoftCeiling: null });
+      expect(plans.map((p) => p.code as string)).toEqual([
+        'legacy_free',
+        'tier1',
+        'tier2',
+        'tier3',
+      ]);
+      expect(plans[0]).toMatchObject({
+        kind: 'legacy',
+        isSelectable: false,
+        orderSoftCeiling: null,
+      });
       expect(await count('planprice')).toBe(0);
     });
 
     it('every plan has a planfeature row for EVERY registered key (a key added without one fails here)', async () => {
-      const plans = await db.query<RowDataPacket[]>(`SELECT id, code FROM plan`);
+      const plans = await db.query<RowDataPacket[]>(
+        `SELECT id, code FROM plan`,
+      );
       for (const p of plans) {
         const rows = await db.query<RowDataPacket[]>(
           `SELECT featureKey FROM planfeature WHERE planId = ?`,
-          [p.id],
+          [p.id as number],
         );
         const have = rows.map((r) => r.featureKey as string).sort();
         expect([p.code, have]).toEqual([p.code, [...FEATURE_KEY_LIST].sort()]);
@@ -341,27 +399,30 @@ describe('Billing PLT-1 first slice (e2e)', () => {
           `SELECT pf.featureKey, pf.entitled FROM planfeature pf JOIN plan p ON p.id = pf.planId WHERE p.code = ?`,
           [code],
         );
-        return new Map(rows.map((r) => [r.featureKey as string, Boolean(r.entitled)]));
+        return new Map(
+          rows.map((r) => [r.featureKey as string, Boolean(r.entitled)]),
+        );
       };
       const [legacy, t1, t2, t3] = await Promise.all(
         ['legacy_free', 'tier1', 'tier2', 'tier3'].map(ent),
       );
-      for (const m of [legacy, t1, t2, t3]) expect(m.get('auto_deduct_ingredient_stock')).toBe(true);
+      for (const m of [legacy, t1, t2, t3])
+        expect(m.get('auto_deduct_ingredient_stock')).toBe(true);
       expect([...legacy.values()].every(Boolean)).toBe(true);
-      expect([t1.get('slider'), t1.get('customer_survey'), t1.get('abandoned_cart_recovery')]).toEqual([
-        false,
-        false,
-        false,
-      ]);
-      expect([t2.get('slider'), t2.get('customer_survey'), t2.get('abandoned_cart_recovery')]).toEqual([
-        true,
-        true,
-        true,
-      ]);
-      expect([t2.get('notify_customers_whatsapp'), t3.get('notify_customers_whatsapp')]).toEqual([
-        false,
-        true,
-      ]);
+      expect([
+        t1.get('slider'),
+        t1.get('customer_survey'),
+        t1.get('abandoned_cart_recovery'),
+      ]).toEqual([false, false, false]);
+      expect([
+        t2.get('slider'),
+        t2.get('customer_survey'),
+        t2.get('abandoned_cart_recovery'),
+      ]).toEqual([true, true, true]);
+      expect([
+        t2.get('notify_customers_whatsapp'),
+        t3.get('notify_customers_whatsapp'),
+      ]).toEqual([false, true]);
       expect([...t3.values()].every(Boolean)).toBe(true);
     });
   });
@@ -372,16 +433,26 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       for (let i = 1; i <= 12; i++) ids.push(await fixtureShop(i));
       ids.push(tenants.A.id, tenants.B.id);
       // Created after the migration ran: no subscription row (fail open).
-      await db.execute(`DELETE FROM shopsubscription WHERE shopId IN (${ph(ids)})`, ids);
+      await db.execute(
+        `DELETE FROM shopsubscription WHERE shopId IN (${ph(ids)})`,
+        ids,
+      );
 
       const matrix = async () =>
         Object.fromEntries(
-          await Promise.all(ids.map(async (id) => [id, await features.getFlags(id)] as const)),
+          await Promise.all(
+            ids.map(async (id) => [id, await features.getFlags(id)] as const),
+          ),
         );
       const sums = async () => [
         await checksum('shop', SHOP_COLS, 'id', ids),
         await checksum('order', ORDER_COLS, 'shopId', ids),
-        await checksum('shopfeatureoverride', ['shopId', 'featureKey', 'enabled', 'note'], 'shopId', ids),
+        await checksum(
+          'shopfeatureoverride',
+          ['shopId', 'featureKey', 'enabled', 'note'],
+          'shopId',
+          ids,
+        ),
       ];
 
       const before = await matrix();
@@ -389,7 +460,10 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       // Fail-open already equals the independent pre-billing formula.
       for (const id of ids) expect(before[id]).toEqual(await oracleFlags(id));
       expect(
-        (await db.query<RowDataPacket[]>(`SELECT shopId FROM shopsubscription WHERE shopId IN (${ph(ids)})`, ids)),
+        await db.query<RowDataPacket[]>(
+          `SELECT shopId FROM shopsubscription WHERE shopId IN (${ph(ids)})`,
+          ids,
+        ),
       ).toHaveLength(0);
 
       await runMigrationSql();
@@ -403,9 +477,17 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       );
       expect(subs).toHaveLength(ids.length);
       for (const s of subs) {
-        expect(s).toMatchObject({ code: 'legacy_free', source: 'legacy', status: 'active' });
+        expect(s).toMatchObject({
+          code: 'legacy_free',
+          source: 'legacy',
+          status: 'active',
+        });
         // unknown stays NULL
-        expect([s.currency, s.currentPeriodEnd, s.trialEndsAt]).toEqual([null, null, null]);
+        expect([s.currency, s.currentPeriodEnd, s.trialEndsAt]).toEqual([
+          null,
+          null,
+          null,
+        ]);
       }
       // Suspended-before-billing shops are 'platform', never auto-liftable.
       const suspended = await db.query<RowDataPacket[]>(
@@ -418,7 +500,12 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       // Idempotent: a second and third run add no row to any billing table.
       const sizes = async () => Promise.all(BILLING_TABLES.map(count));
       const mine = async () =>
-        (await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM subscriptionevent WHERE shopId IN (${ph(ids)})`, ids))[0].n;
+        (
+          await db.query<RowDataPacket[]>(
+            `SELECT COUNT(*) AS n FROM subscriptionevent WHERE shopId IN (${ph(ids)})`,
+            ids,
+          )
+        )[0].n as number;
       await runMigrationSql(); // settle rows created by parallel specs
       const sizeBefore = await sizes();
       const eventsBefore = await mine();
@@ -454,7 +541,9 @@ describe('Billing PLT-1 first slice (e2e)', () => {
         `UPDATE shop SET sliderEnabled = 1, notifyEmail = 1, customerSurveyEnabled = 1, suspendedAt = NULL WHERE id = ?`,
         [shopId],
       );
-      await db.execute(`DELETE FROM shopfeatureoverride WHERE shopId = ?`, [shopId]);
+      await db.execute(`DELETE FROM shopfeatureoverride WHERE shopId = ?`, [
+        shopId,
+      ]);
       await db.execute(
         `INSERT INTO shopsubscription (shopId, planId, status, source) VALUES (?, ?, 'active', 'stripe')
          ON DUPLICATE KEY UPDATE planId = VALUES(planId), source = 'stripe'`,
@@ -463,7 +552,9 @@ describe('Billing PLT-1 first slice (e2e)', () => {
     });
 
     afterAll(async () => {
-      await db.execute(`DELETE FROM shopsubscription WHERE planId = ?`, [planId]);
+      await db.execute(`DELETE FROM shopsubscription WHERE planId = ?`, [
+        planId,
+      ]);
       await db.execute(`DELETE FROM plan WHERE id = ?`, [planId]);
     });
 
@@ -472,11 +563,21 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       expect(flags.slider).toBe(false); // plan row says no
       expect(flags.notify_email).toBe(true);
       expect(flags.customer_survey).toBe(true); // no planfeature row: entitled
-      const [col] = await db.query<RowDataPacket[]>(`SELECT sliderEnabled FROM shop WHERE id = ?`, [shopId]);
+      const [col] = await db.query<RowDataPacket[]>(
+        `SELECT sliderEnabled FROM shop WHERE id = ?`,
+        [shopId],
+      );
       expect(Boolean(col.sliderEnabled)).toBe(true); // the merchant's column is never rewritten
       const d = (await features.describe(shopId))!;
-      expect(d.find((f) => f.key === 'slider')).toMatchObject({ entitled: false, entitledBy: 'plan', effective: false });
-      expect(d.find((f) => f.key === 'customer_survey')).toMatchObject({ entitled: true, entitledBy: 'default' });
+      expect(d.find((f) => f.key === 'slider')).toMatchObject({
+        entitled: false,
+        entitledBy: 'plan',
+        effective: false,
+      });
+      expect(d.find((f) => f.key === 'customer_survey')).toMatchObject({
+        entitled: true,
+        entitledBy: 'default',
+      });
     });
 
     it('a platform override beats the plan in both directions', async () => {
@@ -486,7 +587,9 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       );
       const flags = await features.getFlags(shopId);
       expect([flags.slider, flags.notify_email]).toEqual([true, false]);
-      await db.execute(`DELETE FROM shopfeatureoverride WHERE shopId = ?`, [shopId]);
+      await db.execute(`DELETE FROM shopfeatureoverride WHERE shopId = ?`, [
+        shopId,
+      ]);
     });
 
     it('enabledShopIds (SQL) agrees with getFlags for every key, for plan-limited and plan-less shops', async () => {
@@ -495,39 +598,72 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       for (const key of FEATURE_KEY_LIST) {
         const ids = new Set(await features.enabledShopIds(key));
         for (const id of [shopId, bare, legacyShop]) {
-          expect([key, id, ids.has(id)]).toEqual([key, id, (await features.getFlags(id))[key]]);
+          expect([key, id, ids.has(id)]).toEqual([
+            key,
+            id,
+            (await features.getFlags(id))[key],
+          ]);
         }
       }
-      expect(new Set(await features.enabledShopIds('slider')).has(shopId)).toBe(false);
+      expect(new Set(await features.enabledShopIds('slider')).has(shopId)).toBe(
+        false,
+      );
     });
 
     it('moving the shop to a plan that entitles the key restores it with no reconfiguration', async () => {
-      const [t2] = await db.query<RowDataPacket[]>(`SELECT id FROM plan WHERE code = 'tier2'`);
-      await db.execute(`UPDATE shopsubscription SET planId = ? WHERE shopId = ?`, [t2.id, shopId]);
+      const [t2] = await db.query<RowDataPacket[]>(
+        `SELECT id FROM plan WHERE code = 'tier2'`,
+      );
+      await db.execute(
+        `UPDATE shopsubscription SET planId = ? WHERE shopId = ?`,
+        [t2.id as number, shopId],
+      );
       expect((await features.getFlags(shopId)).slider).toBe(true);
-      expect(new Set(await features.enabledShopIds('slider')).has(shopId)).toBe(true);
+      expect(new Set(await features.enabledShopIds('slider')).has(shopId)).toBe(
+        true,
+      );
     });
   });
 
   describe('GET /billing/subscription and /billing/usage (shop admin, read only)', () => {
     it('a shop with no subscription row is reported honestly and keeps every feature (fail open)', async () => {
-      await db.execute(`DELETE FROM shopsubscription WHERE shopId = ?`, [tenants.A.id]);
+      await db.execute(`DELETE FROM shopsubscription WHERE shopId = ?`, [
+        tenants.A.id,
+      ]);
       const sub = body<Sub>(
-        await request(app.getHttpServer()).get('/billing/subscription').set(auth('A')).expect(200),
+        await request(app.getHttpServer())
+          .get('/billing/subscription')
+          .set(auth('A'))
+          .expect(200),
       );
-      expect(sub).toMatchObject({ hasSubscription: false, plan: null, status: null });
+      expect(sub).toMatchObject({
+        hasSubscription: false,
+        plan: null,
+        status: null,
+      });
       expect(sub.features).toHaveLength(FEATURE_KEY_LIST.length);
       expect(sub.features.every((f) => f.entitled)).toBe(true);
       const usage = body<Usage>(
-        await request(app.getHttpServer()).get('/billing/usage').set(auth('A')).expect(200),
+        await request(app.getHttpServer())
+          .get('/billing/usage')
+          .set(auth('A'))
+          .expect(200),
       );
-      expect(usage).toMatchObject({ used: 0, ceiling: null, percent: null, level: 0 });
+      expect(usage).toMatchObject({
+        used: 0,
+        ceiling: null,
+        percent: null,
+        level: 0,
+      });
     });
 
     it('shows the legacy plan once backfilled', async () => {
       await runMigrationSql();
       const sub = body<Sub>(
-        await request(app.getHttpServer()).get('/billing/subscription').set(auth('A')).expect(200),
+        await request(app.getHttpServer())
+          .get('/billing/subscription')
+          .set(auth('A'))
+          .expect(200),
       );
       expect(sub).toMatchObject({
         hasSubscription: true,
@@ -539,7 +675,9 @@ describe('Billing PLT-1 first slice (e2e)', () => {
 
     it('is admin only and needs a login', async () => {
       await request(app.getHttpServer()).get('/billing/usage').expect(401);
-      await request(app.getHttpServer()).get('/billing/subscription').expect(401);
+      await request(app.getHttpServer())
+        .get('/billing/subscription')
+        .expect(401);
       for (const role of ['viewer', 'order_manager'] as const) {
         const t = await createStaffToken(app, tenants.A.token, 'bill', role);
         await request(app.getHttpServer())
@@ -554,9 +692,14 @@ describe('Billing PLT-1 first slice (e2e)', () => {
     });
 
     it('counts only this shop, only this month (shop timezone), only non-cancelled orders', async () => {
-      const [tz] = await db.query<RowDataPacket[]>(`SELECT timezone FROM shop WHERE id = ?`, [tenants.A.id]);
+      const [tz] = await db.query<RowDataPacket[]>(
+        `SELECT timezone FROM shop WHERE id = ?`,
+        [tenants.A.id],
+      );
       const period = currentUsagePeriod(new Date(), tz.timezone as string);
-      const inMonth = new Date(Math.min(Date.now(), period.endExclusive.getTime() - 60_000));
+      const inMonth = new Date(
+        Math.min(Date.now(), period.endExclusive.getTime() - 60_000),
+      );
       await insertOrders(tenants.A.id, tenants.A.outletId, [
         { at: inMonth, status: 'pending' },
         { at: inMonth, status: 'confirmed' },
@@ -564,9 +707,21 @@ describe('Billing PLT-1 first slice (e2e)', () => {
         { at: new Date(period.start.getTime() - 3_600_000), status: 'pending' }, // last month
         { at: period.endExclusive, status: 'pending' }, // next month (exclusive end)
       ]);
-      await insertOrders(tenants.B.id, tenants.B.outletId, [{ at: inMonth, status: 'pending' }]);
-      const a = body<Usage>(await request(app.getHttpServer()).get('/billing/usage').set(auth('A')).expect(200));
-      const b = body<Usage>(await request(app.getHttpServer()).get('/billing/usage').set(auth('B')).expect(200));
+      await insertOrders(tenants.B.id, tenants.B.outletId, [
+        { at: inMonth, status: 'pending' },
+      ]);
+      const a = body<Usage>(
+        await request(app.getHttpServer())
+          .get('/billing/usage')
+          .set(auth('A'))
+          .expect(200),
+      );
+      const b = body<Usage>(
+        await request(app.getHttpServer())
+          .get('/billing/usage')
+          .set(auth('B'))
+          .expect(200),
+      );
       expect(a.used).toBe(2);
       expect(a.periodKey).toBe(period.periodKey);
       expect(b.used).toBe(1); // never A's orders
@@ -578,10 +733,23 @@ describe('Billing PLT-1 first slice (e2e)', () => {
         `INSERT INTO plan (code, name, kind, orderSoftCeiling) VALUES (?, 'Cap', 'standard', 1)`,
         [`cap-${runId}`],
       );
-      await db.execute(`UPDATE shopsubscription SET planId = ? WHERE shopId = ?`, [p.insertId, tenants.A.id]);
+      await db.execute(
+        `UPDATE shopsubscription SET planId = ? WHERE shopId = ?`,
+        [p.insertId, tenants.A.id],
+      );
       try {
-        const u = body<Usage>(await request(app.getHttpServer()).get('/billing/usage').set(auth('A')).expect(200));
-        expect(u).toMatchObject({ used: 2, ceiling: 1, percent: 200, level: 120 });
+        const u = body<Usage>(
+          await request(app.getHttpServer())
+            .get('/billing/usage')
+            .set(auth('A'))
+            .expect(200),
+        );
+        expect(u).toMatchObject({
+          used: 2,
+          ceiling: 1,
+          percent: 200,
+          level: 120,
+        });
         // Over 120%, checkout and admin order creation still succeed.
         await request(app.getHttpServer())
           .post(`/public/${tenants.A.slug}/orders`)
@@ -597,7 +765,10 @@ describe('Billing PLT-1 first slice (e2e)', () => {
             items: [{ productId: tenants.A.productId, quantity: 1 }],
           })
           .then((r) =>
-            expect({ status: r.status, body: r.status === 201 ? 'ok' : r.body }).toEqual({
+            expect({
+              status: r.status,
+              body: r.status === 201 ? 'ok' : (r.body as unknown),
+            }).toEqual({
               status: 201,
               body: 'ok',
             }),
@@ -615,16 +786,29 @@ describe('Billing PLT-1 first slice (e2e)', () => {
           })
           .expect(201);
       } finally {
-        const [legacy] = await db.query<RowDataPacket[]>(`SELECT id FROM plan WHERE code = 'legacy_free'`);
-        await db.execute(`UPDATE shopsubscription SET planId = ? WHERE shopId = ?`, [legacy.id, tenants.A.id]);
+        const [legacy] = await db.query<RowDataPacket[]>(
+          `SELECT id FROM plan WHERE code = 'legacy_free'`,
+        );
+        await db.execute(
+          `UPDATE shopsubscription SET planId = ? WHERE shopId = ?`,
+          [legacy.id as number, tenants.A.id],
+        );
         await db.execute(`DELETE FROM plan WHERE id = ?`, [p.insertId]);
       }
     });
 
     it('exposes no write route and no whitelisted billing field to a shop admin', async () => {
       for (const method of ['post', 'put', 'patch', 'delete'] as const) {
-        await request(app.getHttpServer())[method]('/billing/subscription').set(auth('A')).send({}).expect(404);
-        await request(app.getHttpServer())[method]('/billing/usage').set(auth('A')).send({}).expect(404);
+        await request(app.getHttpServer())
+          [method]('/billing/subscription')
+          .set(auth('A'))
+          .send({})
+          .expect(404);
+        await request(app.getHttpServer())
+          [method]('/billing/usage')
+          .set(auth('A'))
+          .send({})
+          .expect(404);
       }
       for (const field of ['suspensionReason', 'planId', 'subscription']) {
         await request(app.getHttpServer())
@@ -633,7 +817,10 @@ describe('Billing PLT-1 first slice (e2e)', () => {
           .send({ [field]: 'platform' })
           .expect(400);
       }
-      const [r] = await db.query<RowDataPacket[]>(`SELECT suspensionReason FROM shop WHERE id = ?`, [tenants.A.id]);
+      const [r] = await db.query<RowDataPacket[]>(
+        `SELECT suspensionReason FROM shop WHERE id = ?`,
+        [tenants.A.id],
+      );
       expect(r.suspensionReason).toBeNull();
     });
   });
@@ -646,31 +833,38 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       };
       const spies = (['query', 'execute'] as const).map((m) => {
         const orig = db[m].bind(db) as (...a: unknown[]) => Promise<unknown>;
-        return jest.spyOn(db, m).mockImplementation(((sql: string, ...rest: unknown[]) => {
+        return jest.spyOn(db, m).mockImplementation(((
+          sql: string,
+          ...rest: unknown[]
+        ) => {
           record(sql);
           return orig(sql, ...rest);
         }) as never);
       });
-      const origTx = db.transaction.bind(db);
-      const txSpy = jest.spyOn(db, 'transaction').mockImplementation((async (
+      type Fn = (...a: unknown[]) => unknown;
+      const wrapConn = (conn: PoolConnection): PoolConnection =>
+        new Proxy(conn, {
+          get(target, prop): unknown {
+            const v: unknown = Reflect.get(target, prop, target);
+            if (typeof v !== 'function') return v;
+            const fn = v as Fn;
+            if (prop === 'query' || prop === 'execute') {
+              return (sql: unknown, ...rest: unknown[]) => {
+                record(sql);
+                return Reflect.apply(fn, target, [sql, ...rest]);
+              };
+            }
+            return fn.bind(target) as Fn;
+          },
+        });
+      const origTx = db.transaction.bind(db) as (
         fn: (conn: PoolConnection) => Promise<unknown>,
-      ) =>
-        origTx((conn: PoolConnection) =>
-          fn(
-            new Proxy(conn, {
-              get(target, prop, receiver) {
-                const v = Reflect.get(target, prop, receiver) as unknown;
-                if ((prop === 'query' || prop === 'execute') && typeof v === 'function') {
-                  return (sql: unknown, ...rest: unknown[]) => {
-                    record(sql);
-                    return (v as (...a: unknown[]) => unknown).call(target, sql, ...rest);
-                  };
-                }
-                return typeof v === 'function' ? (v as () => unknown).bind(target) : v;
-              },
-            }),
-          ),
-        )) as never);
+      ) => Promise<unknown>;
+      const txSpy = jest
+        .spyOn(db, 'transaction')
+        .mockImplementation((fn: (conn: PoolConnection) => Promise<unknown>) =>
+          origTx((conn: PoolConnection) => fn(wrapConn(conn))),
+        );
       try {
         await request(app.getHttpServer())
           .post(`/public/${tenants.B.slug}/orders`)
@@ -686,7 +880,10 @@ describe('Billing PLT-1 first slice (e2e)', () => {
             items: [{ productId: tenants.B.productId, quantity: 1 }],
           })
           .then((r) =>
-            expect({ status: r.status, body: r.status === 201 ? 'ok' : r.body }).toEqual({
+            expect({
+              status: r.status,
+              body: r.status === 201 ? 'ok' : (r.body as unknown),
+            }).toEqual({
               status: 201,
               body: 'ok',
             }),
@@ -708,13 +905,21 @@ describe('Billing PLT-1 first slice (e2e)', () => {
         txSpy.mockRestore();
       }
       expect(seen.length).toBeGreaterThan(10); // the recorder really saw the flow
-      const touching = seen.filter((s) => /\b(plan|planfeature|planprice|shopsubscription|subscriptionevent)\b/i.test(s));
+      const touching = seen.filter((s) =>
+        /\b(plan|planfeature|planprice|shopsubscription|subscriptionevent)\b/i.test(
+          s,
+        ),
+      );
       const bad = touching.filter(
         (s) =>
-          /\b(INSERT|UPDATE|DELETE|REPLACE)\b[^;]*\b(plan|planfeature|planprice|shopsubscription|subscriptionevent)\b/i.test(s) ||
+          /\b(INSERT|UPDATE|DELETE|REPLACE)\b[^;]*\b(plan|planfeature|planprice|shopsubscription|subscriptionevent)\b/i.test(
+            s,
+          ) ||
           /\b(FROM|JOIN)\s+`?(plan|planprice|subscriptionevent)\b/i.test(s) ||
           // the ONLY allowed read: FeaturesService's entitlement lookup
-          !/SELECT pf\.featureKey, pf\.entitled\s+FROM shopsubscription ss\s+JOIN planfeature pf/.test(s),
+          !/SELECT pf\.featureKey, pf\.entitled\s+FROM shopsubscription ss\s+JOIN planfeature pf/.test(
+            s,
+          ),
       );
       expect(bad).toEqual([]);
     });
@@ -722,28 +927,48 @@ describe('Billing PLT-1 first slice (e2e)', () => {
 
   describe('platform admin: Billing view, no-subscription list, suspension reason', () => {
     it('GET /platform-admin/shops/:id/billing returns plan, usage, events and the suspension reason', async () => {
-      const res = body<ShopBilling>(await platformGet(`/platform-admin/shops/${tenants.A.id}/billing`).expect(200));
-      expect(res.subscription).toMatchObject({ hasSubscription: true, plan: { code: 'legacy_free' } });
+      const res = body<ShopBilling>(
+        await platformGet(
+          `/platform-admin/shops/${tenants.A.id}/billing`,
+        ).expect(200),
+      );
+      expect(res.subscription).toMatchObject({
+        hasSubscription: true,
+        plan: { code: 'legacy_free' },
+      });
       expect(res.usage.used).toBeGreaterThanOrEqual(2);
       expect(res.suspension).toEqual({ suspendedAt: null, reason: null });
-      expect(res.events.some((e) => e.reason === 'backfill_legacy' && e.actorType === 'system')).toBe(true);
+      expect(
+        res.events.some(
+          (e) => e.reason === 'backfill_legacy' && e.actorType === 'system',
+        ),
+      ).toBe(true);
       await platformGet(`/platform-admin/shops/2147483000/billing`).expect(404);
     });
 
     it('is invisible (404) without a platform session, including to a shop admin token', async () => {
-      await request(app.getHttpServer()).get(`/platform-admin/shops/${tenants.A.id}/billing`).expect(404);
+      await request(app.getHttpServer())
+        .get(`/platform-admin/shops/${tenants.A.id}/billing`)
+        .expect(404);
       await request(app.getHttpServer())
         .get(`/platform-admin/shops/${tenants.A.id}/billing`)
         .set(auth('A'))
         .expect(404);
-      await request(app.getHttpServer()).get(`/platform-admin/billing/shops-without-subscription`).set(auth('A')).expect(404);
+      await request(app.getHttpServer())
+        .get(`/platform-admin/billing/shops-without-subscription`)
+        .set(auth('A'))
+        .expect(404);
     });
 
     it('lists shops with no subscription row', async () => {
       const lonely = await fixtureShop(3000 + (runId % 1000));
-      await db.execute(`DELETE FROM shopsubscription WHERE shopId = ?`, [lonely]);
+      await db.execute(`DELETE FROM shopsubscription WHERE shopId = ?`, [
+        lonely,
+      ]);
       const res = body<{ total: number; data: { id: number }[] }>(
-        await platformGet(`/platform-admin/billing/shops-without-subscription`).expect(200),
+        await platformGet(
+          `/platform-admin/billing/shops-without-subscription`,
+        ).expect(200),
       );
       expect(res.total).toBeGreaterThanOrEqual(1);
       expect(res.data.map((s) => s.id)).toContain(lonely);
@@ -751,9 +976,15 @@ describe('Billing PLT-1 first slice (e2e)', () => {
 
     it('suspend writes reason platform (overwriting a billing one) with the audit row; unsuspend clears it', async () => {
       const id = tenants.B.id;
-      await db.execute(`UPDATE shop SET suspendedAt = NOW(), suspensionReason = 'billing' WHERE id = ?`, [id]);
+      await db.execute(
+        `UPDATE shop SET suspendedAt = NOW(), suspensionReason = 'billing' WHERE id = ?`,
+        [id],
+      );
       await platformPost(`/platform-admin/shops/${id}/suspend`).expect(201);
-      const [s] = await db.query<RowDataPacket[]>(`SELECT suspendedAt, suspensionReason FROM shop WHERE id = ?`, [id]);
+      const [s] = await db.query<RowDataPacket[]>(
+        `SELECT suspendedAt, suspensionReason FROM shop WHERE id = ?`,
+        [id],
+      );
       expect(s.suspendedAt).not.toBeNull();
       expect(s.suspensionReason).toBe('platform');
       const audit = await db.query<RowDataPacket[]>(
@@ -762,7 +993,10 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       );
       expect(audit.length).toBeGreaterThanOrEqual(1);
       await platformPost(`/platform-admin/shops/${id}/unsuspend`).expect(201);
-      const [u] = await db.query<RowDataPacket[]>(`SELECT suspendedAt, suspensionReason FROM shop WHERE id = ?`, [id]);
+      const [u] = await db.query<RowDataPacket[]>(
+        `SELECT suspendedAt, suspensionReason FROM shop WHERE id = ?`,
+        [id],
+      );
       expect([u.suspendedAt, u.suspensionReason]).toEqual([null, null]);
     });
 
@@ -776,7 +1010,10 @@ describe('Billing PLT-1 first slice (e2e)', () => {
       } finally {
         spy.mockRestore();
       }
-      const [s] = await db.query<RowDataPacket[]>(`SELECT suspendedAt, suspensionReason FROM shop WHERE id = ?`, [id]);
+      const [s] = await db.query<RowDataPacket[]>(
+        `SELECT suspendedAt, suspensionReason FROM shop WHERE id = ?`,
+        [id],
+      );
       expect([s.suspendedAt, s.suspensionReason]).toEqual([null, null]);
     });
   });

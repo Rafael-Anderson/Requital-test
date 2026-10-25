@@ -9,7 +9,10 @@
 
 export interface BillingStripeClient {
   // Never constructed from STRIPE_SECRET_KEY: billing uses its own account/key.
-  createCheckoutSession(shopId: number, planPriceId: number): Promise<{ url: string }>;
+  createCheckoutSession(
+    shopId: number,
+    planPriceId: number,
+  ): Promise<{ url: string }>;
   createPortalSession(shopId: number): Promise<{ url: string }>;
 }
 
