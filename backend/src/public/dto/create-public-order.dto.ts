@@ -110,6 +110,7 @@ export class CreatePublicOrderDto {
   // unconditionally required in the admin's CreateOrderDto today.
   @IsString()
   @IsNotEmpty()
+  @MaxLength(500)
   customerAddress: string;
 
   // The region, by id. Options come from GET /regions (staff) or
@@ -135,6 +136,14 @@ export class CreatePublicOrderDto {
   @IsOptional()
   @IsLongitude()
   longitude?: number;
+
+  // Set by the storefront only while Google Maps is unavailable to the shopper
+  // and no pin was given. The server then geocodes the typed address (radius
+  // outlets) or accepts it, and flags the order addressUnverified. Ignored when
+  // coordinates are present.
+  @IsOptional()
+  @IsBoolean()
+  addressManual?: boolean;
 
   @IsOptional()
   @IsDateString()

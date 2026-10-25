@@ -188,3 +188,19 @@ describe("OrdersPage: marketplace orders on the board", () => {
     expect(screen.queryByRole("link", { name: "Accept or reject" })).not.toBeInTheDocument();
   });
 });
+
+describe("OrdersPage: unverified delivery address (F9)", () => {
+  it("flags a board card whose address was typed without a map pin, and no other card", async () => {
+    vi.mocked(getShop).mockResolvedValue({ productEditorMode: "advanced" } as never);
+    vi.mocked(listOrders).mockResolvedValue({
+      data: [
+        { ...order, id: 101, customerName: "Sara Ahmed", addressUnverified: true },
+        { ...order, id: 102, shopOrderNumber: 8, customerName: "Omar Ali", addressUnverified: false },
+      ],
+      total: 2,
+    } as never);
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Omar Ali")).toBeInTheDocument());
+    expect(screen.getAllByText("Address not verified")).toHaveLength(1);
+  });
+});

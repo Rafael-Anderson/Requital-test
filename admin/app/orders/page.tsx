@@ -8,6 +8,7 @@ import { relativeTime } from "@/lib/format";
 import { useOutletFilter } from "@/lib/outlet-context";
 import { useShopMode } from "@/lib/useShopMode";
 import StatusBadge from "@/components/StatusBadge";
+import AddressUnverifiedNotice from "@/components/AddressUnverifiedNotice";
 import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { CardSkeleton } from "@/components/ui/Skeleton";
@@ -210,6 +211,11 @@ function OrdersPageContent() {
                         {marketplace && (
                           <div className="mb-1">
                             <ChannelSourceBadge channel={order.channel!} />
+                          </div>
+                        )}
+                        {order.addressUnverified && (
+                          <div className="mb-1">
+                            <AddressUnverifiedNotice compact />
                           </div>
                         )}
                         <div className="text-[13.5px] text-text-secondary dark:text-zinc-300">{order.customerName}</div>
