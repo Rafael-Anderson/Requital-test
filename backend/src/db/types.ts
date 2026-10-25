@@ -621,6 +621,86 @@ export interface ShopRow {
   taxOnDelivery: boolean;
   // STF-3 (migration 20261021110000): every staff user must have two-factor.
   require2fa: boolean;
+  // PLT-1 (migration 20261124100000): why suspendedAt is set. 'platform' |
+  // 'billing' | 'cancelled'; NULL = not suspended. Written by the platform
+  // suspend/unsuspend actions only in this slice.
+  suspensionReason: string | null;
+}
+
+// PLT-1 (migration 20261124100000). Platform-owned: no shopId.
+export interface PlanRow {
+  id: number;
+  code: string;
+  name: string;
+  // 'active' | 'retired'
+  status: string;
+  // 'legacy' | 'standard' | 'comp'
+  kind: string;
+  isSelectable: boolean;
+  // Orders per calendar month; NULL = no ceiling. Soft: never blocks.
+  orderSoftCeiling: number | null;
+  sortOrder: number;
+  createdAt: Date;
+}
+
+export interface PlanfeatureRow {
+  planId: number;
+  featureKey: string;
+  entitled: boolean;
+}
+
+// Empty until the owner sets a price book.
+export interface PlanpriceRow {
+  id: number;
+  planId: number;
+  currency: string;
+  // 'month' | 'year'
+  billingInterval: string;
+  // DECIMAL(12,3) as a string (major units).
+  amount: string;
+  stripePriceId: string | null;
+  active: boolean;
+  createdAt: Date;
+}
+
+// Exactly one current row per shop. NULL = unknown (a legacy shop has no
+// currency, interval, period, trial or Stripe id).
+export interface ShopsubscriptionRow {
+  shopId: number;
+  planId: number;
+  // 'trialing' | 'active' | 'past_due' | 'suspended' | 'cancelled'
+  status: string;
+  // 'legacy' | 'stripe' | 'comp'
+  source: string;
+  currency: string | null;
+  billingInterval: string | null;
+  planPriceId: number | null;
+  trialStartedAt: Date | null;
+  trialEndsAt: Date | null;
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  cancelledAt: Date | null;
+  stripeSubscriptionId: string | null;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SubscriptioneventRow {
+  id: number;
+  shopId: number;
+  fromStatus: string | null;
+  toStatus: string;
+  fromPlanId: number | null;
+  toPlanId: number;
+  reason: string;
+  // 'merchant' | 'platform_admin' | 'stripe' | 'system'
+  actorType: string;
+  actorId: number | null;
+  stripeEventId: string | null;
+  metadata: unknown;
+  createdAt: Date;
 }
 
 export interface ShopfeatureoverrideRow {
