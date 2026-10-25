@@ -486,6 +486,9 @@ export interface CreateOrderPayload {
   area?: string;
   latitude?: number;
   longitude?: number;
+  // Maps was unavailable and no pin was given (F9): the server geocodes or
+  // accepts the typed address and flags the order for the merchant.
+  addressManual?: boolean;
   deliveryDate?: string;
   deliveryTimeSlot?: string;
   deliveryNotes?: string;

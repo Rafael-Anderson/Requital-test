@@ -361,6 +361,51 @@ Remove `TRUST_PROXY` from `backend/.env` and `sudo -u deploy pm2 restart requita
 
 An IPv6 client is throttled per /64 (so it cannot rotate addresses to escape a limit), which means two users on the same /64 share a bucket. The session list IP column records the full address. Per-account protections (the progressive login delay, the MFA lockout) never depended on the IP and are unchanged.
 
+## Google Maps key setup (checkout map, address pickers, delivery-zone map)
+
+The storefront (checkout and saved addresses) and the admin (outlet address, delivery zones) load the Google Maps JavaScript API with one browser key, `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`, set in `storefront/.env.local` and `admin/.env.local`. This is the standing procedure; check it whenever a custom domain is added or the key is rotated.
+
+### What the key must allow
+
+- **Application restriction: HTTP referrers.** The allowed list must contain, exactly:
+  - `*.requital.io/*` (every merchant subdomain storefront)
+  - `requital.io/*`
+  - `admin.requital.io/*`
+  - one `https://<domain>/*` for **each verified merchant custom domain**. Get the list with `SELECT customDomain FROM shop WHERE customDomainStatus = 'verified' ORDER BY customDomain;` (a `pending`, `verifying` or `failed` claim is not served, so it needs no referrer yet).
+- **API restrictions: only Maps JavaScript API and Places API.** The Geocoder used for pin-drag reverse lookups is part of the Maps JavaScript API, so it needs no entry of its own. Do not enable the Geocoding API for this key.
+- **Billing must be linked** to the Google Cloud project. There are two different failures: a project with no billing account at all shows Google's own error dialog (`BillingNotEnabledMapError`), while a key that is valid but whose project has billing trouble can render a grey watermarked map ("For development purposes only") with no error at all. Neither is a code problem.
+- **The key is baked into the JavaScript at build time** (`NEXT_PUBLIC_*`). A changed or rotated key does nothing until both apps are rebuilt and restarted (`npm ci && npm run build` in `admin/` and `storefront/`, then `pm2 restart requital-admin requital-storefront`). Changing the restrictions in Google Cloud needs no rebuild and applies within a few minutes.
+- **Before telling a merchant their custom domain is live, add its `https://<domain>/*` referrer.** The domain verifies and serves on our side first; the map only starts working once Google allows that origin. A custom-domain shop with a missing referrer takes orders normally (the typed-address fallback below) but shows no map.
+
+### What a shopper sees when Maps fails
+
+Nothing alarming and nothing from Google. The map area becomes "Map unavailable. You can type your address below.", "Use my location" keeps working, and "Find on map" looks the typed address up through our own geocode endpoint (OpenStreetMap Nominatim, one lookup per button press). Checkout stays completable: on an outlet with a delivery radius the server geocodes the typed address and applies the radius to it (an address outside it is still refused); if the lookup finds nothing the order is accepted and flagged **"Address not verified on a map, please confirm with the customer"** on the admin order card, the order detail and the packing slip. Phone the customer for those orders before dispatch.
+
+### How a merchant (and we) find out
+
+- An admin sees a banner on every admin page: "Google Maps is not working for your store (code). Contact Requital support." It has two sources:
+  - **This browser's own admin Maps loader** (a real, logged-in admin whose map actually failed). It shows immediately and says nothing about visitors.
+  - **Reports sent by the shop's own storefront visitors** (`POST /public/:shopSlug/maps-error`, read back by `GET /shop/maps-health`). This is what catches a referrer problem on a connected custom domain, which the admin cannot see. The banner then says "Reported by visitors on <host>" and offers **Mark resolved**.
+- The visitor beacon is unauthenticated, so it is deliberately hard to use as a nuisance: only the four codes below, only from the shop's own verified hosts, throttled to 20 per minute per IP, and it shows in the banner only once a problem has been reported **at least 3 times over at least 60 minutes**, within the **last 7 days**. **Mark resolved** (admin only, audit logged as `maps_health.resolved`) zeroes that code and host's count, so only reports after it count again; if the problem really persists, three more reports over an hour bring it back.
+- The throttle and the one-row-per-code-and-host bound assume `TRUST_PROXY=loopback` is set in production (see the "Client IP behind the proxies" section above). Without it every visitor shares one bucket and the beacon throttle is meaningless.
+- **Privacy note for the owner:** in the typed-address fallback the shopper's typed delivery address (plus the chosen region) is sent to OpenStreetMap Nominatim by our backend to find coordinates, both from the "Find on map" button and, on a radius outlet, when the order is placed. The privacy policy should mention OpenStreetMap geocoding.
+- **Manual-address pricing rule:** while Maps is down and no pin exists, the delivery zone is matched by name and region only, never by a zone's map circle, in the quote and in the order alike (the quote cannot geocode, the order can, and a geocoded point matching a circle would otherwise charge a different fee than the one quoted). The geocoded point is used only for the delivery-radius check. An outlet that has zones but none match the typed address then charges the shop default fee on an unverified address (the order is flagged so the merchant confirms it before dispatch); a matched zone's minimum order still applies.
+- To look yourself: `SELECT s.subdomain, m.code, m.host, m.hitCount, m.lastSeenAt FROM mapserrorlog m JOIN shop s ON s.id = m.shopId ORDER BY m.lastSeenAt DESC;`
+
+### Triage
+
+| Code or symptom | Meaning | Fix |
+|---|---|---|
+| `RefererNotAllowedMapError` | The page's address is not in the key's allowed referrers. The `host` column says which one. | Add `https://<host>/*` (or the platform wildcard above) to the key's HTTP referrers in Google Cloud. No rebuild. |
+| `BillingNotEnabledMapError` | The Google Cloud project has no active billing account. | Link or fix billing on the project. No rebuild. |
+| `InvalidKeyMapError` | The key in the build is wrong, deleted or malformed. | Set the right `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` in both apps, rebuild and restart both. |
+| `ApiNotActivatedMapError` | Maps JavaScript API (or Places API) is not enabled for the project, or is excluded by the key's API restriction. | Enable it on the project and make sure the key's API restriction lists Maps JavaScript API and Places API. No rebuild. |
+| Banner shows "load failed" | The Maps script itself did not load (network, ad blocker, or the key's host is blocked). | Usually the viewer's browser. If every visitor is affected, check outbound access to `maps.googleapis.com`. |
+| Grey overlay with a repeating "For development purposes only" watermark, no error | Key is valid but the project's billing is not in good standing. | Fix billing. This produces no error code, so no banner appears. |
+| Map fine for shoppers, banner shows on a custom domain only | That domain's referrer is missing (the report names the host). | Add its referrer. |
+
+Visitor reports leave the banner 7 days after the last one, or at once when an admin marks them resolved; the rows themselves stay until the shop is deleted. An admin can also dismiss the banner for the session.
+
 ## Shop owner lost their two-factor (platform-admin recovery)
 
 **This is the only way a sole shop admin recovers.** If a shop's only admin loses their authenticator device AND their recovery codes, nobody else in that shop can reset them (a same-shop admin can reset a colleague, never themselves), so a Requital platform admin must do it. Until you press the button the shop is locked out of its own admin. Because the reset hands account access to whoever asks convincingly, it is a social-engineering target: do the checklist below first, every time, no exceptions for urgency.
@@ -489,6 +534,7 @@ This project's migrations are hand-authored `migration.sql` files applied by `np
 | `20261022100000_url_redirects` | Data-loss revert | `DROP TABLE notfoundlog, urlredirect`. Destroys every merchant's redirect map and the 404 report; the old URLs 404 again until re-imported. Roll the storefront back first (its proxy fetches the map) or it simply sees no redirects. |
 | `20261023100000_survey_publish_consent` | Schema-only, additive | `ALTER TABLE surveyresponse DROP INDEX <the (shopId, featuredAt) index>, DROP COLUMN featuredAt, DROP COLUMN publishConsent`. Every featured review goes offline and every recorded consent is lost, so a re-migrated shop must re-collect consent. Roll the storefront and admin back first (the survey form sends `publishConsent`). |
 | `20261024100000_user_must_enrol_2fa` | Schema-only, additive | `ALTER TABLE user DROP COLUMN mustEnrol2fa`. A user who was waiting to re-enrol after a platform reset is no longer confined (their 2FA was already removed), so roll the backend back first or support must re-check those users. |
+| `20261119100000_maps_degradation` | Schema-only, additive | `DROP TABLE mapserrorlog; ALTER TABLE \`order\` DROP COLUMN addressUnverified`. Orders flagged "address not verified" lose the flag (the packing slip and admin order card stop warning). Roll the backend back first: it inserts `addressUnverified` on every storefront order. |
 
 For any "Data-loss revert" row above, the actually-safe rollback procedure is: **restore from a backup taken before the migration was applied** (see Backup/Restore above), not attempt the down-path against a live database that already has real post-migration data in it. The down-paths listed are what you'd run to make the *schema* match a pre-migration state, not to un-lose the data that lived in the tables/columns being dropped.
 

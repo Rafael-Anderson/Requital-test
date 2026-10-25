@@ -790,6 +790,22 @@ export function updateShop(
   return apiFetch<Shop>("/shop", { method: "PATCH", body: JSON.stringify(data) });
 }
 
+// F9: Google Maps errors reported by this shop's own storefront visitors (a
+// referrer or billing problem on a custom domain never shows in the admin).
+export interface MapsHealth {
+  errors: { code: string; host: string; hitCount: number; lastSeenAt: string }[];
+}
+export function getMapsHealth() {
+  return apiFetch<MapsHealth>("/shop/maps-health");
+}
+// "Mark resolved": from now on only visitor reports AFTER this count.
+export function resolveMapsHealth(code: string, host: string) {
+  return apiFetch<{ resolved: boolean }>("/shop/maps-health/resolve", {
+    method: "POST",
+    body: JSON.stringify({ code, host }),
+  });
+}
+
 export function getShopDomain() {
   return apiFetch<ShopDomainConfig>("/shop/domain");
 }

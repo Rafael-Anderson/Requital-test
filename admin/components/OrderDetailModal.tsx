@@ -27,6 +27,7 @@ import Thumbnail from "@/components/ui/Thumbnail";
 import { useToast } from "@/components/ui/Toast";
 import OrderNotesSection from "@/components/OrderNotesSection";
 import OrderSourceCard from "@/components/OrderSourceCard";
+import AddressUnverifiedNotice from "@/components/AddressUnverifiedNotice";
 import OrderReturnsSection from "@/components/OrderReturnsSection";
 import OrderStatusTimeline from "@/components/OrderStatusTimeline";
 import OrderInvoiceTab from "@/components/OrderInvoiceTab";
@@ -593,6 +594,7 @@ export default function OrderDetailModal({
                     {order.area ? `${order.area}, ` : ""}
                     {order.region?.nameEn}
                   </p>
+                  {order.addressUnverified && <AddressUnverifiedNotice />}
                   {order.deliveryNotes && (
                     <p className="text-sm text-text-muted mt-2">
                       <span className="text-text-faint">Notes: </span>

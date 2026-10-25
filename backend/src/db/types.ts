@@ -66,6 +66,19 @@ export interface OrderRow {
   // Never spread this row into a response without stripping it: it can hold
   // click ids / fbp / fbc / user agent (see stripAttribution).
   attributionJson: unknown;
+  // Migration 20261119100000: a delivery order placed with a typed address and no
+  // map pin because Maps was unavailable (the merchant should confirm it).
+  addressUnverified: boolean;
+}
+
+export interface MapsErrorLogRow {
+  shopId: number;
+  code: string;
+  host: string;
+  hitCount: number;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+  resolvedAt: Date | null;
 }
 
 export interface OrdernoteRow {

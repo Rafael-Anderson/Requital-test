@@ -143,3 +143,20 @@ describe("OrderDetailModal: marketplace orders", () => {
     expect(screen.queryByRole("button", { name: /cancel order/i })).not.toBeInTheDocument();
   });
 });
+
+describe("OrderDetailModal: unverified delivery address (F9)", () => {
+  it("warns under the delivery address only when the address was typed without a map pin", async () => {
+    vi.mocked(getShop).mockResolvedValue({ taxDisplayText: null } as never);
+    vi.mocked(getOrder).mockResolvedValue({ ...fakeOrder(), addressUnverified: true } as Order);
+    const { unmount } = render(<ToastProvider><OrderDetailModal orderId={42} onClose={vi.fn()} /></ToastProvider>);
+    expect(
+      await screen.findByText("Address not verified on a map, please confirm with the customer"),
+    ).toBeInTheDocument();
+    unmount();
+
+    vi.mocked(getOrder).mockResolvedValue({ ...fakeOrder(), addressUnverified: false } as Order);
+    render(<ToastProvider><OrderDetailModal orderId={42} onClose={vi.fn()} /></ToastProvider>);
+    await screen.findByText("Delivery address");
+    expect(screen.queryByText(/Address not verified/)).not.toBeInTheDocument();
+  });
+});
