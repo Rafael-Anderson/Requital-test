@@ -920,6 +920,24 @@ export interface CustomerRow {
   lastDataExportAt: Date | null;
   failedLoginAttempts: number;
   lastFailedLoginAt: Date | null;
+  // When the holder last proved control of `phone` with a one-time code (NULL =
+  // never). See PhoneOtpService.
+  phoneVerifiedAt: Date | null;
+}
+
+export interface PhoneotpRow {
+  id: number;
+  shopId: number;
+  // E.164 (normalizePhoneToE164 with the shop's countryCode), not the raw spelling.
+  phone: string;
+  codeHash: string;
+  attempts: number;
+  expiresAt: Date;
+  consumedAt: Date | null;
+  proofHash: string | null;
+  proofExpiresAt: Date | null;
+  proofUsedAt: Date | null;
+  createdAt: Date;
 }
 
 export interface CustomerrefreshtokenRow {

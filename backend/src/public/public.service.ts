@@ -426,6 +426,8 @@ export class PublicService {
       productDisplayOrientation: shop.productDisplayOrientation,
       productImageZoomEnabled: flags.product_image_zoom,
       showCollectionMenu: flags.collection_menu,
+      // Boolean only: the storefront register form shows its code step.
+      phoneOtpRequired: flags.phone_otp_register,
       taxRate: trimDecimal(shop.taxRate),
       taxInclusive: shop.taxInclusive,
       taxDisplayText: shop.taxDisplayText,

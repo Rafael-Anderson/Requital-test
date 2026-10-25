@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  HttpCode,
   Param,
   Post,
   Req,
@@ -14,6 +15,9 @@ import { RegisterCustomerDto } from './dto/register-customer.dto';
 import { LoginCustomerDto } from './dto/login-customer.dto';
 import { ForgotCustomerPasswordDto } from './dto/forgot-customer-password.dto';
 import { ResetCustomerPasswordDto } from './dto/reset-customer-password.dto';
+import { PhoneOtpService } from './phone-otp.service';
+import { SendPhoneOtpDto } from './dto/send-phone-otp.dto';
+import { VerifyPhoneOtpDto } from './dto/verify-phone-otp.dto';
 import { VerifyCustomerEmailDto } from './dto/verify-customer-email.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import {
@@ -59,7 +63,10 @@ function setCustomerSessionCookies(
 @Public()
 @Controller('public/:shopSlug/auth')
 export class CustomerAuthController {
-  constructor(private readonly customerAuthService: CustomerAuthService) {}
+  constructor(
+    private readonly customerAuthService: CustomerAuthService,
+    private readonly phoneOtp: PhoneOtpService,
+  ) {}
 
   // Same rationale as auth.controller.ts's staff endpoints — 5/min/IP on
   // every credential/token-issuing or enumeration-sensitive route here.
@@ -166,5 +173,29 @@ export class CustomerAuthController {
   @Post('verify-email')
   verifyEmail(@Body() dto: VerifyCustomerEmailDto) {
     return this.customerAuthService.verifyEmail(dto.token);
+  }
+
+  // Phone OTP (404 unless the shop has phone_otp_register on). The answer is a
+  // fixed 202 whatever happened behind it. Per-phone, per-shop and country limits
+  // live in PhoneOtpService; this is the per-IP layer.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @HttpCode(202)
+  @Post('phone-otp/send')
+  async sendPhoneOtp(
+    @Param('shopSlug') shopSlug: string,
+    @Body() dto: SendPhoneOtpDto,
+  ) {
+    await this.phoneOtp.send(shopSlug, dto.phone);
+    return { accepted: true };
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @HttpCode(200)
+  @Post('phone-otp/verify')
+  verifyPhoneOtp(
+    @Param('shopSlug') shopSlug: string,
+    @Body() dto: VerifyPhoneOtpDto,
+  ) {
+    return this.phoneOtp.verify(shopSlug, dto.phone, dto.code);
   }
 }

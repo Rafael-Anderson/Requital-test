@@ -23,6 +23,8 @@ import { CustomerEmailVerificationService } from './customer-email-verification.
 import { renderCustomerLinkEmail } from './customer-link-email';
 import { isWithinLoginCooldown } from './login-lockout';
 import { isEmailVerified } from './email-verified';
+import { PhoneOtpService } from './phone-otp.service';
+import { normalizePhoneToE164 } from '../common/phone';
 
 const BCRYPT_ROUNDS = 10;
 const ACCESS_TOKEN_LIFETIME = '15m';
@@ -43,6 +45,7 @@ export class CustomerAuthService {
     private readonly jobsService: JobsService,
     private readonly passwordPolicy: PasswordPolicyService,
     private readonly emailVerification: CustomerEmailVerificationService,
+    private readonly phoneOtp: PhoneOtpService,
   ) {}
 
   // "Register" is "claim" — find the [shopId, phone] row guest checkout
@@ -52,6 +55,19 @@ export class CustomerAuthService {
   // yet and is created fresh with the password already set.
   async register(shopSlug: string, dto: RegisterCustomerDto) {
     const shop = await this.resolveShop(shopSlug);
+
+    // Phone OTP (flag per shop, off by default). When on, EVERY registration needs
+    // a proof of control of this phone, not only the claim of a row with history:
+    // a row created here for a number nobody proved would later be matched by that
+    // person's guest checkout and hand their orders to this account. Checked first
+    // so an unproven caller learns nothing from the conflicts below.
+    const otpRequired = await this.phoneOtp.isRequired(shop.id);
+    const proofPhone = otpRequired
+      ? normalizePhoneToE164(dto.phone, shop.countryCode)
+      : null;
+    if (otpRequired) {
+      await this.phoneOtp.assertProofValid(shop.id, proofPhone, dto.phoneProof);
+    }
 
     if (dto.email) {
       // No DB-level unique constraint on (shopId, email) — see
@@ -89,6 +105,10 @@ export class CustomerAuthService {
       phone: dto.phone,
     });
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    if (otpRequired) {
+      // Single use: the compare-and-swap decides between concurrent registers.
+      await this.phoneOtp.consumeProof(shop.id, proofPhone, dto.phoneProof);
+    }
     let customerId: number;
     if (existing) {
       await this.db.execute(
@@ -116,6 +136,12 @@ export class CustomerAuthService {
       customerId = result.insertId;
     }
 
+    if (otpRequired) {
+      await this.db.execute(
+        `UPDATE customer SET phoneVerifiedAt = ? WHERE id = ? AND shopId = ?`,
+        [new Date(), customerId, shop.id],
+      );
+    }
     const customer = await this.findCustomerByIdOrThrow(customerId);
     // A send problem must not fail the registration that already succeeded.
     await this.emailVerification

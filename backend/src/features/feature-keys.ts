@@ -106,6 +106,15 @@ export const FEATURE_KEYS = {
     default: false,
     description: 'Marketplace channels (Deliveroo, Talabat) order intake',
   },
+  // Phone OTP on customer register-claim. Gates the send/verify routes and makes
+  // register demand a proof of control of the phone. Ships off with a stub delivery
+  // channel: no SMS/WhatsApp provider is chosen yet, so turning it on for a shop
+  // before one exists makes registration impossible for that shop.
+  phone_otp_register: {
+    source: 'table',
+    default: false,
+    description: 'Phone one-time code required to register a storefront account',
+  },
 } as const satisfies Record<string, FeatureDef>;
 
 export type FeatureKey = keyof typeof FEATURE_KEYS;
