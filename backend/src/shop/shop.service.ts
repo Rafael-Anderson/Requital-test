@@ -61,8 +61,12 @@ export class ShopService {
     // finding, see PR description. Destructured out (not deleted off a
     // mutable copy) so `safeShop`'s type stays a plain, fully-inferred
     // ShopRow subset rather than a hand-written Omit/delete pairing.
-    const { whatsappCredentials, ...safeShop } = shop;
+    //
+    // suspensionReason (PLT-1: 'platform' | 'billing') is platform data and is
+    // stripped the same way, so the merchant payload never says why.
+    const { whatsappCredentials, suspensionReason, ...safeShop } = shop;
     void whatsappCredentials;
+    void suspensionReason;
     return {
       ...safeShop,
       defaultDeliveryFee: trimDecimal(shop.defaultDeliveryFee),
