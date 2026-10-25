@@ -1,4 +1,4 @@
-import { planDefault, resolveFlag } from './features.service';
+import { resolveFlag } from './features.service';
 import { FEATURE_KEYS, FEATURE_KEY_LIST, isFeatureKey } from './feature-keys';
 
 const columnDef = {
@@ -20,21 +20,53 @@ describe('resolveFlag precedence', () => {
     expect(resolveFlag(columnDef, undefined, false, undefined)).toBe(false);
   });
 
-  it('a column-backed key falls to plan then registry default only when the column is NULL', () => {
-    expect(resolveFlag(columnDef, undefined, null, true)).toBe(true);
+  it('a NULL column falls to the registry default', () => {
+    expect(resolveFlag(columnDef, undefined, null, undefined)).toBe(false);
     expect(
       resolveFlag({ ...columnDef, default: true }, undefined, null, undefined),
     ).toBe(true);
   });
 
-  it('a table-backed key ignores any column value and uses override, plan, default', () => {
+  it('a table-backed key ignores any column value and uses override, then default', () => {
     expect(resolveFlag(tableDef, undefined, false, undefined)).toBe(true);
-    expect(resolveFlag(tableDef, undefined, undefined, false)).toBe(false);
     expect(resolveFlag(tableDef, false, undefined, true)).toBe(false);
   });
+});
 
-  it('planDefault has no opinion until billing exists', () => {
-    expect(planDefault(1, 'slider')).toBeUndefined();
+describe('resolveFlag entitlement ceiling (PLT-1): override ?? (entitled && preferred)', () => {
+  it('fails open: no plan opinion (undefined) is the same as entitled', () => {
+    for (const col of [true, false, null]) {
+      expect(resolveFlag(columnDef, undefined, col, undefined)).toBe(
+        resolveFlag(columnDef, undefined, col, true),
+      );
+    }
+    expect(resolveFlag(columnDef, undefined, true, undefined)).toBe(true);
+  });
+
+  it('an unentitled key is off even when the merchant switched it on', () => {
+    expect(resolveFlag(columnDef, undefined, true, false)).toBe(false);
+    expect(resolveFlag(tableDef, undefined, undefined, false)).toBe(false);
+  });
+
+  it('entitlement never switches a feature ON: the merchant preference still decides', () => {
+    expect(resolveFlag(columnDef, undefined, false, true)).toBe(false);
+  });
+
+  it('a platform override beats entitlement in both directions', () => {
+    expect(resolveFlag(columnDef, true, false, false)).toBe(true);
+    expect(resolveFlag(columnDef, false, true, true)).toBe(false);
+  });
+
+  it('matches the pre-billing formula for every legacy (entitled) input', () => {
+    // pre-billing: override ?? column ?? default
+    const old = (o: boolean | undefined, c: boolean | null, d: boolean) =>
+      o !== undefined ? o : c != null ? c : d;
+    for (const o of [undefined, true, false])
+      for (const c of [true, false, null])
+        for (const d of [true, false])
+          expect(resolveFlag({ ...columnDef, default: d }, o, c, true)).toBe(
+            old(o, c, d),
+          );
   });
 });
 

@@ -15,29 +15,26 @@ import {
 
 export type FeatureFlags = Record<FeatureKey, boolean>;
 
-// Hook for PLT-1 (billing/plans). There are no plans, so it answers "no
-// opinion" for everything and the chain falls through to the registry default.
-// Deliberately not a fake plan table: when billing exists this is the single
-// place that starts returning a value. NOTE enabledShopIds() below resolves in
-// SQL and does not call this; it must learn the plan layer at the same time
-// (features.service.spec.ts asserts the two agree, so the gap cannot go unseen).
-export const planDefault: (
-  shopId: number,
-  key: FeatureKey,
-) => boolean | undefined = () => undefined;
-
-// Precedence, highest first: platform override row, the shop column (column-
-// backed keys only), plan default, registry default. Pure so the table-backed
-// path can be exercised without a registered table-backed key.
+// PLT-1 entitlement ceiling. effective = override ?? (entitled && preferred):
+//   override  - a platform row, wins in both directions (comp, or force off)
+//   entitled  - the shop's plan includes the key. A missing subscription or a
+//               missing planfeature row means entitled (fail open, section 5.2):
+//               a billing gap must never switch a merchant's feature off. Every
+//               legacy shop is entitled to everything, so today's result is
+//               unchanged for every existing shop.
+//   preferred - the merchant's own switch (the shop column, else the registry
+//               default). A plan never rewrites it, so an upgrade restores it.
+// Pure so the table-backed path can be exercised without a registered key.
 export function resolveFlag(
   def: FeatureDef,
   override: boolean | undefined,
   columnValue: boolean | null | undefined,
-  plan: boolean | undefined,
+  entitled: boolean | undefined,
 ): boolean {
   if (override !== undefined) return override;
-  if (def.source === 'column' && columnValue != null) return columnValue;
-  return plan ?? def.default;
+  const preferred =
+    def.source === 'column' && columnValue != null ? columnValue : def.default;
+  return (entitled ?? true) && preferred;
 }
 
 export interface FeatureOverrideView {
@@ -55,6 +52,10 @@ export interface FeatureStatus {
   // The merchant's own column value; null for table-backed keys.
   columnValue: boolean | null;
   override: FeatureOverrideView | null;
+  // Does the shop's plan include this key. 'default' = no plan row decides it
+  // (no subscription, or no planfeature row), so it is entitled by fail-open.
+  entitled: boolean;
+  entitledBy: 'plan' | 'default';
   effective: boolean;
 }
 
@@ -93,7 +94,7 @@ export class FeaturesService {
   }
 
   private async load(shopId: number, conn?: PoolConnection) {
-    const [shopRows, overrideRows] = await Promise.all([
+    const [shopRows, overrideRows, planRows] = await Promise.all([
       COLUMNS.length
         ? this.rows<RowDataPacket>(
             conn,
@@ -108,14 +109,26 @@ export class FeaturesService {
         `SELECT * FROM shopfeatureoverride WHERE shopId = ?`,
         [shopId],
       ),
+      this.rows<{ featureKey: string; entitled: boolean } & RowDataPacket>(
+        conn,
+        `SELECT pf.featureKey, pf.entitled
+           FROM shopsubscription ss
+           JOIN planfeature pf ON pf.planId = ss.planId
+          WHERE ss.shopId = ?`,
+        [shopId],
+      ),
     ]);
-    return { shop: shopRows[0] ?? null, overrides: overrideRows };
+    return {
+      shop: shopRows[0] ?? null,
+      overrides: overrideRows,
+      plan: new Map(planRows.map((r) => [r.featureKey, Boolean(r.entitled)])),
+    };
   }
 
   private static statuses(
-    shopId: number,
     shop: RowDataPacket,
     overrides: ShopfeatureoverrideRow[],
+    plan: Map<string, boolean>,
   ): FeatureStatus[] {
     const byKey = new Map(overrides.map((o) => [o.featureKey, o]));
     return FEATURE_KEY_LIST.map((key) => {
@@ -125,6 +138,7 @@ export class FeaturesService {
         def.source === 'column' && shop[def.column] != null
           ? Boolean(shop[def.column])
           : null;
+      const fromPlan = plan.get(key);
       return {
         key,
         description: def.description,
@@ -139,11 +153,13 @@ export class FeaturesService {
               updatedAt: o.updatedAt,
             }
           : null,
+        entitled: fromPlan ?? true,
+        entitledBy: fromPlan === undefined ? 'default' : 'plan',
         effective: resolveFlag(
           def,
           o ? Boolean(o.enabled) : undefined,
           columnValue,
-          planDefault(shopId, key),
+          fromPlan,
         ),
       };
     });
@@ -152,13 +168,13 @@ export class FeaturesService {
   // Every key for one shop in two queries. A shop that does not exist has every
   // feature off: unknown is never a plausible default.
   async getFlags(shopId: number, conn?: PoolConnection): Promise<FeatureFlags> {
-    const { shop, overrides } = await this.load(shopId, conn);
+    const { shop, overrides, plan } = await this.load(shopId, conn);
     const flags = {} as FeatureFlags;
     if (!shop) {
       for (const k of FEATURE_KEY_LIST) flags[k] = false;
       return flags;
     }
-    for (const s of FeaturesService.statuses(shopId, shop, overrides)) {
+    for (const s of FeaturesService.statuses(shop, overrides, plan)) {
       flags[s.key] = s.effective;
     }
     return flags;
@@ -174,13 +190,15 @@ export class FeaturesService {
 
   // Full per-key breakdown for the platform admin page. Null = no such shop.
   async describe(shopId: number): Promise<FeatureStatus[] | null> {
-    const { shop, overrides } = await this.load(shopId);
-    return shop ? FeaturesService.statuses(shopId, shop, overrides) : null;
+    const { shop, overrides, plan } = await this.load(shopId);
+    return shop ? FeaturesService.statuses(shop, overrides, plan) : null;
   }
 
   // For the cron sweeps that used to filter on the column in SQL. Same
-  // precedence as isEnabled, resolved in the query. Identifiers come from the
-  // registry constants, never from input.
+  // precedence as isEnabled, resolved in the query: the LEFT JOINs make a shop
+  // with no subscription, or a plan with no row for the key, entitled (COALESCE
+  // to 1), exactly like load(). Identifiers come from the registry constants,
+  // never from input.
   async enabledShopIds(key: FeatureKey): Promise<number[]> {
     const def = defOf(key);
     const base =
@@ -188,9 +206,11 @@ export class FeaturesService {
     const rows = await this.db.query<({ id: number } & RowDataPacket)[]>(
       `SELECT s.id FROM shop s
          LEFT JOIN shopfeatureoverride o ON o.shopId = s.id AND o.featureKey = ?
-        WHERE COALESCE(o.enabled, ${base}) = 1
+         LEFT JOIN shopsubscription ss ON ss.shopId = s.id
+         LEFT JOIN planfeature pf ON pf.planId = ss.planId AND pf.featureKey = ?
+        WHERE COALESCE(o.enabled, COALESCE(pf.entitled, 1) AND ${base}) = 1
         ORDER BY s.id`,
-      [key],
+      [key, key],
     );
     return rows.map((r) => r.id);
   }
