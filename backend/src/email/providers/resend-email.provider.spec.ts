@@ -35,7 +35,8 @@ describe('ResendEmailProvider', () => {
     expect(init.headers['Content-Type']).toBe('application/json');
 
     const sentBody = JSON.parse(init.body);
-    expect(sentBody.from).toBe('Requital <noreply@requital.io>');
+    expect(sentBody.from).toBe('"Test Shop" <noreply@requital.io>');
+    expect(sentBody.reply_to).toBeUndefined();
     expect(sentBody.to).toBe('customer@example.com');
     expect(sentBody.subject).toBe('Order confirmation #42');
     expect(sentBody.text).toBe('Thanks for your order.');
@@ -77,5 +78,51 @@ describe('ResendEmailProvider', () => {
         credentials: { apiKey: 'bad-key' },
       }),
     ).rejects.toThrow('Resend API error (401): Invalid API key');
+  });
+
+  describe('From header (MKT-3)', () => {
+    const send = async (extra: Record<string, unknown>) => {
+      fetchSpy.mockResolvedValue({ ok: true, json: async () => ({ id: 'x' }) });
+      await new ResendEmailProvider().sendEmail({
+        to: 'c@example.com',
+        subject: 's',
+        text: 't',
+        html: '<p>t</p>',
+        fromName: 'Rose Shop',
+        credentials: { apiKey: 'k' },
+        ...extra,
+      } as never);
+      return JSON.parse(fetchSpy.mock.calls[0][1].body) as Record<
+        string,
+        string
+      >;
+    };
+
+    it('uses the shop domain address and Reply-To when given', async () => {
+      const body = await send({
+        fromAddress: 'noreply@roses.com',
+        replyTo: 'hello@roses.com',
+      });
+      expect(body.from).toBe('"Rose Shop" <noreply@roses.com>');
+      expect(body.reply_to).toBe('hello@roses.com');
+    });
+
+    it.each([
+      [
+        'CRLF header injection',
+        'Evil\r\nBcc: x@y.com',
+        '"Evil Bcc: x@y.com" <noreply@requital.io>',
+      ],
+      [
+        'quote breakout',
+        'A" <attacker@evil.com>, "B',
+        '"A attacker@evil.com , B" <noreply@requital.io>',
+      ],
+      ['empty after cleaning', '\r\n"\"', '"Requital" <noreply@requital.io>'],
+    ])('sanitises the display name: %s', async (_n, name, expected) => {
+      const body = await send({ fromName: name });
+      expect(body.from).toBe(expected);
+      expect(body.from).not.toMatch(/[\r\n]/);
+    });
   });
 });

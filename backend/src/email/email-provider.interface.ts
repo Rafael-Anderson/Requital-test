@@ -7,6 +7,12 @@ export interface SendEmailParams {
   // the sending address/domain is always the platform's (see
   // common/email.ts's class comment for why platform-level, not per-shop).
   fromName: string;
+  // MKT-3: full From address on a shop's VERIFIED sending domain (e.g.
+  // noreply@shop.com). Absent = the platform address. fromName is always the
+  // display name, sanitised by the provider.
+  fromAddress?: string;
+  // Reply-To, set together with fromAddress (the shop's own contact email).
+  replyTo?: string;
   // Platform-level Resend API key, resolved by common/email.ts from
   // RESEND_API_KEY — same bring-your-own-credentials shape as
   // WhatsAppProvider's `credentials` field, even though (unlike WhatsApp)
