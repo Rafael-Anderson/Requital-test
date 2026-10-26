@@ -21,8 +21,10 @@ export function safeHeaders(
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(headers)) {
     if (!/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(name)) continue;
-    // eslint-disable-next-line no-control-regex
-    out[name] = String(value).replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+    out[name] = String(value)
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+      .trim();
   }
   return Object.keys(out).length ? out : undefined;
 }
@@ -64,7 +66,9 @@ export class ResendEmailProvider implements EmailProvider {
         text: params.text,
         html: params.html,
         // UNVERIFIED: Resend's `headers` field carries custom headers as an object.
-        ...(safeHeaders(params.headers) ? { headers: safeHeaders(params.headers) } : {}),
+        ...(safeHeaders(params.headers)
+          ? { headers: safeHeaders(params.headers) }
+          : {}),
       }),
     });
 
