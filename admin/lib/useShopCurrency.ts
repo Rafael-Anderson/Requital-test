@@ -30,11 +30,22 @@ export function useShopCurrency(): string | null {
   const [currency, setCurrency] = useState<string | null>(null);
 
   useEffect(() => {
+    // Ignore a late answer after unmount: a rejection landing after the test
+    // environment is torn down threw "window is not defined" from setState and
+    // failed the whole vitest run on CI.
+    let cancelled = false;
     getShop()
-      .then((s) => setCurrency(s.currency))
+      .then((s) => {
+        if (!cancelled) setCurrency(s.currency);
+      })
       // Silent: a money amount with no currency code is a smaller problem than
       // an error toast on every page, and asserting a default would be a lie.
-      .catch(() => setCurrency(null));
+      .catch(() => {
+        if (!cancelled) setCurrency(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return currency;

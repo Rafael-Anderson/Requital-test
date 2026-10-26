@@ -44,8 +44,11 @@ describe('SEC: public validate prices unpublished products (e2e)', () => {
       });
     // Expected: rejected like checkout does (400 "not currently available").
     // Actual on main: 201 { valid: true, discountAmount: 777 }.
-    expect(JSON.stringify(body(res))).not.toContain('777');
+    // Match 777 only as a whole number: the error text embeds a generated item
+    // name whose timestamp digits can contain 777.
+    const price = /(?<![0-9])777(?![0-9])/;
+    expect(JSON.stringify(body(res))).not.toMatch(price);
     expect(res.status).toBe(400);
-    expect(JSON.stringify(body(res))).not.toContain('777');
+    expect(JSON.stringify(body(res))).not.toMatch(price);
   });
 });
