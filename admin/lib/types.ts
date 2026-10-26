@@ -4037,4 +4037,4 @@ export interface LoyaltyEntry {
 
 export type CustomerLoyaltyOverview =
   | { available: false }
-  | { available: true; programEnabled: boolean; balance: number; entries: LoyaltyEntry[] };
+  | { available: true; programEnabled: boolean; balance: number; shortfallTotal: number; entries: LoyaltyEntry[] };

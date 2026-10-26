@@ -2,6 +2,7 @@ import {
   clawbackTarget,
   earnBaseMinor,
   earnPoints,
+  MAX_ORDER_POINTS,
   parseRate,
   redeemCreditMinor,
 } from './loyalty-math';
@@ -51,10 +52,11 @@ describe('loyalty math', () => {
     expect(earnPoints(10505, parseRate('1')!, 'KWD')).toBe(10); // 10.505 KWD
     expect(earnPoints(10505, parseRate('0.5')!, 'KWD')).toBe(5);
     expect(earnPoints(100, parseRate('0')!, 'AED')).toBe(0);
-    // large figures do not lose precision
-    expect(earnPoints(900_000_000_00, parseRate('9999.9999')!, 'AED')).toBe(
-      Number((90_000_000_000n * 99999999n) / 1000000n),
+    // exact for large-but-legal figures, and one order is capped below INT
+    expect(earnPoints(10_000_000_000, parseRate('3')!, 'AED')).toBe(
+      300_000_000,
     );
+    expect(earnPoints(1e13, parseRate('1000')!, 'AED')).toBe(MAX_ORDER_POINTS);
   });
   it('clawback targets are cumulative, exact, capped at what was earned', () => {
     expect(clawbackTarget(70, 3500, 10000)).toBe(24); // floor(24.5)

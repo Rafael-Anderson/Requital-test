@@ -20,6 +20,7 @@ import {
   lockCustomerInShop,
 } from '../customer-crm/customer-scope';
 import { isMarketplaceChannel } from '../channels/marketplace-channels';
+import { ONLINE_PAYMENT_METHODS } from '../reports/attribution-report';
 import { StoreCreditService } from '../store-credit/store-credit.service';
 import { minorToDecimal } from '../store-credit/store-credit-money';
 import type { CustomerContext } from '../customer-auth/customer-context';
@@ -34,6 +35,9 @@ import {
   earnPoints,
   parseRate,
   redeemCreditMinor,
+  toMinor,
+  MAX_EARN_RATE,
+  MAX_REDEEM_POINTS_PER_UNIT,
   type EarnBase,
 } from './loyalty-math';
 
@@ -177,13 +181,17 @@ export class LoyaltyService implements OnModuleInit {
       enabled: dto.enabled ?? before.enabled,
       earnRate:
         dto.earnRate !== undefined
-          ? this.rateText(dto.earnRate, 'earnRate')
+          ? this.rateText(dto.earnRate, 'earnRate', MAX_EARN_RATE)
           : before.earnRate,
       earnBase: dto.earnBase ?? before.earnBase,
       redeemEnabled: dto.redeemEnabled ?? before.redeemEnabled,
       redeemPointsPerUnit:
         dto.redeemPointsPerUnit !== undefined
-          ? this.rateText(dto.redeemPointsPerUnit, 'redeemPointsPerUnit')
+          ? this.rateText(
+              dto.redeemPointsPerUnit,
+              'redeemPointsPerUnit',
+              MAX_REDEEM_POINTS_PER_UNIT,
+            )
           : before.redeemPointsPerUnit,
       redeemMinPoints: dto.redeemMinPoints ?? before.redeemMinPoints,
       redeemStepPoints: dto.redeemStepPoints ?? before.redeemStepPoints,
@@ -240,12 +248,15 @@ export class LoyaltyService implements OnModuleInit {
     return this.getProgram(ctx.shopId);
   }
 
-  private rateText(raw: unknown, field: string): string {
+  private rateText(raw: unknown, field: string, max: number): string {
     const r = parseRate(raw);
     if (r === null) {
       throw new BadRequestException(
         `${field} must be a number with at most 4 decimal places`,
       );
+    }
+    if (r > BigInt(max) * 10000n) {
+      throw new BadRequestException(`${field} cannot be more than ${max}`);
     }
     return trimRate(`${r / 10000n}.${String(r % 10000n).padStart(4, '0')}`);
   }
@@ -295,7 +306,7 @@ export class LoyaltyService implements OnModuleInit {
       id: r.id as number,
       type: r.entryType as string,
       points: r.points as number,
-      shortfall: r.shortfall as number,
+      shortfall: customerView ? 0 : (r.shortfall as number),
       reason:
         customerView && r.actorUserId != null
           ? null
@@ -316,14 +327,21 @@ export class LoyaltyService implements OnModuleInit {
       return { available: false as const };
     }
     const program = await this.programRow(shopId);
-    const [balance, entries] = await Promise.all([
+    const [balance, entries, short] = await Promise.all([
       this.balanceOf(shopId, customerId),
       this.entries(shopId, customerId, 50, false),
+      this.db.query<RowDataPacket[]>(
+        `SELECT COALESCE(SUM(shortfall), 0) AS s FROM loyaltyentry WHERE shopId = ? AND customerId = ?`,
+        [shopId, customerId],
+      ),
     ]);
     return {
       available: true as const,
       programEnabled: program?.enabled ?? false,
       balance,
+      // Points that could not be taken back on returns because they were already
+      // spent. Admin only. See the clamp in clawbackForReturn.
+      shortfallTotal: Number(short[0].s),
       entries,
     };
   }
@@ -333,28 +351,34 @@ export class LoyaltyService implements OnModuleInit {
   async accountOverview(ctx: CustomerContext) {
     const p = await this.liveProgram(ctx.shopId);
     if (!p) return { enabled: false as const };
-    const [balance, entries, redeemP, cur] = await Promise.all([
+    const [balance, entries, redeemP, cur, who] = await Promise.all([
       this.balanceOf(ctx.shopId, ctx.customerId),
       this.entries(ctx.shopId, ctx.customerId, 20, true),
       this.redeemProgram(ctx.shopId),
       this.db.query<RowDataPacket[]>(`SELECT currency FROM shop WHERE id = ?`, [
         ctx.shopId,
       ]),
+      this.db.query<RowDataPacket[]>(
+        `SELECT phoneVerifiedAt FROM customer WHERE id = ? AND shopId = ?`,
+        [ctx.customerId, ctx.shopId],
+      ),
     ]);
     const currency = cur[0]?.currency as string;
+    const phoneVerified = who[0]?.phoneVerifiedAt != null;
     return {
       enabled: true as const,
       balance,
       entries,
-      redeem: redeemP
-        ? {
-            pointsPerUnit: redeemP.redeemPointsPerUnit,
-            minPoints: redeemP.redeemMinPoints,
-            stepPoints: redeemP.redeemStepPoints,
-            maxPoints: redeemP.redeemMaxPoints,
-            currency,
-          }
-        : null,
+      redeem:
+        redeemP && phoneVerified
+          ? {
+              pointsPerUnit: redeemP.redeemPointsPerUnit,
+              minPoints: redeemP.redeemMinPoints,
+              stepPoints: redeemP.redeemStepPoints,
+              maxPoints: redeemP.redeemMaxPoints,
+              currency,
+            }
+          : null,
     };
   }
 
@@ -486,7 +510,7 @@ export class LoyaltyService implements OnModuleInit {
     if (!Number.isInteger(shopId) || !Number.isInteger(orderId)) return;
     const earned = await this.db.transaction(async (conn) => {
       const [orders] = await conn.query<RowDataPacket[]>(
-        `SELECT status, paymentStatus, channel, customerId, currency, total, deliveryFee, taxAmount, giftCardAmount, storeCreditAmount
+        `SELECT status, paymentStatus, paymentMethod, channel, customerId, currency, total, deliveryFee, taxAmount, giftCardAmount, storeCreditAmount
            FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
         [orderId, shopId],
       );
@@ -495,6 +519,11 @@ export class LoyaltyService implements OnModuleInit {
         !o ||
         o.status !== 'delivered' ||
         o.paymentStatus === 'refunded' ||
+        // An online-payment order earns only once it is PAID (a delivered order
+        // that was never paid is a gateway or ops problem, not a sale). Cash and
+        // card-at-handover orders are settled by the delivery itself.
+        (ONLINE_PAYMENT_METHODS.includes(o.paymentMethod as string) &&
+          o.paymentStatus !== 'paid') ||
         isMarketplaceChannel(o.channel as string | null) ||
         o.customerId == null
       ) {
@@ -541,6 +570,30 @@ export class LoyaltyService implements OnModuleInit {
       } catch (error) {
         if (isDuplicateKeyError(error)) return 0;
         throw error;
+      }
+      // A return that landed BEFORE this job ran found no earn row to claw back
+      // from, so catch up here: the same cumulative rule clawbackForReturn uses,
+      // booked on the latest return (the order row lock we hold serialises this
+      // against any return, so a later one will see this earn row instead).
+      const [refunds] = await conn.query<RowDataPacket[]>(
+        `SELECT COALESCE(SUM(refundAmount), 0) AS refunded, MAX(id) AS lastReturnId
+           FROM orderreturn WHERE orderId = ?`,
+        [orderId],
+      );
+      const lastReturnId = refunds[0].lastReturnId as number | null;
+      if (lastReturnId != null) {
+        const claw = clawbackTarget(
+          points,
+          toMinor(refunds[0].refunded, currency),
+          toMinor(o.total, currency) - toMinor(o.deliveryFee, currency),
+        );
+        if (claw > 0) {
+          await conn.query(
+            `INSERT INTO loyaltyentry (shopId, customerId, entryType, points, returnId)
+             VALUES (?, ?, 'clawback', ?, ?)`,
+            [shopId, o.customerId, -claw, lastReturnId],
+          );
+        }
       }
       return points;
     });
@@ -600,6 +653,12 @@ export class LoyaltyService implements OnModuleInit {
       ) - Number(priorRows[0].gross);
     if (gross <= 0) return;
     const balance = await this.lockedBalance(conn, p.shopId, customerId);
+    // ZERO FLOOR, KNOWN FARMING HOLE (BLOCKER for turning redemption on): this clamp
+    // means points already spent (redeemed for store credit) are NOT recovered when
+    // the order is later returned; the unrecovered part is only RECORDED as
+    // `shortfall`. Earn, redeem, return again = free store credit. Redemption must
+    // stay off until the owner decides how to recover it (reclaim store credit,
+    // allow a negative balance, or hold points until the return window closes).
     const taken = Math.min(gross, Math.max(balance, 0));
     try {
       await conn.query(
@@ -627,7 +686,12 @@ export class LoyaltyService implements OnModuleInit {
         ctx.shopId,
         ctx.customerId,
       );
-      if (String(customer.email ?? '').endsWith('@deleted.requital')) {
+      // The account holder must have proved control of the phone (the register-
+      // claim hole): an account that never did cannot turn points into money.
+      if (
+        String(customer.email ?? '').endsWith('@deleted.requital') ||
+        customer.phoneVerifiedAt == null
+      ) {
         throw new NotFoundException('Not found');
       }
       const program = await this.redeemProgram(ctx.shopId, conn);

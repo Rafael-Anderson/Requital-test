@@ -395,6 +395,21 @@ export class ReturnsService {
         );
       }
 
+      // CUS-5: take back the share of the earned points this refund represents
+      // (cumulative, idempotent per return, clamped at a zero balance). LOCK ORDER:
+      // order (held) -> customer -> stock, the same as checkout with store credit,
+      // so this runs BEFORE the stock loop below. A 1213 after the provider refund
+      // would strand a refunded return.
+      await this.loyaltyService.clawbackForReturn(conn, {
+        shopId: order.shopId,
+        orderId,
+        returnId: newReturnId,
+        customerId: ownerCustomerId,
+        refundedMinor: alreadyMinor + refundMinor,
+        refundableMinor:
+          totalMinor - Math.round(Number(locked.deliveryFee ?? 0) * factor),
+      });
+
       for (const line of dto.items) {
         const orderItem = lineById.get(line.orderItemId)!;
         const productId = orderItem.productId as number;
@@ -451,18 +466,6 @@ export class ReturnsService {
           );
         }
       }
-
-      // CUS-5: take back the share of the earned points this refund represents
-      // (cumulative, idempotent per return, clamped at a zero balance). Order row
-      // lock is already held; this takes the customer lock next.
-      await this.loyaltyService.clawbackForReturn(conn, {
-        shopId: order.shopId,
-        orderId,
-        returnId: newReturnId,
-        customerId: ownerCustomerId,
-        refundedMinor: alreadyMinor + refundMinor,
-        refundableMinor: totalMinor - Math.round(Number(locked.deliveryFee ?? 0) * factor),
-      });
 
       // A refunded/returned order is no longer described by the invoice issued
       // for it (C2) - the document still records what was sold, but the order has

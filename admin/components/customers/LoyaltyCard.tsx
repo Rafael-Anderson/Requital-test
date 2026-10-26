@@ -90,6 +90,13 @@ export default function LoyaltyCard({ customerId, canEdit }: { customerId: numbe
             </div>
           </div>
 
+          {data.shortfallTotal > 0 && (
+            <p className="rounded-xl border border-amber-300 p-3 text-xs text-text-secondary">
+              {data.shortfallTotal.toLocaleString()} points could not be taken back on returned orders because the
+              customer had already spent them. They are only recorded here; nothing was recovered.
+            </p>
+          )}
+
           {canEdit && (
             <div className="space-y-3 rounded-xl border border-border p-3 dark:border-white/10">
               {formError && <InlineErrorMessage>{formError}</InlineErrorMessage>}

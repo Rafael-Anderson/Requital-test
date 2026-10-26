@@ -6,6 +6,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import type { DatabaseService } from '../src/database/database.service';
 import { JobsWorkerService } from '../src/jobs/jobs.worker.service';
 import { LoyaltyService } from '../src/loyalty/loyalty.service';
+import { ProductsService } from '../src/products/products.service';
 import { body, bootApp, makeFixtures } from './helpers/w5-fixture';
 import {
   asCustomer,
@@ -384,6 +385,19 @@ describe('Loyalty (e2e)', () => {
       )!;
       expect(claw.points).toBe(0);
       expect(claw.shortfall).toBe(earned);
+      // visible to the merchant (admin only), hidden from the customer
+      const adminView = body<{ shortfallTotal: number }>(
+        await admin(
+          shop,
+          'get',
+          `/customers/${customer.customerId}/loyalty`,
+        ).expect(200),
+      );
+      expect(adminView.shortfallTotal).toBe(earned);
+      const custView = body<{ entries: { shortfall: number }[] }>(
+        await account(shop, customer).expect(200),
+      );
+      expect(custView.entries.every((e) => e.shortfall === 0)).toBe(true);
       expect(await balance(customer.customerId)).toBe(0);
     });
 
@@ -403,6 +417,111 @@ describe('Loyalty (e2e)', () => {
         201,
       );
       expect(await entries(customer.customerId)).toHaveLength(1);
+    });
+  });
+
+  describe('review fixes', () => {
+    const ret = (shop: Shop, orderId: number, items: object[]) =>
+      request(server())
+        .post(`/orders/${orderId}/returns`)
+        .set(f.auth(shop))
+        .send({ reason: 'changed_mind', items, restock: true });
+
+    it('MED-1: the return takes the customer lock (clawback) BEFORE any stock work', async () => {
+      const s = await setup(`loy-lock${++seq}`);
+      const orderId = await delivered(s.shop, s.customer, s.product.id, 2);
+      await drain(orderId);
+      const line = (await f.orderItems(orderId))[0].id as number;
+      const calls: string[] = [];
+      type Fn = (...a: unknown[]) => Promise<unknown>;
+      const record = (obj: object, name: string, tag: string) => {
+        const target = obj as Record<string, Fn>;
+        const orig: Fn = target[name].bind(obj) as Fn;
+        jest
+          .spyOn(target, name)
+          .mockImplementation((...a: unknown[]): Promise<unknown> => {
+            calls.push(tag);
+            return orig(...a);
+          });
+      };
+      const products = app.get(ProductsService);
+      record(loyalty, 'clawbackForReturn', 'clawback');
+      record(products, 'releaseOrderConsumption', 'stock');
+      record(products, 'consumeForOrderItems', 'stock');
+      try {
+        await ret(s.shop, orderId, [{ orderItemId: line, quantity: 1 }]).expect(
+          201,
+        );
+      } finally {
+        jest.restoreAllMocks();
+      }
+      expect(calls.indexOf('clawback')).toBeGreaterThanOrEqual(0);
+      expect(calls.indexOf('stock')).toBeGreaterThan(calls.indexOf('clawback'));
+    });
+
+    it('MED-2: a return that landed before the earn job ran is netted off when the earn runs', async () => {
+      const s = await setup(`loy-early${++seq}`);
+      const orderId = await delivered(s.shop, s.customer, s.product.id, 2);
+      const line = (await f.orderItems(orderId))[0].id as number;
+      // the return happens first: no earn row exists yet
+      await ret(s.shop, orderId, [{ orderItemId: line, quantity: 1 }]).expect(
+        201,
+      );
+      expect(await entries(s.customer.customerId)).toHaveLength(0);
+      await drain(orderId);
+      const rows = await entries(s.customer.customerId);
+      expect(rows.map((r) => r.entryType as string)).toEqual([
+        'earn',
+        'clawback',
+      ]);
+      const earned = rows[0].points as number;
+      expect(rows[1].points as number).toBe(-Math.floor(earned / 2));
+      expect(rows[1].shortfall).toBe(0);
+      // the next return continues from there: the two clawbacks sum to the earn
+      await ret(s.shop, orderId, [{ orderItemId: line, quantity: 1 }]).expect(
+        201,
+      );
+      expect(await balance(s.customer.customerId)).toBe(0);
+    });
+
+    it('LOW: an online-payment order earns only once it is paid; cash at handover earns on delivered', async () => {
+      const s = await setup(`loy-paid${++seq}`);
+      const orderId = await delivered(s.shop, s.customer, s.product.id);
+      await db.execute(
+        `UPDATE \`order\` SET paymentMethod = 'card_online', paymentStatus = 'unpaid' WHERE id = ?`,
+        [orderId],
+      );
+      await loyalty.earnForOrder({ shopId: s.shop.shopId, orderId });
+      expect(await entries(s.customer.customerId)).toHaveLength(0);
+      await db.execute(
+        `UPDATE \`order\` SET paymentStatus = 'paid' WHERE id = ?`,
+        [orderId],
+      );
+      await loyalty.earnForOrder({ shopId: s.shop.shopId, orderId });
+      expect(await entries(s.customer.customerId)).toHaveLength(1);
+    });
+
+    it('LOW: rates are capped on save (400), and an extreme order cannot exceed the INT range', async () => {
+      const s = await setup(`loy-cap${++seq}`);
+      for (const bad of ['1000.0001', '5000', '99999999']) {
+        await admin(s.shop, 'put', '/loyalty/program', {
+          earnRate: bad,
+        }).expect(400);
+      }
+      await admin(s.shop, 'put', '/loyalty/program', {
+        earnRate: '1000',
+      }).expect(200);
+      await admin(s.shop, 'put', '/loyalty/program', {
+        redeemPointsPerUnit: '1000001',
+      }).expect(400);
+      const orderId = await delivered(s.shop, s.customer, s.product.id);
+      await db.execute(
+        `UPDATE \`order\` SET total = 90000000000 WHERE id = ?`,
+        [orderId],
+      );
+      await loyalty.earnForOrder({ shopId: s.shop.shopId, orderId });
+      const pts = (await entries(s.customer.customerId))[0].points as number;
+      expect(pts).toBe(1_000_000_000);
     });
   });
 
@@ -536,6 +655,10 @@ describe('Loyalty (e2e)', () => {
           ...redeemCfg,
         },
       });
+      await db.execute(
+        `UPDATE customer SET phoneVerifiedAt = NOW(3) WHERE id = ?`,
+        [s.customer.customerId],
+      );
       await admin(
         s.shop,
         'post',
@@ -614,6 +737,61 @@ describe('Loyalty (e2e)', () => {
         .expect(400);
     });
 
+    it('MED-3: an account that never proved its phone cannot redeem (404) and is not offered it', async () => {
+      const { shop, customer } = await ready('loy-rd-unv');
+      await override(shop.shopId, 'phone_otp_register');
+      await db.execute(
+        `UPDATE customer SET phoneVerifiedAt = NULL WHERE id = ?`,
+        [customer.customerId],
+      );
+      await redeem(shop, customer, 50).expect(404);
+      expect(await credit(customer.customerId)).toBe(0);
+      expect(
+        body<{ redeem: unknown }>(await account(shop, customer).expect(200))
+          .redeem,
+      ).toBeNull();
+    });
+
+    it('LOW: the store-credit key of a redemption cannot be pre-claimed by an admin', async () => {
+      const { shop, customer } = await ready('loy-rd-key2');
+      await override(shop.shopId, 'phone_otp_register');
+      // staff cannot even type a key containing a colon
+      await admin(
+        shop,
+        'post',
+        `/customers/${customer.customerId}/store-credit/adjustments`,
+        {
+          currency: 'AED',
+          amount: 1,
+          direction: 'grant',
+          reason: 'probe',
+          idempotencyKey: 'loyalty:1234567',
+        },
+      ).expect(400);
+      // and the old hyphen form no longer collides with a redemption
+      const probe = await db.query<RowDataPacket[]>(
+        `SELECT COALESCE(MAX(id), 0) + 1 AS n FROM loyaltyentry`,
+      );
+      await admin(
+        shop,
+        'post',
+        `/customers/${customer.customerId}/store-credit/adjustments`,
+        {
+          currency: 'AED',
+          amount: 1,
+          direction: 'grant',
+          reason: 'probe',
+          idempotencyKey: `loyalty-${String(probe[0].n)}`,
+        },
+      ).expect(201);
+      await redeem(shop, customer, 50).expect(201);
+      const k = await db.query<RowDataPacket[]>(
+        `SELECT idempotencyKey FROM storecreditentry WHERE customerId = ? AND reason = 'Loyalty points redeemed'`,
+        [customer.customerId],
+      );
+      expect(String(k[0].idempotencyKey)).toMatch(/^loyalty:\d+$/);
+    });
+
     it('concurrent redemptions cannot overspend the balance', async () => {
       const { shop, customer } = await ready('loy-rd-race');
       await override(shop.shopId, 'phone_otp_register');
@@ -635,6 +813,10 @@ describe('Loyalty (e2e)', () => {
         shop.slug,
         phone(),
         `loy-${f.uniq()}@x.test`,
+      );
+      await db.execute(
+        `UPDATE customer SET phoneVerifiedAt = NOW(3) WHERE id = ?`,
+        [other.customerId],
       );
       await override(shop.shopId, 'phone_otp_register');
       // give the other customer a balance so only the key rule can refuse

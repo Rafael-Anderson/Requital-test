@@ -418,7 +418,9 @@ export class StoreCreditService {
         customerId,
         currency,
         minorToDecimal(amountMinor, currency),
-        `loyalty-${loyaltyEntryId}`,
+        // A colon: the admin grant key regex ([A-Za-z0-9_-]) can never produce it,
+        // so staff cannot pre-claim the key a redemption will use.
+        `loyalty:${loyaltyEntryId}`,
       ],
     );
     return (res as { insertId: number }).insertId;

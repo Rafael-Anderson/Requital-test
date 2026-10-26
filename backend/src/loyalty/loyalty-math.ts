@@ -3,6 +3,13 @@ import { minorUnitFactor } from '../common/currency-minor-units';
 // Loyalty arithmetic, all in integers (BigInt where a product can pass 2^53).
 // Rates are exact decimal strings with at most 4 places, read as value * 10000.
 
+// Safe ceilings. 1000 points per currency unit is far above any real program, and
+// a single order can never earn more than MAX_ORDER_POINTS, so a ledger row can
+// never leave the INT range (2,147,483,647) whatever the order size or the rate.
+export const MAX_EARN_RATE = 1000;
+export const MAX_REDEEM_POINTS_PER_UNIT = 1_000_000;
+export const MAX_ORDER_POINTS = 1_000_000_000;
+
 export const EARN_BASES = ['net_paid', 'items_after_discount'] as const;
 export type EarnBase = (typeof EARN_BASES)[number];
 
@@ -59,7 +66,7 @@ export function earnPoints(
   const pts =
     (BigInt(baseMinor) * rate10000) /
     (BigInt(minorUnitFactor(currency)) * 10000n);
-  return Number(pts);
+  return Math.min(Number(pts), MAX_ORDER_POINTS);
 }
 
 // Cumulative points to have taken back once `refundedMinor` of an order's

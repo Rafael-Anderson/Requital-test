@@ -16,6 +16,7 @@ const overview = {
   available: true as const,
   programEnabled: true,
   balance: 120,
+  shortfallTotal: 0,
   entries: [
     { id: 1, type: "earn" as const, points: 120, shortfall: 0, reason: null, orderId: 5, orderNumber: 7, returnId: null, actorName: null, createdAt: "2026-10-01T10:00:00Z" },
   ],
@@ -50,6 +51,17 @@ describe("LoyaltyCard", () => {
     await userEvent.click(submit);
     await waitFor(() => expect(api.adjustCustomerLoyalty).toHaveBeenCalledTimes(1));
     expect(vi.mocked(api.adjustCustomerLoyalty).mock.calls[0][1]).toMatchObject({ points: -20, reason: "goodwill" });
+  });
+
+  it("shows the total of points that could not be taken back, only when there are some", async () => {
+    vi.mocked(api.getCustomerLoyalty).mockResolvedValue({ ...overview, shortfallTotal: 35 });
+    wrap();
+    expect(await screen.findByText(/35 points could not be taken back/)).toBeInTheDocument();
+    cleanup();
+    vi.mocked(api.getCustomerLoyalty).mockResolvedValue(overview);
+    wrap();
+    await screen.findByText("120");
+    expect(screen.queryByText(/could not be taken back on returned orders/)).toBeNull();
   });
 
   it("hides the form from a read-only user", async () => {
