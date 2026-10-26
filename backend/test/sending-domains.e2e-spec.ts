@@ -18,7 +18,20 @@ interface Shop {
   shopId: number;
   email: string;
 }
-type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+interface Json {
+  status: string;
+  verified: boolean;
+  message: string;
+  fromAddress: string;
+  records: unknown[];
+  sendingDomain: Json | null;
+  accessToken: string;
+  devVerificationLink?: string;
+  user: { shopId: number };
+  from: string;
+  reply_to?: string;
+  data?: { id: number }[];
+}
 
 describe('Shop sending domains (e2e)', () => {
   let app: INestApplication<App>;
@@ -102,7 +115,7 @@ describe('Shop sending domains (e2e)', () => {
 
   // Enqueue a send_email job for a shop and run it in THIS process, with a
   // faked Resend; returns each fetch call's JSON body.
-  async function sendJob(shopId: number, payload: Json) {
+  async function sendJob(shopId: number, payload: { fromName?: string }) {
     process.env.RESEND_API_KEY = 're_test_fake';
     const key = `sd:${runId}:${++n}`;
     const job = await jobs.enqueue(
@@ -112,9 +125,9 @@ describe('Shop sending domains (e2e)', () => {
       key,
     );
     await worker.processJobById(job.id);
-    return fetchSpy.mock.calls
+    return (fetchSpy.mock.calls as [string, { body: string }][])
       .filter(([u]) => String(u) === 'https://api.resend.com/emails')
-      .map(([, init]) => JSON.parse(init.body as string) as Json);
+      .map(([, init]) => JSON.parse(init.body) as Json);
   }
   async function verifyViaProvider(t: string, domain: string) {
     fake.setStatus(fake.idFor(domain)!, 'verified');
@@ -131,8 +144,10 @@ describe('Shop sending domains (e2e)', () => {
       .get('/outlets')
       .set(auth(shop.token))
       .expect(200);
-    const outletId = ((outlets.body as Json).data ?? outlets.body)[0]
-      .id as number;
+    const outletRows = ((outlets.body as Json).data ?? outlets.body) as {
+      id: number;
+    }[];
+    const outletId = outletRows[0].id;
     const staffEmail = `sd-branch-${runId}@test.com`;
     await http()
       .post('/auth/branch-users')
@@ -149,7 +164,7 @@ describe('Shop sending domains (e2e)', () => {
       .post('/auth/login')
       .send({ email: staffEmail, password: 'password123' })
       .expect(201);
-    const bt = (login.body as Json).accessToken as string;
+    const bt = (login.body as Json).accessToken;
     await get(bt).expect(403);
     await put(bt, domainFor('role')).expect(403);
     await verify(bt).expect(403);
@@ -190,7 +205,7 @@ describe('Shop sending domains (e2e)', () => {
     const v1 = (await verify(shop.token).expect(201)).body as Json;
     expect(v1).toMatchObject({ status: 'verifying', verified: false });
     await verifyViaProvider(shop.token, domain);
-    expect(((await get(shop.token)).body as Json).sendingDomain.status).toBe(
+    expect(((await get(shop.token)).body as Json).sendingDomain?.status).toBe(
       'verified',
     );
 
@@ -198,7 +213,7 @@ describe('Shop sending domains (e2e)', () => {
       `SELECT action FROM auditlog WHERE shopId = ? AND entityType = 'sending_domain'`,
       [shop.shopId],
     );
-    expect(audit.map((a) => a.action)).toEqual(
+    expect(audit.map((a) => a.action as string)).toEqual(
       expect.arrayContaining(['sending_domain.set', 'sending_domain.verified']),
     );
   });
@@ -215,14 +230,14 @@ describe('Shop sending domains (e2e)', () => {
     await del(b.token).expect(404);
     await put(b.token, domain).expect(409); // verified elsewhere
     // A is untouched.
-    expect(((await get(a.token)).body as Json).sendingDomain.status).toBe(
+    expect(((await get(a.token)).body as Json).sendingDomain?.status).toBe(
       'verified',
     );
     const rows = await db.query<RowDataPacket[]>(
       `SELECT shopId FROM shopsendingdomain WHERE domain = ?`,
       [domain],
     );
-    expect(rows.map((x) => x.shopId)).toEqual([a.shopId]);
+    expect(rows.map((x) => x.shopId as number)).toEqual([a.shopId]);
   });
 
   it('two shops may both PENDING-claim one domain; only the first to verify wins (DB unique key)', async () => {
@@ -260,7 +275,7 @@ describe('Shop sending domains (e2e)', () => {
     const a = await setupShop('sd-send');
     const other = await setupShop('sd-sendother');
     const domain = domainFor('send');
-    const ok = { ok: true, json: async () => ({ id: 're_1' }) };
+    const ok = { ok: true, json: () => Promise.resolve({ id: 're_1' }) };
     fetchSpy.mockResolvedValue(ok);
 
     // pending: platform address, shop display name honoured
@@ -302,7 +317,7 @@ describe('Shop sending domains (e2e)', () => {
       .mockResolvedValueOnce({
         ok: false,
         status: 422,
-        json: async () => ({ message: 'domain not verified' }),
+        json: () => Promise.resolve({ message: 'domain not verified' }),
       })
       .mockResolvedValueOnce(ok);
     sent = await sendJob(a.shopId, { fromName: 'Rose Shop' });
@@ -323,7 +338,10 @@ describe('Shop sending domains (e2e)', () => {
   it('replacing a verified domain stops sending from the old one immediately', async () => {
     const a = await setupShop('sd-repl');
     const d1 = domainFor('repl1');
-    fetchSpy.mockResolvedValue({ ok: true, json: async () => ({ id: 'x' }) });
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ id: 'x' }),
+    });
     await put(a.token, d1).expect(200);
     await verifyViaProvider(a.token, d1);
     await put(a.token, domainFor('repl2')).expect(200);
@@ -344,7 +362,7 @@ describe('Shop sending domains (e2e)', () => {
     expect(r.verified).toBe(false);
     fake.failNext(0);
     expect(r.message).toMatch(/email provider/);
-    expect(((await get(a.token)).body as Json).sendingDomain.status).toBe(
+    expect(((await get(a.token)).body as Json).sendingDomain?.status).toBe(
       'pending',
     );
   });
@@ -362,10 +380,10 @@ describe('Shop sending domains (e2e)', () => {
       [b.shopId],
     );
     await svc.runSweep();
-    expect(((await get(a.token)).body as Json).sendingDomain.status).toBe(
+    expect(((await get(a.token)).body as Json).sendingDomain?.status).toBe(
       'verified',
     );
-    expect(((await get(b.token)).body as Json).sendingDomain.status).toBe(
+    expect(((await get(b.token)).body as Json).sendingDomain?.status).toBe(
       'failed',
     );
   });

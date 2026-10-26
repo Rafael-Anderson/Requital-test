@@ -157,31 +157,34 @@ describe('sendEmailStub', () => {
 });
 
 describe('shop sending identity (MKT-3)', () => {
+  type FetchCall = [string, { body: string }];
   let fetchSpy: jest.SpyInstance;
   const originalKey = process.env.RESEND_API_KEY;
+  const ok = { ok: true, json: () => Promise.resolve({ id: 're_1' }) };
+  const bodyOf = (i: number) => {
+    const calls = fetchSpy.mock.calls as FetchCall[];
+    return JSON.parse(calls[i][1].body) as Record<string, string>;
+  };
   beforeEach(() => {
     fetchSpy = jest.spyOn(global, 'fetch');
     jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    process.env.RESEND_API_KEY = 're_real';
   });
   afterEach(() => {
     jest.restoreAllMocks();
+    setSendingIdentityResolver(null);
     if (originalKey === undefined) delete process.env.RESEND_API_KEY;
     else process.env.RESEND_API_KEY = originalKey;
   });
-  const ok = { ok: true, json: async () => ({ id: 're_1' }) };
-  const bodyOf = (i: number) =>
-    JSON.parse(fetchSpy.mock.calls[i][1].body) as Record<string, string>;
-  beforeEach(() => {
-    process.env.RESEND_API_KEY = 're_real';
-  });
-  afterEach(() => setSendingIdentityResolver(null));
 
   it('sends from the verified domain with Reply-To', async () => {
     fetchSpy.mockResolvedValue(ok);
-    setSendingIdentityResolver(async () => ({
-      fromAddress: 'noreply@roses.com',
-      replyTo: 'hi@roses.com',
-    }));
+    setSendingIdentityResolver(() =>
+      Promise.resolve({
+        fromAddress: 'noreply@roses.com',
+        replyTo: 'hi@roses.com',
+      }),
+    );
     await sendEmail('c@example.com', 'S', 'B', {
       fromName: 'Roses',
       shopId: 7,
@@ -195,12 +198,12 @@ describe('shop sending identity (MKT-3)', () => {
       .mockResolvedValueOnce({
         ok: false,
         status: 422,
-        json: async () => ({ message: 'domain not verified' }),
+        json: () => Promise.resolve({ message: 'domain not verified' }),
       })
       .mockResolvedValueOnce(ok);
-    setSendingIdentityResolver(async () => ({
-      fromAddress: 'noreply@roses.com',
-    }));
+    setSendingIdentityResolver(() =>
+      Promise.resolve({ fromAddress: 'noreply@roses.com' }),
+    );
     await sendEmail('c@example.com', 'S', 'B', {
       fromName: 'Roses',
       shopId: 7,
@@ -212,9 +215,7 @@ describe('shop sending identity (MKT-3)', () => {
 
   it('falls back when the identity lookup throws', async () => {
     fetchSpy.mockResolvedValue(ok);
-    setSendingIdentityResolver(async () => {
-      throw new Error('db down');
-    });
+    setSendingIdentityResolver(() => Promise.reject(new Error('db down')));
     await sendEmail('c@example.com', 'S', 'B', {
       fromName: 'Roses',
       shopId: 7,
@@ -225,9 +226,9 @@ describe('shop sending identity (MKT-3)', () => {
 
   it('platform mail (no fromName) never uses a shop domain, shopId or not', async () => {
     fetchSpy.mockResolvedValue(ok);
-    const resolver = jest.fn(async () => ({
-      fromAddress: 'noreply@roses.com',
-    }));
+    const resolver = jest.fn(() =>
+      Promise.resolve({ fromAddress: 'noreply@roses.com' }),
+    );
     setSendingIdentityResolver(resolver);
     await sendEmail('c@example.com', 'S', 'B', { shopId: 7 });
     expect(resolver).not.toHaveBeenCalled();
@@ -236,9 +237,9 @@ describe('shop sending identity (MKT-3)', () => {
 
   it('no shopId (direct callers) never consults the resolver', async () => {
     fetchSpy.mockResolvedValue(ok);
-    const resolver = jest.fn(async () => ({
-      fromAddress: 'noreply@roses.com',
-    }));
+    const resolver = jest.fn(() =>
+      Promise.resolve({ fromAddress: 'noreply@roses.com' }),
+    );
     setSendingIdentityResolver(resolver);
     await sendEmail('c@example.com', 'S', 'B', { fromName: 'Roses' });
     expect(resolver).not.toHaveBeenCalled();

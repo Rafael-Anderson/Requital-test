@@ -14,13 +14,19 @@ describe('ResendDomainsClient (fetch mocked, UNVERIFIED shapes)', () => {
   it('creates a domain and maps records without leaking the key', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,
-      json: async () => ({
-        id: 'd1',
-        status: 'not_started',
-        records: [
-          { record: 'DKIM', type: 'TXT', name: 'k._domainkey', value: 'p=abc' },
-        ],
-      }),
+      json: () =>
+        Promise.resolve({
+          id: 'd1',
+          status: 'not_started',
+          records: [
+            {
+              record: 'DKIM',
+              type: 'TXT',
+              name: 'k._domainkey',
+              value: 'p=abc',
+            },
+          ],
+        }),
     });
     const out = await new ResendDomainsClient('secret-key').createDomain(
       'roses.com',
@@ -32,16 +38,18 @@ describe('ResendDomainsClient (fetch mocked, UNVERIFIED shapes)', () => {
         { type: 'TXT', name: 'k._domainkey', value: 'p=abc', label: 'DKIM' },
       ],
     });
-    const [url, init] = fetchSpy.mock.calls[0];
-    expect(String(url)).toBe('https://api.resend.com/domains');
-    expect(JSON.parse(init.body)).toEqual({ name: 'roses.com' });
+    const [url, init] = (
+      fetchSpy.mock.calls as [string, { body: string }][]
+    )[0];
+    expect(url).toBe('https://api.resend.com/domains');
+    expect(JSON.parse(init.body) as unknown).toEqual({ name: 'roses.com' });
   });
 
   it('error carries the status code only, never the key or provider body', async () => {
     fetchSpy.mockResolvedValue({
       ok: false,
       status: 403,
-      json: async () => ({ message: 'secret-key bad' }),
+      json: () => Promise.resolve({ message: 'secret-key bad' }),
     });
     const err = await new ResendDomainsClient('secret-key')
       .getDomain('d1')

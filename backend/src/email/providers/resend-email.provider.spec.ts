@@ -1,4 +1,5 @@
 import { ResendEmailProvider } from './resend-email.provider';
+import type { SendEmailParams } from '../email-provider.interface';
 
 describe('ResendEmailProvider', () => {
   let fetchSpy: jest.SpyInstance;
@@ -36,7 +37,7 @@ describe('ResendEmailProvider', () => {
 
     const sentBody = JSON.parse(init.body);
     expect(sentBody.from).toBe('"Test Shop" <noreply@requital.io>');
-    expect(sentBody.reply_to).toBeUndefined();
+    expect(sentBody).not.toHaveProperty('reply_to');
     expect(sentBody.to).toBe('customer@example.com');
     expect(sentBody.subject).toBe('Order confirmation #42');
     expect(sentBody.text).toBe('Thanks for your order.');
@@ -81,8 +82,12 @@ describe('ResendEmailProvider', () => {
   });
 
   describe('From header (MKT-3)', () => {
-    const send = async (extra: Record<string, unknown>) => {
-      fetchSpy.mockResolvedValue({ ok: true, json: async () => ({ id: 'x' }) });
+    type FetchCall = [string, { body: string }];
+    const send = async (extra: Partial<SendEmailParams>) => {
+      fetchSpy.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ id: 'x' }),
+      });
       await new ResendEmailProvider().sendEmail({
         to: 'c@example.com',
         subject: 's',
@@ -91,11 +96,9 @@ describe('ResendEmailProvider', () => {
         fromName: 'Rose Shop',
         credentials: { apiKey: 'k' },
         ...extra,
-      } as never);
-      return JSON.parse(fetchSpy.mock.calls[0][1].body) as Record<
-        string,
-        string
-      >;
+      });
+      const calls = fetchSpy.mock.calls as FetchCall[];
+      return JSON.parse(calls[0][1].body) as Record<string, string>;
     };
 
     it('uses the shop domain address and Reply-To when given', async () => {
@@ -118,7 +121,7 @@ describe('ResendEmailProvider', () => {
         'A" <attacker@evil.com>, "B',
         '"A attacker@evil.com , B" <noreply@requital.io>',
       ],
-      ['empty after cleaning', '\r\n"\"', '"Requital" <noreply@requital.io>'],
+      ['empty after cleaning', '\r\n""', '"Requital" <noreply@requital.io>'],
     ])('sanitises the display name: %s', async (_n, name, expected) => {
       const body = await send({ fromName: name });
       expect(body.from).toBe(expected);
