@@ -8,7 +8,8 @@ import { useMapsFailure } from "@/lib/maps-status";
 import { buildQuoteRequest, quoteBlocksSubmit, useDeliveryQuote } from "@/lib/useDeliveryQuote";
 import { useCart } from "@/lib/cart";
 import { useAuth } from "@/lib/auth";
-import { captureAbandonedCart, createOrder, listMyAddresses } from "@/lib/api";
+import { captureAbandonedCart, createOrder, HttpError, listMyAddresses } from "@/lib/api";
+import { attemptEnded, checkoutAttemptKey, discardCheckoutAttempt, payloadSignature } from "@/lib/checkout-attempt";
 import {
   dateKeyInTimezone,
   generateTimeSlots,
@@ -281,7 +282,11 @@ export function useCheckoutForm() {
     let redirecting = false;
     try {
       track("add_payment_info", { items: cartAnalyticsItems(items), value: subtotal, paymentType: paymentMethod });
-      const res = await createOrder(shopSlug, {
+      // Everything that makes this THIS order, minus the marketing attribution (whose
+      // consent state may change between two submits of one order). Its signature
+      // decides whether a retry is the same attempt (same key, so the server hands
+      // back the same order) or a changed one (a new key): lib/checkout-attempt.ts.
+      const orderPayload = {
         outletId,
         orderType,
         paymentMethod,
@@ -310,6 +315,10 @@ export function useCheckoutForm() {
         })),
         giftCardCode: giftCardCode || undefined,
         useStoreCredit: useStoreCredit || undefined,
+      };
+      const res = await createOrder(shopSlug, {
+        ...orderPayload,
+        idempotencyKey: await checkoutAttemptKey(shopSlug, payloadSignature(orderPayload)),
         // MKT-14: where this order came from + the cookie-consent state at this
         // moment. Click ids / fbp / fbc are included only if the visitor accepted.
         attribution: buildOrderAttribution(shopSlug),
@@ -324,11 +333,15 @@ export function useCheckoutForm() {
         stashPurchase(res.order.id, purchase);
         // Stay "submitting" while the browser leaves: re-enabling the button here
         // would let a second click place a second order.
+        // The attempt key is KEPT here on purpose: if they come back (Back, or the
+        // gateway's cancel link) and submit the same cart again, the server returns
+        // this same order with a fresh payment session instead of a second order.
         redirecting = true;
         window.location.href = res.checkoutUrl;
         return;
       }
       track("purchase", purchase);
+      discardCheckoutAttempt(shopSlug);
       clear();
       // The confirmation page reads the order with its tracking token, never its
       // sequential id (an id in a URL must not open an order).
@@ -338,6 +351,11 @@ export function useCheckoutForm() {
           : `${shopBasePath}/orders/track`,
       );
     } catch (err) {
+      // The server says this attempt is over (the payment gateway failed and the
+      // order was cancelled, or the key was closed or reused): the next submit is a
+      // new attempt with a new key. Any other failure, a dropped connection included,
+      // keeps the key, so retrying cannot create a second order if the first did land.
+      if (err instanceof HttpError && attemptEnded(err.code)) discardCheckoutAttempt(shopSlug);
       setError(err instanceof Error ? err.message : "Could not place order");
     } finally {
       if (!redirecting) {

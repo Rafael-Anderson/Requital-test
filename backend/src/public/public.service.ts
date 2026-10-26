@@ -42,6 +42,49 @@ import {
 import { getZoneMatchingMode } from '../delivery-zones/zone-matching-mode';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { PaymentSettingsService } from '../payments/payment-settings.service';
+import { amountStillDue } from '../payments/payments.service';
+import type { CheckoutSession } from '../payments/payment-provider.interface';
+import { randomUUID } from 'crypto';
+import { OrdersService } from '../orders/orders.service';
+import {
+  OrderNotPayableError,
+  ProviderTimeoutError,
+  PaymentUnavailableException,
+  SessionInProgressException,
+  checkoutFingerprint,
+  describeProviderError,
+  providerTimeoutMs,
+} from './checkout-recovery';
+
+// How long one request may hold the right to create a payment session for an order.
+const SESSION_LEASE_SECONDS = 120;
+
+// A recorded session younger than this is returned as is on a replay; older ones
+// are replaced. Long enough for the normal "went to the gateway, came back with
+// Back" round trip, short enough that a session that has expired is not handed
+// out again.
+const SESSION_REUSE_SECONDS = 60 * 60;
+
+// Runs a provider call under a hard timeout: the AbortController is signalled for
+// providers that honour it, and the promise is also raced so a provider that
+// ignores the signal still cannot hold the lease.
+async function withProviderTimeout<T>(
+  abort: AbortController,
+  call: () => Promise<T>,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      abort.abort();
+      reject(new ProviderTimeoutError());
+    }, providerTimeoutMs());
+  });
+  try {
+    return await Promise.race([call(), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 import { CustomersService } from '../customers/customers.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { BioLinksService } from '../bio-links/bio-links.service';
@@ -168,6 +211,7 @@ export class PublicService {
     private readonly conversionEventsService: ConversionEventsService,
     private readonly reviewsService: ReviewsService,
     private readonly codeGuessLimiter: CodeGuessLimiter,
+    private readonly ordersService: OrdersService,
   ) {}
 
   // Backs the theme builder's live preview for a shop that hasn't published
@@ -352,12 +396,14 @@ export class PublicService {
       Promise.all(
         INDEPENDENT_ONLINE_PROVIDERS.map(async (p) => ({
           provider: p,
-          enabled: await this.paymentSettingsService.isEnabled(shop.id, p),
+          // F8: usable, not merely toggled on (a gateway with no credentials is
+          // not a payment method the shopper can complete).
+          enabled: await this.paymentSettingsService.isUsable(shop.id, p),
         })),
       ).then((results) =>
         results.filter((r) => r.enabled).map((r) => r.provider),
       ),
-      this.paymentSettingsService.isEnabled(shop.id, shop.paymentGateway),
+      this.paymentSettingsService.isUsable(shop.id, shop.paymentGateway),
       this.db.query<(BannerimageRow & RowDataPacket)[]>(
         `SELECT * FROM bannerimage WHERE shopId = ? ORDER BY \`order\` ASC`,
         [shop.id],
@@ -1509,6 +1555,13 @@ export class PublicService {
     return rows[0];
   }
 
+  // F8: idempotent checkout. A request carrying an idempotencyKey is looked up
+  // BEFORE anything is validated or written, so a replay never re-spends a gift
+  // card, store credit or discount and never re-reserves stock; it also never
+  // re-notifies. A concurrent duplicate that slips past the lookup loses on the
+  // UNIQUE(shopId, idempotencyKey) index (its whole transaction rolls back) or on
+  // a limit check the winner already consumed, and is answered with the winner's
+  // order by the catch below. No key = the old behaviour, unchanged.
   async createOrder(
     shopSlug: string,
     dto: CreatePublicOrderDto,
@@ -1519,6 +1572,434 @@ export class PublicService {
   ) {
     const shop = await this.resolveShop(shopSlug);
     this.assertPublished(shop);
+    const key = dto.idempotencyKey;
+    if (!key) {
+      return this.placeOrder(shop, dto, sessionCustomer, null, clientIp);
+    }
+    const fingerprint = checkoutFingerprint(
+      dto,
+      sessionCustomer?.customerId ?? null,
+    );
+    const replay = await this.replayCheckout(shop, key, fingerprint);
+    if (replay) return replay;
+    try {
+      return await this.placeOrder(
+        shop,
+        dto,
+        sessionCustomer,
+        { key, fingerprint },
+        clientIp,
+      );
+    } catch (err) {
+      if (
+        err instanceof PaymentUnavailableException ||
+        err instanceof SessionInProgressException
+      ) {
+        throw err;
+      }
+      const raced = await this.replayCheckout(shop, key, fingerprint).catch(
+        () => null,
+      );
+      if (raced) return raced;
+      throw err;
+    }
+  }
+
+  // The order a prior attempt with this key already created, shaped exactly like
+  // the original response; null when there is none. Shop-scoped: a key is only
+  // ever looked up inside the shop whose slug the request used.
+  private async replayCheckout(
+    shop: ShopRow,
+    key: string,
+    fingerprint: string,
+  ) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, status, paymentStatus, paymentMethod, currency, total,
+              giftCardAmount, storeCreditAmount, shopOrderNumber,
+              trackingToken, idempotencyFingerprint, paymentSessionId, paymentSessionUrl,
+              TIMESTAMPDIFF(SECOND, paymentSessionAt, NOW(3)) AS sessionAgeSeconds
+         FROM \`order\` WHERE shopId = ? AND idempotencyKey = ?`,
+      [shop.id, key],
+    );
+    const row = rows[0];
+    if (!row) return null;
+    if (row.idempotencyFingerprint !== fingerprint) {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'idempotency_key_reused',
+        message:
+          'This checkout was already submitted with different details. Please review your cart and place the order again.',
+      });
+    }
+    if (row.status === 'cancelled') {
+      // The attempt ended (the gateway failed and the order was cancelled, or the
+      // merchant cancelled it). Never revive it: its stock and tenders were
+      // already given back, so the shopper starts a new attempt with a new key.
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'checkout_attempt_closed',
+        message:
+          'This checkout attempt has ended. Please review your cart and place the order again.',
+      });
+    }
+    const order = await this.checkoutOrderResponse(row.id as number);
+    const gatewayName = this.gatewayFor(
+      shop,
+      row.paymentMethod as string | null,
+    );
+    // An unpaid online order the shopper never finished paying (closed the tab,
+    // came back from the gateway with Back). Only while it is still pending and
+    // unpaid and something is still due.
+    if (
+      gatewayName &&
+      row.status === 'pending' &&
+      row.paymentStatus === 'unpaid' &&
+      amountStillDue(row) > 0
+    ) {
+      // A session is already recorded and recent: hand back the SAME open session
+      // rather than minting a second payable one (if both were paid the shopper
+      // would be charged twice). Only a session older than the reuse window, which
+      // has most likely expired or been abandoned, is replaced; a double payment
+      // after that is still caught and flagged for refund by applyWebhookResult.
+      if (
+        row.paymentSessionId &&
+        row.paymentSessionUrl &&
+        row.sessionAgeSeconds !== null &&
+        Number(row.sessionAgeSeconds) < SESSION_REUSE_SECONDS
+      ) {
+        this.notifyOrderPlaced(shop.id, order);
+        return { order, checkoutUrl: row.paymentSessionUrl as string };
+      }
+      const result = await this.obtainPaymentSession(
+        shop,
+        order,
+        gatewayName,
+        amountStillDue(row),
+      );
+      // A first attempt that got as far as committing but died before announcing
+      // it is announced now (a no-op if it already was).
+      this.notifyOrderPlaced(shop.id, result.order);
+      return result;
+    }
+    // Pay on delivery / pickup (or already paid): the order committed, so announce
+    // it now if the first attempt died before doing so (a no-op if it did).
+    this.notifyOrderPlaced(shop.id, order);
+    return { order, checkoutUrl: null };
+  }
+
+  // The gateway an order's paymentMethod is paid through, or null when none is
+  // (pay on delivery / pickup). card_online routes to whichever card processor
+  // (Nomod/Stripe) is currently active; the independent providers route to
+  // themselves directly.
+  private gatewayFor(
+    shop: Pick<ShopRow, 'paymentGateway'>,
+    paymentMethod: string | null,
+  ): string | null {
+    if (paymentMethod === 'card_online') return shop.paymentGateway;
+    return (INDEPENDENT_ONLINE_PROVIDERS as readonly string[]).includes(
+      paymentMethod ?? '',
+    )
+      ? paymentMethod
+      : null;
+  }
+
+  // The order as the storefront checkout returns it (and a replay returns it
+  // again): the row, money trimmed, items attached. Strips the internal columns.
+  private async checkoutOrderResponse(orderId: number) {
+    const orderRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM \`order\` WHERE id = ?`,
+      [orderId],
+    );
+    const itemRows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM orderitem WHERE orderId = ?`,
+      [orderId],
+    );
+    return {
+      // attributionJson (click ids, fbp/fbc, user agent) and the idempotency key
+      // are stripped: the customer's own checkout response has no use for them.
+      ...stripAttribution(orderRows[0]),
+      id: orderRows[0].id as number,
+      shopOrderNumber: orderRows[0].shopOrderNumber as number,
+      trackingToken: orderRows[0].trackingToken as string | null,
+      // Captured on the row at creation (A1); the notification states what
+      // THIS order was priced in, not what the shop is set to now.
+      currency: orderRows[0].currency as string,
+      outletId: orderRows[0].outletId as number,
+      customerName: orderRows[0].customerName as string,
+      customerEmail: orderRows[0].customerEmail as string | null,
+      customerPhone: orderRows[0].customerPhone as string,
+      orderType: orderRows[0].orderType as string | null,
+      deliveryFee: trimDecimal(orderRows[0].deliveryFee as string),
+      taxAmount: trimDecimal(orderRows[0].taxAmount as string),
+      discountAmount: trimDecimal(orderRows[0].discountAmount as string),
+      giftCardAmount: trimDecimal(orderRows[0].giftCardAmount as string),
+      storeCreditAmount: trimDecimal(orderRows[0].storeCreditAmount as string),
+      total: trimDecimal(orderRows[0].total as string),
+      orderitem: itemRows.map((i) => ({
+        ...i,
+        priceAtPurchase: trimDecimal(i.priceAtPurchase as string),
+        autoDiscountAmount: trimDecimal(i.autoDiscountAmount as string | null),
+      })),
+    };
+  }
+
+  // Gets the shopper a payment session for an order that has committed, or says
+  // plainly why not. Three outcomes besides success:
+  //  - another request holds the lease on this order's session: 409 "being
+  //    prepared" (never a second session behind one order);
+  //  - the order stopped being pending and unpaid while we asked the gateway
+  //    (paid, confirmed or cancelled): report its ACTUAL state, never "you have
+  //    not been charged" (a paid order is a success, a cancelled one is closed);
+  //  - the gateway failed: failAfterGateway.
+  private async obtainPaymentSession(
+    shop: ShopRow,
+    order: Awaited<ReturnType<PublicService['checkoutOrderResponse']>>,
+    gatewayName: string,
+    amount: number,
+  ): Promise<{ order: typeof order; checkoutUrl: string | null }> {
+    try {
+      const checkoutUrl = await this.startPaymentSession(
+        shop,
+        order,
+        gatewayName,
+        amount,
+      );
+      return { order, checkoutUrl };
+    } catch (err) {
+      if (err instanceof SessionInProgressException) throw err;
+      if (err instanceof OrderNotPayableError) {
+        return this.settledOutcome(shop, order.id);
+      }
+      return this.failAfterGateway(shop, order, gatewayName, err);
+    }
+  }
+
+  // The order's actual state after a session race: paid or moved on is a success
+  // (no URL, the storefront goes to its confirmation page); cancelled is closed.
+  private async settledOutcome(shop: ShopRow, orderId: number) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT status FROM \`order\` WHERE id = ? AND shopId = ?`,
+      [orderId, shop.id],
+    );
+    if (rows[0]?.status === 'cancelled') {
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'checkout_attempt_closed',
+        message:
+          'This checkout attempt has ended. Please review your cart and place the order again.',
+      });
+    }
+    return {
+      order: await this.checkoutOrderResponse(orderId),
+      checkoutUrl: null,
+    };
+  }
+
+  // Creates the gateway checkout session for an order and records it. Takes a
+  // short LEASE first (order.paymentSessionClaimedAt, DB clock) so two requests
+  // cannot be minting sessions for one order at once; the lease is released when
+  // the session is recorded or the call fails, and lapses by itself after
+  // SESSION_LEASE_SECONDS. Throws SessionInProgressException when someone else
+  // holds it, OrderNotPayableError when the order is no longer pending and unpaid,
+  // and lets a provider failure propagate.
+  private async startPaymentSession(
+    shop: ShopRow,
+    order: {
+      id: number;
+      shopOrderNumber: number;
+      trackingToken: unknown;
+      currency: string;
+    },
+    gatewayName: string,
+    amount: number,
+  ): Promise<string> {
+    // Who holds the lease. Recording the session and releasing the lease are both
+    // guarded by this token, so an attempt whose lease lapsed and was taken over
+    // can neither overwrite the new holder's session nor clear its lease.
+    const token = randomUUID();
+    const claim = await this.db.execute(
+      `UPDATE \`order\` SET paymentSessionClaimedAt = NOW(3), paymentSessionClaimToken = ?
+        WHERE id = ? AND shopId = ? AND status = 'pending' AND paymentStatus = 'unpaid'
+          AND (paymentSessionClaimedAt IS NULL
+               OR paymentSessionClaimedAt < NOW(3) - INTERVAL ${SESSION_LEASE_SECONDS} SECOND)`,
+      [token, order.id, shop.id],
+    );
+    if (claim.affectedRows !== 1) {
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT status, paymentStatus FROM \`order\` WHERE id = ? AND shopId = ?`,
+        [order.id, shop.id],
+      );
+      if (
+        rows[0]?.status === 'pending' &&
+        rows[0]?.paymentStatus === 'unpaid'
+      ) {
+        throw new SessionInProgressException();
+      }
+      throw new OrderNotPayableError();
+    }
+    let session: CheckoutSession;
+    try {
+      const provider = this.providerRegistry.get(gatewayName);
+      const credentials = await this.paymentSettingsService.resolveCredentials(
+        shop.id,
+        gatewayName,
+      );
+      const abort = new AbortController();
+      session = await withProviderTimeout(abort, () =>
+        provider.createCheckoutSession({
+          signal: abort.signal,
+          orderId: order.id,
+          orderNumber: order.shopOrderNumber,
+          amount,
+          // The order's own captured currency (A1), never the shop's live one.
+          currency: order.currency,
+          // Built from THIS shop's own public host, not a platform-wide base
+          // URL - see common/storefront-url.ts. The slug is deliberately absent
+          // from the path: on a real host proxy.ts prepends it, so including it
+          // here produced a 404 on every gateway return.
+          // Carries the order's tracking token, never its sequential id: the
+          // confirmation page reads the order with that token, so the id in a URL
+          // can never be used to enumerate orders. The page decides what to say
+          // from the order's paymentStatus, not from anything in this URL.
+          successUrl: storefrontUrl(
+            shop,
+            `/orders/${order.trackingToken as string}`,
+          ),
+          cancelUrl: storefrontUrl(shop, `/checkout?orderId=${order.id}`),
+          credentials,
+        }),
+      );
+    } catch (err) {
+      // Release the lease so the shopper's retry is not told "in progress".
+      await this.db
+        .execute(
+          `UPDATE \`order\` SET paymentSessionClaimedAt = NULL, paymentSessionClaimToken = NULL
+            WHERE id = ? AND shopId = ? AND paymentSessionClaimToken = ?`,
+          [order.id, shop.id, token],
+        )
+        .catch(() => undefined);
+      throw err;
+    }
+    // Remembered so a payment whose webhook never arrives can still be
+    // reconciled (PaymentReconciliationService). Written only while the order is
+    // still pending and unpaid (a cancel or a payment that raced us wins), and
+    // together with clearing the previous session's reconciliation state, exactly
+    // as PaymentsService.getCheckoutSession does when it mints a new session.
+    let recorded: boolean;
+    try {
+      recorded = await this.db.transaction(async (conn) => {
+        const [res] = await conn.query(
+          `UPDATE \`order\` SET paymentSessionId = ?, paymentSessionGateway = ?, paymentSessionUrl = ?, paymentSessionAt = NOW(3),
+                 paymentSessionClaimedAt = NULL, paymentSessionClaimToken = NULL
+            WHERE id = ? AND shopId = ? AND status = 'pending' AND paymentStatus = 'unpaid'
+              AND paymentSessionClaimToken = ?`,
+          [
+            session.providerReference,
+            gatewayName,
+            session.checkoutUrl,
+            order.id,
+            shop.id,
+            token,
+          ],
+        );
+        if ((res as { affectedRows: number }).affectedRows !== 1) return false;
+        await conn.query(
+          `DELETE FROM paymentreconciliation WHERE orderId = ? AND shopId = ?`,
+          [order.id, shop.id],
+        );
+        return true;
+      });
+    } catch (err) {
+      // The write failed (not committed): nothing was returned to the shopper, so
+      // release the lease by token. Left set it would block the failure path's
+      // cancel and strand a pending order with no session.
+      await this.db
+        .execute(
+          `UPDATE \`order\` SET paymentSessionClaimedAt = NULL, paymentSessionClaimToken = NULL
+            WHERE id = ? AND shopId = ? AND paymentSessionClaimToken = ?`,
+          [order.id, shop.id, token],
+        )
+        .catch(() => undefined);
+      throw err;
+    }
+    if (!recorded) {
+      // Either the order moved on, or this attempt's lease lapsed and another
+      // attempt took over. In the second case the order is still pending and
+      // payable through the other attempt, so this one must neither overwrite its
+      // session nor cancel the order: it answers "being prepared" and the
+      // shopper's next submit picks up the winner.
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT status, paymentStatus FROM \`order\` WHERE id = ? AND shopId = ?`,
+        [order.id, shop.id],
+      );
+      if (
+        rows[0]?.status === 'pending' &&
+        rows[0]?.paymentStatus === 'unpaid'
+      ) {
+        throw new SessionInProgressException();
+      }
+      throw new OrderNotPayableError();
+    }
+    return session.checkoutUrl;
+  }
+
+  // The payment gateway failed for an order that has already committed. Cancel it
+  // by the system cancel (everything it took goes back) ONLY when no payment
+  // session was ever recorded for it: then no URL was ever handed to the shopper
+  // and nothing payable exists. If a session IS recorded (a replay that failed
+  // after an earlier success) the order is left pending and that session stays
+  // payable, because cancelling would let a payment land on a cancelled order with
+  // no refund path. The cause is logged as class, status and provider code only
+  // (a gateway message can carry a partial key); the shopper gets a safe error.
+  private async failAfterGateway(
+    shop: ShopRow,
+    order: Awaited<ReturnType<PublicService['checkoutOrderResponse']>>,
+    gatewayName: string,
+    cause: unknown,
+  ): Promise<{ order: typeof order; checkoutUrl: string | null }> {
+    const orderId = order.id;
+    logger.error(`order #${orderId}: payment session could not be created`, {
+      orderId,
+      shopId: shop.id,
+      gateway: gatewayName,
+      ...describeProviderError(cause),
+    });
+    let cancelled = false;
+    try {
+      cancelled = await this.ordersService.cancelAfterGatewayFailure(
+        shop.id,
+        orderId,
+        gatewayName,
+      );
+    } catch (cancelErr) {
+      logger.error(
+        `order #${orderId}: auto-cancel after a gateway failure FAILED, the order is still pending and holds stock and tenders`,
+        { orderId, shopId: shop.id, ...describeProviderError(cancelErr) },
+      );
+    }
+    if (cancelled) throw new PaymentUnavailableException(true);
+    // Not cancelled: either it keeps a live session (still pending), or it moved
+    // on while we asked (paid or cancelled by someone else). Say what is true.
+    const fresh = await this.db.query<RowDataPacket[]>(
+      `SELECT status, paymentStatus FROM \`order\` WHERE id = ? AND shopId = ?`,
+      [orderId, shop.id],
+    );
+    if (
+      fresh[0]?.status === 'pending' &&
+      fresh[0]?.paymentStatus === 'unpaid'
+    ) {
+      throw new PaymentUnavailableException(false);
+    }
+    return this.settledOutcome(shop, orderId);
+  }
+
+  private async placeOrder(
+    shop: ShopRow,
+    dto: CreatePublicOrderDto,
+    sessionCustomer: CustomerContext | null,
+    idempotency: { key: string; fingerprint: string } | null,
+    clientIp?: string,
+  ) {
     const outletRows = await this.db.query<(OutletRow & RowDataPacket)[]>(
       `SELECT * FROM outlet WHERE id = ? AND shopId = ? AND active = 1 LIMIT 1`,
       [dto.outletId, shop.id],
@@ -1787,6 +2268,10 @@ export class PublicService {
         conn,
         shop.id,
         async (shopOrderNumber) => {
+          const idemParams = [
+            idempotency?.key ?? null,
+            idempotency?.fingerprint ?? null,
+          ];
           const [res] = await withTrackingToken((trackingToken) =>
             conn.query(
         `INSERT INTO \`order\` (
@@ -1794,8 +2279,9 @@ export class PublicService {
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
           giftCardId, giftCardCode, giftCardAmount, storeCreditAmount, total, paymentStatus, trackingToken, shopOrderNumber,
-          currency, rateBaseCurrency, exchangeRate, attributionJson, addressUnverified
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          currency, rateBaseCurrency, exchangeRate, attributionJson, addressUnverified,
+          idempotencyKey, idempotencyFingerprint
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
@@ -1852,6 +2338,7 @@ export class PublicService {
           // F9: typed address with no map pin (Maps unavailable): flagged so the
           // merchant confirms it with the customer.
           addressUnverified ? 1 : 0,
+          ...idemParams,
         ],
             ),
           );
@@ -1950,6 +2437,12 @@ export class PublicService {
           giftCardLines,
           dto.customerEmail ?? null,
           shop.name,
+          // Sold by an unpaid ONLINE order: the codes are emailed once it is paid.
+          {
+            deferEmail: Boolean(
+              this.gatewayFor(shop, dto.paymentMethod) && remainderTotal > 0,
+            ),
+          },
         );
       }
 
@@ -1967,126 +2460,82 @@ export class PublicService {
       return newOrderId;
     });
 
-    const orderRows = await this.db.query<RowDataPacket[]>(
-      `SELECT * FROM \`order\` WHERE id = ?`,
-      [orderId],
-    );
-    const itemRows = await this.db.query<RowDataPacket[]>(
-      `SELECT * FROM orderitem WHERE orderId = ?`,
-      [orderId],
-    );
-    const order = {
-      // attributionJson (click ids, fbp/fbc, user agent) is stripped: the
-      // customer's own checkout response has no use for it.
-      ...stripAttribution(orderRows[0]),
-      id: orderRows[0].id as number,
-      shopOrderNumber: orderRows[0].shopOrderNumber as number,
-      // Captured on the row at creation (A1); the notification states what
-      // THIS order was priced in, not what the shop is set to now.
-      currency: orderRows[0].currency as string,
-      outletId: orderRows[0].outletId as number,
-      customerName: orderRows[0].customerName as string,
-      customerEmail: orderRows[0].customerEmail as string | null,
-      customerPhone: orderRows[0].customerPhone as string,
-      orderType: orderRows[0].orderType as string | null,
-      deliveryFee: trimDecimal(orderRows[0].deliveryFee as string),
-      taxAmount: trimDecimal(orderRows[0].taxAmount as string),
-      discountAmount: trimDecimal(orderRows[0].discountAmount as string),
-      giftCardAmount: trimDecimal(orderRows[0].giftCardAmount as string),
-      storeCreditAmount: trimDecimal(orderRows[0].storeCreditAmount as string),
-      total: trimDecimal(orderRows[0].total as string),
-      orderitem: itemRows.map((i) => ({
-        ...i,
-        priceAtPurchase: trimDecimal(i.priceAtPurchase as string),
-        autoDiscountAmount: trimDecimal(i.autoDiscountAmount as string | null),
-      })),
-    };
+    const order = await this.checkoutOrderResponse(orderId);
 
-    // Fires on order placement itself, not on payment completion — "we
-    // received your order" rather than a payment receipt. Consistent for
-    // every payment method (COD included), so this doesn't wait on the
-    // card_online branch below.
-    //
-    // Not awaited, deliberately: a slow or down email/WhatsApp provider must
-    // never delay (or, if it throws, fail) checkout for a real customer —
-    // same fire-and-forget/.catch()-guarded discipline as
-    // NotifySubscriptionsService.triggerForProduct. The order has already
-    // committed by this point; a notification failure is logged, not
-    // surfaced to the response.
-    this.orderNotificationsService
-      .notifyOrderConfirmed(shop.id, order)
+    const gatewayName = this.gatewayFor(shop, dto.paymentMethod);
+    // A gift card covering the order in full leaves nothing to charge: no
+    // checkout session is created whichever online paymentMethod was selected
+    // (the order was already marked 'paid' at creation above).
+    if (!(gatewayName && remainderTotal > 0)) {
+      // MKT-4: an order that needs no online payment (pay on delivery / pickup,
+      // or fully covered by a gift card) is a conversion NOW. An online-payment
+      // order is not one until it is paid: PaymentsService.applyWebhookResult
+      // queues it then, which also covers the reconciliation sweep. Same job key
+      // either way, so the two triggers can never produce two events.
+      await this.conversionEventsService.enqueuePurchase(order.id);
+      this.notifyOrderPlaced(shop.id, order);
+      return { order, checkoutUrl: null };
+    }
+    // The order has committed and holds stock, a discount use and tenders. If the
+    // gateway cannot give the shopper a session, obtainPaymentSession cancels it
+    // (when nothing payable exists for it) and throws a safe error; nothing has
+    // been announced yet, by design (below).
+    const result = await this.obtainPaymentSession(
+      shop,
+      order,
+      gatewayName,
+      remainderTotal,
+    );
+    // Announced only now that a payment session exists. Before F8 the customer's
+    // "we received your order" message and the merchant's new-order WhatsApp alert
+    // went out BEFORE the gateway was asked, so a gateway failure left both
+    // announcing an order that was never payable. COD / pickup orders have no such
+    // step and are announced right after commit, above.
+    this.notifyOrderPlaced(shop.id, result.order);
+    return result;
+  }
+
+  // "We received your order" to the customer plus the merchant alert. Fires on
+  // order placement itself, not on payment completion, and is consistent for every
+  // payment method; for an online order it is called only after the gateway
+  // session exists (see placeOrder). Not awaited, deliberately: a slow or down
+  // email/WhatsApp provider must never delay (or, if it throws, fail) checkout for
+  // a real customer, the same fire-and-forget/.catch()-guarded discipline as
+  // NotifySubscriptionsService.triggerForProduct. The order has already committed
+  // by this point; a notification failure is logged, not surfaced.
+  private notifyOrderPlaced(
+    shopId: number,
+    order: Awaited<ReturnType<PublicService['checkoutOrderResponse']>>,
+  ) {
+    // Exactly once per order: a CAS on order.placedNotifiedAt, so a replayed
+    // checkout that finds the announcement unsent can send it, and one that finds
+    // it sent cannot send it twice.
+    this.db
+      .execute(
+        `UPDATE \`order\` SET placedNotifiedAt = NOW(3)
+          WHERE id = ? AND shopId = ? AND placedNotifiedAt IS NULL`,
+        [order.id, shopId],
+      )
+      .then((res) =>
+        res.affectedRows === 1
+          ? this.orderNotificationsService.notifyOrderConfirmed(shopId, order)
+          : undefined,
+      )
       .catch((err: unknown) => {
         logger.error(`order #${order.id}: notifyOrderConfirmed failed`, {
           orderId: order.id,
-          shopId: shop.id,
+          shopId,
           error: err instanceof Error ? err.message : String(err),
         });
+        // Not announced after all: reopen the marker so a replay can send it,
+        // instead of an order that reads "announced" and never was.
+        this.db
+          .execute(
+            `UPDATE \`order\` SET placedNotifiedAt = NULL WHERE id = ? AND shopId = ?`,
+            [order.id, shopId],
+          )
+          .catch(() => undefined);
       });
-
-    // card_online routes to whichever card processor (Nomod/Stripe) is
-    // currently active; the independent providers route to themselves
-    // directly — both resolve merchant-supplied credentials the same way
-    // (PaymentSettingsService.resolveCredentials, null when the shop hasn't
-    // configured its own and the provider should fall back to its own
-    // env-var default, if it has one — see StripePaymentProvider).
-    const gatewayName =
-      dto.paymentMethod === 'card_online'
-        ? shop.paymentGateway
-        : (INDEPENDENT_ONLINE_PROVIDERS as readonly string[]).includes(
-              dto.paymentMethod,
-            )
-          ? dto.paymentMethod
-          : null;
-    // MKT-4: an order that needs no online payment (pay on delivery / pickup,
-    // or fully covered by a gift card) is a conversion NOW. An online-payment
-    // order is not one until it is paid: PaymentsService.applyWebhookResult
-    // queues it then, which also covers the reconciliation sweep. Same job key
-    // either way, so the two triggers can never produce two events.
-    if (!(gatewayName && remainderTotal > 0)) {
-      await this.conversionEventsService.enqueuePurchase(order.id);
-    }
-    // A gift card covering the order in full leaves nothing to charge — no
-    // checkout session is created regardless of which online paymentMethod
-    // was selected (order was already marked 'paid' at creation above).
-    if (gatewayName && remainderTotal > 0) {
-      const provider = this.providerRegistry.get(gatewayName);
-      const credentials = await this.paymentSettingsService.resolveCredentials(
-        shop.id,
-        gatewayName,
-      );
-      const session = await provider.createCheckoutSession({
-        orderId: order.id,
-        orderNumber: order.shopOrderNumber,
-        amount: remainderTotal,
-        currency: shop.currency,
-        // Built from THIS shop's own public host, not a platform-wide base
-        // URL - see common/storefront-url.ts. The slug is deliberately absent
-        // from the path: on a real host proxy.ts prepends it, so including it
-        // here produced a 404 on every gateway return.
-        // Carries the order's tracking token, never its sequential id: the
-        // confirmation page reads the order with that token, so the id in a URL
-        // can never be used to enumerate orders. The page decides what to say
-        // from the order's paymentStatus, not from anything in this URL.
-        successUrl: storefrontUrl(
-          shop,
-          `/orders/${orderRows[0].trackingToken as string}`,
-        ),
-        cancelUrl: storefrontUrl(shop, `/checkout?orderId=${order.id}`),
-        credentials,
-      });
-      // Remembered so a payment whose webhook never arrives can still be
-      // reconciled (PaymentReconciliationService). Deliberately after the
-      // session exists and outside the order-creation transaction: failing to
-      // record it must never roll back an order the customer has already been
-      // sent off to pay for.
-      await this.db.execute(
-        `UPDATE \`order\` SET paymentSessionId = ?, paymentSessionGateway = ?
-          WHERE id = ?`,
-        [session.providerReference, gatewayName, order.id],
-      );
-      return { order, checkoutUrl: session.checkoutUrl };
-    }
-    return { order, checkoutUrl: null };
   }
 
   // The single pricing path for a storefront checkout, used by createOrder AND
@@ -2565,7 +3014,7 @@ export class PublicService {
     ) {
       // Not delivery/pickup-scoped — a single enabled flag gates both, same
       // as the Payment Gateways settings page's "visibility toggle" framing.
-      const enabled = await this.paymentSettingsService.isEnabled(
+      const enabled = await this.paymentSettingsService.isUsable(
         shop.id,
         paymentMethod,
       );
@@ -2592,7 +3041,7 @@ export class PublicService {
       // online" client-side (see storefront's cardProcessorEnabled AND),
       // but a direct API call needs the same real check the settings page
       // enforces, not just a client-side hint.
-      const processorEnabled = await this.paymentSettingsService.isEnabled(
+      const processorEnabled = await this.paymentSettingsService.isUsable(
         shop.id,
         shop.paymentGateway,
       );

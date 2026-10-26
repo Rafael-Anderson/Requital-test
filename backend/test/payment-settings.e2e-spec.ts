@@ -543,7 +543,7 @@ describe('Payment Settings (e2e)', () => {
       expect(messageContains(res, 'tabby')).toBe(true);
     });
 
-    it('once enabled, checkout accepts the order (creating it) even though the stub gateway itself then fails — matches the existing card_online-with-a-stub-gateway behavior', async () => {
+    it('once enabled, a gateway that then fails cancels the just-created order and answers with a safe 503 (F8)', async () => {
       const shop = await setupOrderableShop('pay-checkout-accept');
       await request(app.getHttpServer())
         .patch('/payment-settings/tabby')
@@ -551,12 +551,13 @@ describe('Payment Settings (e2e)', () => {
         .send({ enabled: true })
         .expect(200);
 
-      // The order is created (stock reserved, row committed) before the
-      // stub gateway call throws — same documented behavior as card_online
-      // against an unconfigured/stub gateway. The HTTP response is a 500
-      // (the throw propagates), not a clean rejection, because this is a
-      // genuine "gateway is a stub" condition, not a validation failure.
-      await request(app.getHttpServer())
+      // The order commits (stock reserved) before the gateway is asked, and the
+      // gateway call fails (the real provider cannot reach Tabby from here). Before
+      // F8 that propagated as a bare 500 and left an unpayable pending order
+      // holding everything; now the order is cancelled (all of it given back) and
+      // the shopper gets a stable, gateway-free 503. The row is kept, cancelled,
+      // for the audit trail.
+      const res = await request(app.getHttpServer())
         .post(`/public/${shop.slug}/orders`)
         .send({
           outletId: shop.outletId,
@@ -567,12 +568,14 @@ describe('Payment Settings (e2e)', () => {
           customerAddress: '1 Test St',
           // Required because setupOrderableShop configures deliveryRadiusKm
           // — otherwise the radius check 400s before ever reaching the
-          // tabby stub, which isn't what this test is about.
+          // gateway, which isn't what this test is about.
           latitude: 25.2048,
           longitude: 55.2708,
           items: [{ productId: shop.productId, quantity: 1 }],
         })
-        .expect(500);
+        .expect(503);
+      expect(body<{ code: string }>(res).code).toBe('payment_unavailable');
+      expect(JSON.stringify(res.body)).not.toMatch(/tabby/i);
 
       const orderRows = await db.query<(OrderRow & RowDataPacket)[]>(
         `SELECT o.* FROM \`order\` o
@@ -580,7 +583,9 @@ describe('Payment Settings (e2e)', () => {
          WHERE s.subdomain = ? AND o.paymentMethod = ?`,
         [shop.slug, 'tabby'],
       );
-      expect(orderRows[0]).toBeTruthy();
+      expect(orderRows).toHaveLength(1);
+      expect(orderRows[0].status).toBe('cancelled');
+      expect(orderRows[0].paymentStatus).toBe('unpaid');
     });
 
     it('card_online is rejected once the shop explicitly disables its only card processor', async () => {

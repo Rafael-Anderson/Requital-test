@@ -18,6 +18,11 @@ const logger = createLogger('PaytabsPaymentProvider');
 export class PayTabsPaymentProvider implements PaymentProvider {
   readonly name = 'paytabs';
 
+  // Structural stub: never usable, whatever credentials a shop saved.
+  isUsable(): boolean {
+    return false;
+  }
+
   createCheckoutSession(
     _params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {

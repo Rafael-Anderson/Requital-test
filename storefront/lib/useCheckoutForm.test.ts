@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { createOrder } from "@/lib/api";
+import { createOrder, HttpError } from "@/lib/api";
 import { useCheckoutForm } from "./useCheckoutForm";
 
 afterEach(cleanup);
@@ -9,9 +9,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
+let mockQuantity = 1;
 vi.mock("@/lib/cart", () => ({
   useCart: () => ({
-    items: [{ productId: 1, name: "Item", price: 10, quantity: 1, thumbnail: "" }],
+    items: [{ productId: 1, name: "Item", price: 10, quantity: mockQuantity, thumbnail: "" }],
     subtotal: 10,
     discountCode: undefined,
     giftCardCode: undefined,
@@ -29,6 +30,15 @@ vi.mock("@/lib/payment-methods", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
+  HttpError: class HttpError extends Error {
+    constructor(
+      message: string,
+      readonly status: number,
+      readonly code?: string,
+    ) {
+      super(message);
+    }
+  },
   captureAbandonedCart: vi.fn(),
   createOrder: vi.fn(),
   listMyAddresses: vi.fn().mockResolvedValue([]),
@@ -79,6 +89,8 @@ describe("useCheckoutForm - submit safety and reasons", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockOutlets = openOutlet;
+    mockQuantity = 1;
+    sessionStorage.clear();
   });
 
   it("says why Place order is off when a date is picked without a time slot", async () => {
@@ -106,6 +118,10 @@ describe("useCheckoutForm - submit safety and reasons", () => {
       void result.current.handleSubmit(submitEvent);
       void result.current.handleSubmit(submitEvent);
     });
+    // The key is hashed with Web Crypto first, so the request goes out a moment
+    // after both events; wait for it, then for the submit to finish.
+    await waitFor(() => expect(createOrder).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.submitting).toBe(false));
     expect(createOrder).toHaveBeenCalledTimes(1);
   });
 
@@ -155,5 +171,93 @@ describe("useCheckoutForm - submit safety and reasons", () => {
     });
     expect(result.current.error).toBe("Out of stock");
     expect(result.current.canSubmit).toBe(true);
+  });
+});
+
+// F8: one idempotency key per checkout ATTEMPT, so a retry of the same attempt is the
+// same order and a changed or finished attempt is a new one.
+describe("useCheckoutForm - idempotent checkout attempts", () => {
+  const openOutlet = [{ id: 1, name: "Main", deliveryEnabled: true, pickupEnabled: false, isOpen: true }];
+  const submitEvent = { preventDefault: () => {} } as React.FormEvent;
+  const keyOf = (call: number) => (vi.mocked(createOrder).mock.calls[call][1] as { idempotencyKey?: string }).idempotencyKey;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockOutlets = openOutlet;
+    mockQuantity = 1;
+    sessionStorage.clear();
+  });
+
+  async function submit(result: { current: ReturnType<typeof useCheckoutForm> }) {
+    await waitFor(() => expect(result.current.canSubmit).toBe(true));
+    await act(async () => {
+      await result.current.handleSubmit(submitEvent);
+    });
+  }
+
+  it("sends a key, and the SAME key when an unchanged order is retried after a dropped connection", async () => {
+    vi.mocked(createOrder).mockRejectedValueOnce(new Error("Failed to fetch")).mockRejectedValueOnce(new Error("Failed to fetch"));
+    const { result } = renderHook(() => useCheckoutForm());
+    await submit(result);
+    await submit(result);
+    expect(createOrder).toHaveBeenCalledTimes(2);
+    expect(keyOf(0)).toMatch(/^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Za-z0-9_-]{22,64})$/i);
+    expect(keyOf(1)).toBe(keyOf(0));
+  });
+
+  it("uses a NEW key once the cart changes", async () => {
+    vi.mocked(createOrder).mockRejectedValue(new Error("Failed to fetch"));
+    const { result, rerender } = renderHook(() => useCheckoutForm());
+    await submit(result);
+    mockQuantity = 3;
+    rerender();
+    await submit(result);
+    expect(keyOf(1)).not.toBe(keyOf(0));
+  });
+
+  it("starts a NEW attempt after the server ends this one (the payment gateway failed), and shows the safe message", async () => {
+    vi.mocked(createOrder).mockRejectedValueOnce(
+      new HttpError("We could not start your online payment. Your order was not placed.", 503, "payment_unavailable"),
+    );
+    const { result } = renderHook(() => useCheckoutForm());
+    await submit(result);
+    expect(result.current.error).toMatch(/could not start your online payment/i);
+    expect(result.current.canSubmit).toBe(true);
+    vi.mocked(createOrder).mockRejectedValueOnce(new Error("Failed to fetch"));
+    await submit(result);
+    expect(keyOf(1)).not.toBe(keyOf(0));
+  });
+
+  it("keeps the key while leaving for the gateway, so Back and submit again is the same order", async () => {
+    vi.mocked(createOrder).mockResolvedValue({
+      order: { id: 1, total: "10", currency: "AED", trackingToken: "t" },
+      checkoutUrl: "https://pay.example/session",
+    } as never);
+    const original = window.location;
+    Object.defineProperty(window, "location", { configurable: true, value: { href: "" } });
+    try {
+      const { result } = renderHook(() => useCheckoutForm());
+      await submit(result);
+      // Back from the gateway (bfcache restore) unlocks the button.
+      act(() => {
+        window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+      });
+      await submit(result);
+      expect(createOrder).toHaveBeenCalledTimes(2);
+      expect(keyOf(1)).toBe(keyOf(0));
+    } finally {
+      Object.defineProperty(window, "location", { configurable: true, value: original });
+    }
+  });
+
+  it("drops the key after an order that completes without leaving the site", async () => {
+    vi.mocked(createOrder).mockResolvedValue({
+      order: { id: 1, total: "10", currency: "AED", trackingToken: "t" },
+      checkoutUrl: null,
+    } as never);
+    const { result } = renderHook(() => useCheckoutForm());
+    await submit(result);
+    await submit(result);
+    expect(keyOf(1)).not.toBe(keyOf(0));
   });
 });

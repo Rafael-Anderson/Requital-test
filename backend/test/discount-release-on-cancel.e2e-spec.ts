@@ -206,7 +206,7 @@ describe('Discount redemption release on cancel / full refund (e2e)', () => {
     expect(await redemptions(autoId)).toHaveLength(0);
   });
 
-  it('gift card + discount order: the cancel releases the discount and does not touch the card', async () => {
+  it('gift card + discount order: the cancel releases the discount AND gives the card balance back (F8)', async () => {
     const { shop, product } = await shopWithStock('rel-gift');
     const d = await f.createDiscount(shop, { usageLimit: 2 });
     const card = body<{ id: number; code: string }>(
@@ -230,13 +230,23 @@ describe('Discount redemption release on cancel / full refund (e2e)', () => {
       `SELECT remainingBalance, status FROM giftcard WHERE id = ?`,
       [card.id],
     );
+    // The card really was drawn down by the order.
+    expect(Number(cardBefore[0].remainingBalance)).toBe(0);
     await f.cancelOrder(shop, orderId(res)).expect(201);
     expect(await timesUsed(d.id)).toBe(0);
     const cardAfter = await db.query<RowDataPacket[]>(
       `SELECT remainingBalance, status FROM giftcard WHERE id = ?`,
       [card.id],
     );
-    expect(cardAfter[0]).toEqual(cardBefore[0]);
+    // Before F8 a cancel returned the discount, store credit and stock but never
+    // the gift card balance, so the customer lost it.
+    expect(Number(cardAfter[0].remainingBalance)).toBe(5);
+    expect(cardAfter[0].status).toBe('active');
+    const used = await db.query<RowDataPacket[]>(
+      `SELECT COALESCE(SUM(amountUsed), 0) AS s FROM giftcardredemption WHERE giftCardId = ?`,
+      [card.id],
+    );
+    expect(Number(used[0].s)).toBe(0);
   });
 
   it('BNPL: a webhook-driven expiry cancel releases the redemption, a replayed event does not release twice', async () => {

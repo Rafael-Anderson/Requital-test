@@ -91,6 +91,13 @@ async function getAccessToken(
 export class PayPalPaymentProvider implements PaymentProvider {
   readonly name = 'paypal';
 
+  isUsable(credentials: Record<string, string> | null): boolean {
+    return !!(
+      (credentials?.clientId ?? process.env.PAYPAL_CLIENT_ID) &&
+      (credentials?.clientSecret ?? process.env.PAYPAL_CLIENT_SECRET)
+    );
+  }
+
   async createCheckoutSession(
     params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {
@@ -110,6 +117,7 @@ export class PayPalPaymentProvider implements PaymentProvider {
 
     const accessToken = await getAccessToken(clientId, clientSecret);
     const res = await fetch(`${PAYPAL_API_URL}/v2/checkout/orders`, {
+      signal: params.signal,
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,

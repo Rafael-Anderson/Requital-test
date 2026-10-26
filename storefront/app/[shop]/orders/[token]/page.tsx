@@ -23,6 +23,7 @@ import {
   timelineSteps,
   type PaymentView,
 } from "@/lib/order-confirmation";
+import { discardCheckoutAttempt } from "@/lib/checkout-attempt";
 import type { OrderLookupResult } from "@/lib/types";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import CurrencySymbol from "@/components/CurrencySymbol";
@@ -465,12 +466,15 @@ export default function OrderConfirmationPage() {
   const paid = order?.paymentStatus === "paid";
   useEffect(() => {
     if (!paid || orderId === undefined) return;
+    // The checkout attempt that produced this order is finished: a later purchase
+    // of the same cart must be a new order (lib/checkout-attempt.ts).
+    discardCheckoutAttempt(shopSlug);
     const stashed = takeStashedPurchase(orderId);
     if (stashed) {
       track("purchase", stashed);
       clear();
     }
-  }, [paid, orderId, clear]);
+  }, [paid, orderId, clear, shopSlug]);
 
   const retry = useCallback(() => {
     setError(null);

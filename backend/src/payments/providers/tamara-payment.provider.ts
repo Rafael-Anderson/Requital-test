@@ -41,6 +41,10 @@ interface TamaraWebhookPayload {
 export class TamaraPaymentProvider implements PaymentProvider {
   readonly name = 'tamara';
 
+  isUsable(credentials: Record<string, string> | null): boolean {
+    return !!(credentials?.apiToken ?? process.env.TAMARA_TOKEN);
+  }
+
   async createCheckoutSession(
     params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {
@@ -60,6 +64,7 @@ export class TamaraPaymentProvider implements PaymentProvider {
       DEFAULT_TAMARA_API_URL;
 
     const res = await fetch(`${apiUrl}/checkout`, {
+      signal: params.signal,
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiToken}`,

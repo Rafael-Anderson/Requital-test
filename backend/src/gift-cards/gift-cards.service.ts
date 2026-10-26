@@ -207,6 +207,62 @@ export class GiftCardsService {
     );
   }
 
+  // A CANCEL gives back every gift card balance the order drew (F8: the one tender
+  // a cancel never returned; store credit, stock and the discount use all were).
+  // Runs on the caller's transaction, after the cancel's status CAS won, so the
+  // order is locked and only one cancel can be here. Shop-scoped through the card
+  // (the order id alone is never trusted). Idempotent: each redemption record is
+  // zeroed as it is released, so a second pass (a retried cancel, or an order that
+  // an edit had already part-released) gives back only what is still held.
+  async releaseAllForOrder(
+    conn: PoolConnection,
+    shopId: number,
+    orderId: number,
+  ) {
+    const [held] = await conn.query<RowDataPacket[]>(
+      `SELECT r.giftCardId, r.amountUsed
+         FROM giftcardredemption r
+         JOIN giftcard g ON g.id = r.giftCardId
+        WHERE r.orderId = ? AND g.shopId = ? AND r.amountUsed > 0
+        ORDER BY r.giftCardId, r.id
+          FOR UPDATE`,
+      [orderId, shopId],
+    );
+    for (const r of held) {
+      await this.releaseForOrderEdit(
+        conn,
+        r.giftCardId as number,
+        orderId,
+        Number(trimDecimal(r.amountUsed as string)),
+      );
+    }
+  }
+
+  // F8: the order that SOLD gift cards is being cancelled (by staff, a payment
+  // webhook or the gateway-failure system cancel), so the codes it issued must not
+  // work and the email that carries them must not go out. The cards are disabled
+  // (an admin can see them and re-enable), and the queued delivery email is
+  // dismissed while still pending; one already sent cannot be recalled, which is
+  // why the card is disabled as well. Only a card still 'active' and untouched is
+  // changed, so it is idempotent and never takes back a card already spent from.
+  async voidIssuedForOrder(
+    conn: PoolConnection,
+    shopId: number,
+    orderId: number,
+  ) {
+    await conn.query(
+      `UPDATE giftcard SET status = 'disabled', updatedAt = ?
+        WHERE purchaseOrderId = ? AND shopId = ? AND status = 'active'
+          AND remainingBalance = initialValue`,
+      [new Date(), orderId, shopId],
+    );
+    await conn.query(
+      `UPDATE job SET status = 'dismissed', updatedAt = ?
+        WHERE shopId = ? AND idempotencyKey = ? AND status = 'pending'`,
+      [new Date(), shopId, `gift-card-issued-email:${orderId}`],
+    );
+  }
+
   // One unit issued per quantity — e.g. quantity 3 of a 200 AED gift card
   // product creates three independent 200-balance cards, each individually
   // redeemable (not one 600-balance card), matching how a shopper buying 3
@@ -222,6 +278,9 @@ export class GiftCardsService {
     lines: { amount: number; quantity: number }[],
     recipientEmail: string | null,
     shopName: string,
+    // deferEmail: an unpaid ONLINE order does not email its codes yet; see
+    // sendIssuedEmailForOrder.
+    opts: { deferEmail?: boolean } = {},
   ) {
     const issued: { code: string; initialValue: number }[] = [];
     for (const line of lines) {
@@ -235,19 +294,43 @@ export class GiftCardsService {
         issued.push({ code, initialValue: line.amount });
       }
     }
-    if (recipientEmail && issued.length > 0) {
-      const bodyLines = [
-        `Thanks for your purchase from ${shopName}! Here ${issued.length === 1 ? 'is your gift card code' : 'are your gift card codes'}:`,
-        '',
-        ...issued.map((g) => `${g.code}: ${g.initialValue}`),
-      ];
-      const codeRows = issued
-        .map(
-          (g) =>
-            `<tr><td style="padding:10px 16px;background-color:#f4f4f4;border-radius:6px;font-family:monospace;font-size:15px;color:#111111;">${escapeHtml(g.code)}</td><td style="padding:10px 16px;font-size:14px;color:#111111;text-align:right;">${escapeHtml(String(g.initialValue))}</td></tr><tr><td colspan="2" style="height:8px;line-height:8px;font-size:0;">&nbsp;</td></tr>`,
-        )
-        .join('');
-      const giftCardHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+    if (recipientEmail && issued.length > 0 && !opts.deferEmail) {
+      await this.enqueueIssuedEmail(
+        shopId,
+        orderId,
+        recipientEmail,
+        shopName,
+        issued,
+        conn,
+      );
+    }
+    return issued;
+  }
+
+  // The "here are your gift card codes" email. Enqueued on the order transaction
+  // when one is given (it then commits atomically with the cards), otherwise
+  // directly (the deferred send after payment). One job per order (the key), so
+  // sending it twice is harmless.
+  private async enqueueIssuedEmail(
+    shopId: number,
+    orderId: number,
+    recipientEmail: string,
+    shopName: string,
+    issued: { code: string; initialValue: number }[],
+    tx?: PoolConnection,
+  ) {
+    const bodyLines = [
+      `Thanks for your purchase from ${shopName}! Here ${issued.length === 1 ? 'is your gift card code' : 'are your gift card codes'}:`,
+      '',
+      ...issued.map((g) => `${g.code}: ${g.initialValue}`),
+    ];
+    const codeRows = issued
+      .map(
+        (g) =>
+          `<tr><td style="padding:10px 16px;background-color:#f4f4f4;border-radius:6px;font-family:monospace;font-size:15px;color:#111111;">${escapeHtml(g.code)}</td><td style="padding:10px 16px;font-size:14px;color:#111111;text-align:right;">${escapeHtml(String(g.initialValue))}</td></tr><tr><td colspan="2" style="height:8px;line-height:8px;font-size:0;">&nbsp;</td></tr>`,
+      )
+      .join('');
+    const giftCardHtml = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
 <tr><td style="padding:40px;">
@@ -261,27 +344,65 @@ export class GiftCardsService {
 </td></tr>
 </table>
 </td></tr></table>`;
-      // Enqueued via `conn` (not the plain injected db pool) so the job
-      // row commits atomically with the gift cards it describes — if the
-      // surrounding order-creation transaction rolls back, this job row
-      // never exists to be sent either. Also moves what used to be a
-      // synchronous Resend network call off the critical path of an
-      // open DB transaction.
-      await this.jobsService.enqueue(
-        shopId,
-        'send_email',
-        {
-          to: recipientEmail,
-          subject: `Your ${shopName} gift card`,
-          bodyText: bodyLines.join('\n'),
-          html: giftCardHtml,
-          fromName: shopName,
-        },
-        `gift-card-issued-email:${orderId}`,
-        { tx: conn },
+    // Enqueued via `conn` (not the plain injected db pool) so the job
+    // row commits atomically with the gift cards it describes — if the
+    // surrounding order-creation transaction rolls back, this job row
+    // never exists to be sent either. Also moves what used to be a
+    // synchronous Resend network call off the critical path of an
+    // open DB transaction.
+    await this.jobsService.enqueue(
+      shopId,
+      'send_email',
+      {
+        to: recipientEmail,
+        subject: `Your ${shopName} gift card`,
+        bodyText: bodyLines.join('\n'),
+        html: giftCardHtml,
+        fromName: shopName,
+      },
+      `gift-card-issued-email:${orderId}`,
+      tx ? { tx } : {},
+    );
+  }
+
+  // F8: gift cards sold by an ONLINE order are emailed only once the order is paid
+  // (issueForOrder defers the email for them), so an unpaid or abandoned order never
+  // leaks a working code. Called when the payment is recorded. Only cards still
+  // active are included (a cancelled order's cards were voided), the recipient is
+  // the order's own customerEmail, and the job key makes it once per order.
+  async sendIssuedEmailForOrder(shopId: number, orderId: number) {
+    // The cards are read FOR UPDATE and the job is enqueued on the same
+    // transaction, so a cancel voiding them (which takes the same row locks) is
+    // strictly before (no cards left to email) or after (it dismisses the pending
+    // job): the email can never go out for a card that is no longer active.
+    await this.db.transaction(async (conn) => {
+      const [cards] = await conn.query<RowDataPacket[]>(
+        `SELECT code, initialValue FROM giftcard
+          WHERE purchaseOrderId = ? AND shopId = ? AND status = 'active'
+          ORDER BY id FOR UPDATE`,
+        [orderId, shopId],
       );
-    }
-    return issued;
+      if (cards.length === 0) return;
+      const [orders] = await conn.query<RowDataPacket[]>(
+        `SELECT o.customerEmail, s.name AS shopName
+           FROM \`order\` o JOIN shop s ON s.id = o.shopId
+          WHERE o.id = ? AND o.shopId = ?`,
+        [orderId, shopId],
+      );
+      const email = orders[0]?.customerEmail as string | null | undefined;
+      if (!email) return;
+      await this.enqueueIssuedEmail(
+        shopId,
+        orderId,
+        email,
+        orders[0].shopName as string,
+        cards.map((c) => ({
+          code: c.code as string,
+          initialValue: Number(trimDecimal(c.initialValue as string)),
+        })),
+        conn,
+      );
+    });
   }
 
   private async syncStatus(conn: PoolConnection, giftCardId: number) {
