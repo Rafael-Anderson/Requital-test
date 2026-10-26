@@ -15,6 +15,7 @@ vi.mock("@/lib/api", () => ({
   listCustomerNotes: vi.fn().mockResolvedValue([]),
   listCustomerMerges: vi.fn().mockResolvedValue([]),
   getCustomerStoreCredit: vi.fn().mockResolvedValue({ balances: [], entries: [] }),
+  getCustomerLoyalty: vi.fn().mockResolvedValue({ available: false }),
   getCustomerConsent: vi.fn().mockResolvedValue({
     channels: [],
     newsletter: { subscribed: false, since: null, source: null },
