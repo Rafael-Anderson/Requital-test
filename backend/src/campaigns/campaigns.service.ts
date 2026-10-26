@@ -84,7 +84,11 @@ export class CampaignsService {
     return out;
   }
 
-  private view(c: CampaignDb, counts: Record<string, number> = {}, withBody = false) {
+  private view(
+    c: CampaignDb,
+    counts: Record<string, number> = {},
+    withBody = false,
+  ) {
     return {
       id: c.id,
       name: c.name,
@@ -109,7 +113,10 @@ export class CampaignsService {
 
   // What the admin page needs before it can offer anything.
   async status(ctx: TenantContext) {
-    const enabled = await this.features.isEnabled(ctx.shopId, 'email_campaigns');
+    const enabled = await this.features.isEnabled(
+      ctx.shopId,
+      'email_campaigns',
+    );
     const identity = await this.sendingDomains.resolveIdentity(ctx.shopId);
     const sent = await this.db.query<RowDataPacket[]>(
       `SELECT COUNT(*) AS n FROM campaignrecipient
@@ -133,7 +140,10 @@ export class CampaignsService {
          FROM campaign WHERE shopId = ? ORDER BY createdAt DESC, id DESC LIMIT 200`,
       [ctx.shopId],
     );
-    const counts = await this.counts(ctx.shopId, rows.map((r) => r.id));
+    const counts = await this.counts(
+      ctx.shopId,
+      rows.map((r) => r.id),
+    );
     return rows.map((r) => this.view(r, counts.get(r.id)));
   }
 
@@ -153,8 +163,12 @@ export class CampaignsService {
   }
 
   // A segment id of another shop (or a missing one) is a 404 here.
-  private async assertSegment(shopId: number, segmentId: number | null | undefined) {
-    if (segmentId != null) await loadSegmentPredicate(this.db, shopId, segmentId);
+  private async assertSegment(
+    shopId: number,
+    segmentId: number | null | undefined,
+  ) {
+    if (segmentId != null)
+      await loadSegmentPredicate(this.db, shopId, segmentId);
   }
 
   async create(ctx: TenantContext, dto: CreateCampaignDto) {
@@ -164,7 +178,14 @@ export class CampaignsService {
     const res = await this.db.execute(
       `INSERT INTO campaign (shopId, name, subject, bodyHtml, segmentId, createdBy)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [ctx.shopId, dto.name, dto.subject, html, dto.segmentId ?? null, ctx.userId],
+      [
+        ctx.shopId,
+        dto.name,
+        dto.subject,
+        html,
+        dto.segmentId ?? null,
+        ctx.userId,
+      ],
     );
     await this.audit.logCtx(ctx, {
       action: 'campaign.created',
@@ -270,8 +291,12 @@ export class CampaignsService {
       );
     }
     const shop = await this.shopFor(ctx.shopId);
-    const shopName = (shop.displayName as string | null) || (shop.name as string);
-    const link = storefrontUrl(shop as never, `/unsubscribe?token=${TEST_TOKEN}`);
+    const shopName =
+      (shop.displayName as string | null) || (shop.name as string);
+    const link = storefrontUrl(
+      shop as never,
+      `/unsubscribe?token=${TEST_TOKEN}`,
+    );
     const { html, text } = renderCampaignEmail({
       shopName,
       legalName: shop.legalName as string | null,
@@ -287,7 +312,10 @@ export class CampaignsService {
         shopId: ctx.shopId,
         requireShopIdentity: true,
         headers: unsubscribeHeaders(
-          storefrontUrl(shop as never, `/api/public/campaigns/unsubscribe?token=${TEST_TOKEN}`),
+          storefrontUrl(
+            shop as never,
+            `/api/public/campaigns/unsubscribe?token=${TEST_TOKEN}`,
+          ),
         ),
       });
     } catch {
@@ -320,7 +348,9 @@ export class CampaignsService {
       try {
         segment = await loadSegmentPredicate(this.db, ctx.shopId, c.segmentId);
       } catch {
-        throw new ConflictException('The segment for this campaign no longer exists');
+        throw new ConflictException(
+          'The segment for this campaign no longer exists',
+        );
       }
     }
     const a = audienceSql(ctx.shopId, segment);

@@ -16,21 +16,31 @@ describe('campaign email rendering', () => {
     });
     expect(html).toContain('Rose &lt;b&gt;&amp; Co&lt;/b&gt;');
     expect(html).not.toContain('<b>& Co');
-    expect(html).toContain('href="https://rose.requital.io/unsubscribe?token=abc"');
+    expect(html).toContain(
+      'href="https://rose.requital.io/unsubscribe?token=abc"',
+    );
     expect(html).toContain('Dubai, UAE');
-    expect(text).toContain('Unsubscribe: https://rose.requital.io/unsubscribe?token=abc');
+    expect(text).toContain(
+      'Unsubscribe: https://rose.requital.io/unsubscribe?token=abc',
+    );
     expect(text).toContain('Hello');
   });
 
   it('turns sanitised html into readable text', () => {
     expect(
-      htmlToText('<p>A &amp; B</p><p>See <a href="https://x.test/?a=1&amp;b=2">here</a></p>'),
+      htmlToText(
+        '<p>A &amp; B</p><p>See <a href="https://x.test/?a=1&amp;b=2">here</a></p>',
+      ),
     ).toBe('A & B\n\nSee here (https://x.test/?a=1&b=2)');
   });
 
   it('builds the RFC 8058 one-click pair and strips anything that could end a header', () => {
-    const h = unsubscribeHeaders('https://x.test/a?token=1\r\nBcc: evil@x.test>');
-    expect(h['List-Unsubscribe']).toBe('<https://x.test/a?token=1Bcc:evil@x.test>');
+    const h = unsubscribeHeaders(
+      'https://x.test/a?token=1\r\nBcc: evil@x.test>',
+    );
+    expect(h['List-Unsubscribe']).toBe(
+      '<https://x.test/a?token=1Bcc:evil@x.test>',
+    );
     expect(h['List-Unsubscribe']).not.toMatch(/[\r\n]/);
     expect(h['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
   });

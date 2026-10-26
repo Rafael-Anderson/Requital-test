@@ -186,7 +186,7 @@ describe('Email campaigns (e2e)', () => {
       for (const j of jobs) {
         await db.execute(`UPDATE job SET nextAttemptAt = ? WHERE id = ?`, [
           new Date(Date.now() - 1000),
-          j.id,
+          j.id as number,
         ]);
         await worker.processJobById(j.id as number);
       }
@@ -227,7 +227,10 @@ describe('Email campaigns (e2e)', () => {
   describe('feature flag and access', () => {
     it('is off by default: every route but status is 403, status says so', async () => {
       const s = await setupShop('cf-off', { flag: false });
-      const st = await http().get('/campaigns/status').set(auth(s.token)).expect(200);
+      const st = await http()
+        .get('/campaigns/status')
+        .set(auth(s.token))
+        .expect(200);
       expect((st.body as Json).enabled).toBe(false);
       await http().get('/campaigns').set(auth(s.token)).expect(403);
       await draft(s).expect(403);
@@ -256,10 +259,12 @@ describe('Email campaigns (e2e)', () => {
 
     it('sanitises the body on write and refuses an empty or multi-line one', async () => {
       const s = await setupShop('cf-san');
-      const c = (await draft(s, {
-        bodyHtml:
-          '<p onclick="x()">Hi</p><script>alert(1)</script><a href="javascript:alert(1)">bad</a><a href="https://ok.example/x">ok</a>',
-      }).expect(201)).body as Json;
+      const c = (
+        await draft(s, {
+          bodyHtml:
+            '<p onclick="x()">Hi</p><script>alert(1)</script><a href="javascript:alert(1)">bad</a><a href="https://ok.example/x">ok</a>',
+        }).expect(201)
+      ).body as Json;
       expect(c.bodyHtml).not.toMatch(/script|onclick|javascript:/i);
       expect(c.bodyHtml).toContain('https://ok.example/x');
       await draft(s, { bodyHtml: '<script>x</script>' }).expect(400);
@@ -271,7 +276,10 @@ describe('Email campaigns (e2e)', () => {
     it('counts only recorded email consent and confirmed newsletter rows', async () => {
       const { s } = await audienceShop('cf-aud');
       const c = await newDraft(s);
-      const r = await http().get(`/campaigns/${c.id}/audience`).set(auth(s.token)).expect(200);
+      const r = await http()
+        .get(`/campaigns/${c.id}/audience`)
+        .set(auth(s.token))
+        .expect(200);
       // in1 (granted customer) and in2 (confirmed newsletter). Nothing else.
       expect((r.body as Json).count).toBe(2);
       expect(Object.keys(r.body as object)).toEqual(['count']);
@@ -285,7 +293,17 @@ describe('Email campaigns (e2e)', () => {
         .set(auth(s.token))
         .send({
           name: 'unknown',
-          rules: { op: 'and', rules: [{ field: 'consent', cmp: 'is', channel: 'email', value: 'unknown' }] },
+          rules: {
+            op: 'and',
+            rules: [
+              {
+                field: 'consent',
+                cmp: 'is',
+                channel: 'email',
+                value: 'unknown',
+              },
+            ],
+          },
         })
         .expect(201);
       const allSeg = await http()
@@ -293,16 +311,25 @@ describe('Email campaigns (e2e)', () => {
         .set(auth(s.token))
         .send({
           name: 'everyone',
-          rules: { op: 'and', rules: [{ field: 'orderCount', cmp: 'gte', value: 0 }] },
+          rules: {
+            op: 'and',
+            rules: [{ field: 'orderCount', cmp: 'gte', value: 0 }],
+          },
         })
         .expect(201);
       const c1 = await newDraft(s, { segmentId: (unknownSeg.body as Json).id });
-      const r1 = await http().get(`/campaigns/${c1.id}/audience`).set(auth(s.token)).expect(200);
+      const r1 = await http()
+        .get(`/campaigns/${c1.id}/audience`)
+        .set(auth(s.token))
+        .expect(200);
       expect((r1.body as Json).count).toBe(0);
       // "Everyone" keeps the consented CUSTOMER; a newsletter-only address has no
       // customer row to match, so a segment drops it.
       const c2 = await newDraft(s, { segmentId: (allSeg.body as Json).id });
-      const r2 = await http().get(`/campaigns/${c2.id}/audience`).set(auth(s.token)).expect(200);
+      const r2 = await http()
+        .get(`/campaigns/${c2.id}/audience`)
+        .set(auth(s.token))
+        .expect(200);
       expect((r2.body as Json).count).toBe(1);
     });
 
@@ -312,7 +339,13 @@ describe('Email campaigns (e2e)', () => {
       const seg = await http()
         .post('/customer-segments')
         .set(auth(a.token))
-        .send({ name: 's', rules: { op: 'and', rules: [{ field: 'orderCount', cmp: 'gte', value: 0 }] } })
+        .send({
+          name: 's',
+          rules: {
+            op: 'and',
+            rules: [{ field: 'orderCount', cmp: 'gte', value: 0 }],
+          },
+        })
         .expect(201);
       await draft(b, { segmentId: (seg.body as Json).id }).expect(404);
     });
@@ -323,10 +356,18 @@ describe('Email campaigns (e2e)', () => {
       const s = await setupShop('cf-nodom', { domain: false });
       await customer(s.shopId, `a-${s.slug}@mail.test`, 'granted');
       const c = await newDraft(s);
-      const r = await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(409);
+      const r = await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(409);
       expect(JSON.stringify(r.body)).toMatch(/sending domain/i);
-      await http().post(`/campaigns/${c.id}/test`).set(auth(s.token)).expect(409);
-      const now = (await http().get(`/campaigns/${c.id}`).set(auth(s.token)).expect(200)).body as Json;
+      await http()
+        .post(`/campaigns/${c.id}/test`)
+        .set(auth(s.token))
+        .expect(409);
+      const now = (
+        await http().get(`/campaigns/${c.id}`).set(auth(s.token)).expect(200)
+      ).body as Json;
       expect(now.status).toBe('draft');
       expect(sentTo()).toHaveLength(0);
     });
@@ -339,39 +380,68 @@ describe('Email campaigns (e2e)', () => {
       );
       await customer(s.shopId, `a-${s.slug}@mail.test`, 'granted');
       const c = await newDraft(s);
-      await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(409);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(409);
     });
 
     it('needs the admin email verified, and a non-empty audience', async () => {
       const u = await setupShop('cf-unv', { verified: false });
       await customer(u.shopId, `a-${u.slug}@mail.test`, 'granted');
       const cu = await newDraft(u);
-      await http().post(`/campaigns/${cu.id}/send`).set(auth(u.token)).expect(403);
+      await http()
+        .post(`/campaigns/${cu.id}/send`)
+        .set(auth(u.token))
+        .expect(403);
       const s = await setupShop('cf-empty');
       await customer(s.shopId, `u-${s.slug}@mail.test`, null);
       const c = await newDraft(s);
-      await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(409);
-      expect(((await http().get(`/campaigns/${c.id}`).set(auth(s.token))).body as Json).status).toBe('draft');
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(409);
+      expect(
+        (
+          (await http().get(`/campaigns/${c.id}`).set(auth(s.token)))
+            .body as Json
+        ).status,
+      ).toBe('draft');
     });
 
     it('mails only consented addresses, with the footer and one-click headers', async () => {
       const { s, e } = await audienceShop('cf-send');
       const c = await newDraft(s);
-      const r = await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(201);
+      const r = await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
       expect((r.body as Json).status).toBe('sending');
       expect((r.body as Json).audienceCount).toBe(2);
       await drain(c.id);
-      const done = (await http().get(`/campaigns/${c.id}`).set(auth(s.token))).body as Json;
+      const done = (await http().get(`/campaigns/${c.id}`).set(auth(s.token)))
+        .body as Json;
       expect(done.status).toBe('sent');
-      expect(done.counts).toEqual({ pending: 0, sent: 2, skipped: 0, failed: 0 });
+      expect(done.counts).toEqual({
+        pending: 0,
+        sent: 2,
+        skipped: 0,
+        failed: 0,
+      });
       const lines = sentTo();
       expect(lines).toHaveLength(2);
       const tos = lines.map((l) => /to=(\S+)/.exec(l)![1]).sort();
       expect(tos).toEqual([e('in1'), e('in2')].sort());
       for (const l of lines) {
-        expect(l).toMatch(/List-Unsubscribe"?:"<https:\/\/.+\/api\/public\/campaigns\/unsubscribe\?token=[0-9a-f]{32}>"/);
-        expect(l).toContain('"List-Unsubscribe-Post":"List-Unsubscribe=One-Click"');
-        expect(l).toMatch(/Unsubscribe: https:\/\/.+\/unsubscribe\?token=[0-9a-f]{32}/);
+        expect(l).toMatch(
+          /List-Unsubscribe"?:"<https:\/\/.+\/api\/public\/campaigns\/unsubscribe\?token=[0-9a-f]{32}>"/,
+        );
+        expect(l).toContain(
+          '"List-Unsubscribe-Post":"List-Unsubscribe=One-Click"',
+        );
+        expect(l).toMatch(
+          /Unsubscribe: https:\/\/.+\/unsubscribe\?token=[0-9a-f]{32}/,
+        );
         expect(l).toContain('agreed to receive marketing emails');
       }
       // The two tokens differ and the address is not in the link.
@@ -388,7 +458,10 @@ describe('Email campaigns (e2e)', () => {
         http().post(`/campaigns/${c.id}/send`).set(auth(s.token)),
       ]);
       expect(rs.every((r) => r.status === 201)).toBe(true);
-      await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(201);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
       const jobs = await db.query<RowDataPacket[]>(
         `SELECT id FROM job WHERE idempotencyKey = ?`,
         [`campaign:${c.id}:batch:0`],
@@ -398,7 +471,10 @@ describe('Email campaigns (e2e)', () => {
       await drain(c.id);
       expect(sentTo()).toHaveLength(2);
       // Running a finished campaign's batch again sends nothing.
-      await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(201);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
       await drain(c.id);
       expect(sentTo()).toHaveLength(2);
     });
@@ -406,7 +482,10 @@ describe('Email campaigns (e2e)', () => {
     it('asks for consent again at send time', async () => {
       const { s, e } = await audienceShop('cf-recheck');
       const c = await newDraft(s);
-      await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(201);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
       // After the audience was frozen: in1 withdraws, in2 is suppressed.
       await db.execute(
         `UPDATE customerconsent cc JOIN customer c ON c.id = cc.customerId
@@ -416,7 +495,8 @@ describe('Email campaigns (e2e)', () => {
       await suppress(s.shopId, e('in2'), 'complaint');
       await drain(c.id);
       expect(sentTo()).toHaveLength(0);
-      const done = (await http().get(`/campaigns/${c.id}`).set(auth(s.token))).body as Json;
+      const done = (await http().get(`/campaigns/${c.id}`).set(auth(s.token)))
+        .body as Json;
       expect(done.counts.skipped).toBe(2);
       expect(done.status).toBe('sent');
     });
@@ -424,17 +504,32 @@ describe('Email campaigns (e2e)', () => {
     it('stops a running campaign when the feature is switched off or the domain lapses', async () => {
       const { s } = await audienceShop('cf-stop');
       const c = await newDraft(s);
-      await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(201);
-      await db.execute(`UPDATE shopfeatureoverride SET enabled = 0 WHERE shopId = ?`, [s.shopId]);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
+      await db.execute(
+        `UPDATE shopfeatureoverride SET enabled = 0 WHERE shopId = ?`,
+        [s.shopId],
+      );
       await drain(c.id);
       expect(sentTo()).toHaveLength(0);
-      const row = await db.query<RowDataPacket[]>(`SELECT status, failureReason FROM campaign WHERE id = ?`, [c.id]);
+      const row = await db.query<RowDataPacket[]>(
+        `SELECT status, failureReason FROM campaign WHERE id = ?`,
+        [c.id],
+      );
       expect(row[0].status).toBe('failed');
       const t = await setupShop('cf-stop2');
       await customer(t.shopId, `a-${t.slug}@mail.test`, 'granted');
       const c2 = await newDraft(t);
-      await http().post(`/campaigns/${c2.id}/send`).set(auth(t.token)).expect(201);
-      await db.execute(`UPDATE shopsendingdomain SET status = 'failed' WHERE shopId = ?`, [t.shopId]);
+      await http()
+        .post(`/campaigns/${c2.id}/send`)
+        .set(auth(t.token))
+        .expect(201);
+      await db.execute(
+        `UPDATE shopsendingdomain SET status = 'failed' WHERE shopId = ?`,
+        [t.shopId],
+      );
       await drain(c2.id);
       expect(sentTo()).toHaveLength(0);
       expect((await recips(c2.id))[0].status).toBe('skipped');
@@ -444,7 +539,10 @@ describe('Email campaigns (e2e)', () => {
       process.env.CAMPAIGN_DAILY_SEND_CAP = '1';
       const { s } = await audienceShop('cf-cap');
       const c = await newDraft(s);
-      await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(201);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
       await drain(c.id, 3);
       expect(sentTo()).toHaveLength(1);
       const rows = await recips(c.id);
@@ -459,7 +557,12 @@ describe('Email campaigns (e2e)', () => {
       expect(new Date(next[0].nextAttemptAt as Date).getTime()).toBeGreaterThan(
         Date.now() + 20 * 60_000,
       );
-      expect(((await http().get(`/campaigns/${c.id}`).set(auth(s.token))).body as Json).status).toBe('sending');
+      expect(
+        (
+          (await http().get(`/campaigns/${c.id}`).set(auth(s.token)))
+            .body as Json
+        ).status,
+      ).toBe('sending');
       // Transactional mail is not held up by the cap or counted against it.
       expect(sentTo()).toHaveLength(1);
     });
@@ -467,18 +570,39 @@ describe('Email campaigns (e2e)', () => {
     it('cancel stops the rest, is idempotent and refuses a finished campaign', async () => {
       const { s } = await audienceShop('cf-cancel');
       const c = await newDraft(s);
-      await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(201);
-      const x = await http().post(`/campaigns/${c.id}/cancel`).set(auth(s.token)).expect(201);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
+      const x = await http()
+        .post(`/campaigns/${c.id}/cancel`)
+        .set(auth(s.token))
+        .expect(201);
       expect((x.body as Json).status).toBe('cancelled');
-      await http().post(`/campaigns/${c.id}/cancel`).set(auth(s.token)).expect(201);
+      await http()
+        .post(`/campaigns/${c.id}/cancel`)
+        .set(auth(s.token))
+        .expect(201);
       await drain(c.id);
       expect(sentTo()).toHaveLength(0);
-      expect((await recips(c.id)).every((r) => r.status === 'skipped')).toBe(true);
+      expect((await recips(c.id)).every((r) => r.status === 'skipped')).toBe(
+        true,
+      );
       const d = await newDraft(s);
-      await http().post(`/campaigns/${d.id}/send`).set(auth(s.token)).expect(201);
+      await http()
+        .post(`/campaigns/${d.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
       await drain(d.id);
-      await http().post(`/campaigns/${d.id}/cancel`).set(auth(s.token)).expect(409);
-      await http().patch(`/campaigns/${d.id}`).set(auth(s.token)).send({ name: 'x' }).expect(409);
+      await http()
+        .post(`/campaigns/${d.id}/cancel`)
+        .set(auth(s.token))
+        .expect(409);
+      await http()
+        .patch(`/campaigns/${d.id}`)
+        .set(auth(s.token))
+        .send({ name: 'x' })
+        .expect(409);
     });
 
     it('leaves from the shop domain through the real provider path (faked fetch)', async () => {
@@ -489,25 +613,47 @@ describe('Email campaigns (e2e)', () => {
       const fetchSpy = jest
         .spyOn(global, 'fetch')
         .mockImplementation(() =>
-          Promise.resolve(new Response(JSON.stringify({ id: 'm1' }), { status: 200 })),
+          Promise.resolve(
+            new Response(JSON.stringify({ id: 'm1' }), { status: 200 }),
+          ),
         );
       try {
-        await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(201);
+        await http()
+          .post(`/campaigns/${c.id}/send`)
+          .set(auth(s.token))
+          .expect(201);
         await drain(c.id);
         const bodies = (fetchSpy.mock.calls as [string, { body: string }][])
           .filter(([u]) => String(u) === 'https://api.resend.com/emails')
-          .map(([, i]) => JSON.parse(i.body) as { from: string; headers: Record<string, string>; to: string });
+          .map(
+            ([, i]) =>
+              JSON.parse(i.body) as {
+                from: string;
+                headers: Record<string, string>;
+                to: string;
+              },
+          );
         expect(bodies).toHaveLength(2);
         for (const b of bodies) {
           expect(b.from).toContain(`@${s.slug}.example.com>`);
-          expect(b.headers['List-Unsubscribe']).toMatch(/^<https:\/\/.+token=[0-9a-f]{32}>$/);
-          expect(b.headers['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
+          expect(b.headers['List-Unsubscribe']).toMatch(
+            /^<https:\/\/.+token=[0-9a-f]{32}>$/,
+          );
+          expect(b.headers['List-Unsubscribe-Post']).toBe(
+            'List-Unsubscribe=One-Click',
+          );
         }
         // The platform address is never a fallback: break the domain, nothing goes.
         fetchSpy.mockClear();
         const d = await newDraft(s);
-        await http().post(`/campaigns/${d.id}/send`).set(auth(s.token)).expect(201);
-        await db.execute(`UPDATE shopsendingdomain SET status = 'pending' WHERE shopId = ?`, [s.shopId]);
+        await http()
+          .post(`/campaigns/${d.id}/send`)
+          .set(auth(s.token))
+          .expect(201);
+        await db.execute(
+          `UPDATE shopsendingdomain SET status = 'pending' WHERE shopId = ?`,
+          [s.shopId],
+        );
         await drain(d.id);
         expect(fetchSpy).not.toHaveBeenCalled();
       } finally {
@@ -527,7 +673,9 @@ describe('Email campaigns (e2e)', () => {
       expect((r.body as Json).sent).toBe(true);
       const lines = sentTo();
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toContain(`to=${s.adminEmail} subject="[Test] Spring offers"`);
+      expect(lines[0]).toContain(
+        `to=${s.adminEmail} subject="[Test] Spring offers"`,
+      );
       expect(await recips(c.id)).toHaveLength(0);
     });
   });
@@ -538,14 +686,22 @@ describe('Email campaigns (e2e)', () => {
       // Same address is both a consented customer and a confirmed newsletter row.
       await newsletter(s.shopId, e('in1'), true);
       const c = await newDraft(s);
-      await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(201);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
       await drain(c.id);
       const token = tokenFromLogs(e('in1'));
 
-      const look = await http().get(`/public/campaigns/unsubscribe?token=${token}`).expect(200);
+      const look = await http()
+        .get(`/public/campaigns/unsubscribe?token=${token}`)
+        .expect(200);
       expect((look.body as Json).shopName).toContain(s.slug);
       expect(
-        await db.query(`SELECT 1 FROM emailsuppression WHERE shopId = ? AND email = ?`, [s.shopId, e('in1')]),
+        await db.query(
+          `SELECT 1 FROM emailsuppression WHERE shopId = ? AND email = ?`,
+          [s.shopId, e('in1')],
+        ),
       ).toHaveLength(0);
 
       // The one-click form post a mail provider makes.
@@ -554,7 +710,9 @@ describe('Email campaigns (e2e)', () => {
         .type('form')
         .send('List-Unsubscribe=One-Click')
         .expect(201);
-      await http().post(`/public/campaigns/unsubscribe?token=${token}`).expect(201);
+      await http()
+        .post(`/public/campaigns/unsubscribe?token=${token}`)
+        .expect(201);
 
       const sup = await db.query<RowDataPacket[]>(
         `SELECT reason FROM emailsuppression WHERE shopId = ? AND email = ?`,
@@ -573,7 +731,10 @@ describe('Email campaigns (e2e)', () => {
           WHERE c.shopId = ? AND c.email = ? ORDER BY ev.id DESC LIMIT 1`,
         [s.shopId, e('in1')],
       );
-      expect(ev[0]).toMatchObject({ source: 'campaign_unsubscribe', status: 'withdrawn' });
+      expect(ev[0]).toMatchObject({
+        source: 'campaign_unsubscribe',
+        status: 'withdrawn',
+      });
       const nl = await db.query<RowDataPacket[]>(
         `SELECT confirmedAt FROM newslettersubscriber WHERE shopId = ? AND email = ?`,
         [s.shopId, e('in1')],
@@ -581,32 +742,53 @@ describe('Email campaigns (e2e)', () => {
       expect(nl[0].confirmedAt).toBeNull();
       // Not in the next audience; the other recipient still is.
       const d = await newDraft(s);
-      const r = await http().get(`/campaigns/${d.id}/audience`).set(auth(s.token));
+      const r = await http()
+        .get(`/campaigns/${d.id}/audience`)
+        .set(auth(s.token));
       expect((r.body as Json).count).toBe(1);
     });
 
     it('answers every unusable token with the same 404', async () => {
       const bodies: string[] = [];
-      for (const t of ['', 'abc', '0'.repeat(32), 'z'.repeat(32), '0'.repeat(31)]) {
-        const g = await http().get(`/public/campaigns/unsubscribe?token=${t}`).expect(404);
-        const p = await http().post(`/public/campaigns/unsubscribe?token=${t}`).expect(404);
+      for (const t of [
+        '',
+        'abc',
+        '0'.repeat(32),
+        'z'.repeat(32),
+        '0'.repeat(31),
+      ]) {
+        const g = await http()
+          .get(`/public/campaigns/unsubscribe?token=${t}`)
+          .expect(404);
+        const p = await http()
+          .post(`/public/campaigns/unsubscribe?token=${t}`)
+          .expect(404);
         bodies.push(JSON.stringify(g.body), JSON.stringify(p.body));
       }
       expect(new Set(bodies).size).toBe(1);
       await http().get(`/public/campaigns/unsubscribe`).expect(404);
     });
 
-    it('one shop\'s token cannot touch another shop\'s rows', async () => {
+    it("one shop's token cannot touch another shop's rows", async () => {
       const a = await audienceShop('cf-tok-a');
       const b = await setupShop('cf-tok-b');
       // Same address in shop B, consented.
       const shared = a.e('in1');
       await customer(b.shopId, shared, 'granted');
       const c = await newDraft(a.s);
-      await http().post(`/campaigns/${c.id}/send`).set(auth(a.s.token)).expect(201);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(a.s.token))
+        .expect(201);
       await drain(c.id);
-      await http().post(`/public/campaigns/unsubscribe?token=${tokenFromLogs(shared)}`).expect(201);
-      expect(await db.query(`SELECT 1 FROM emailsuppression WHERE shopId = ?`, [b.shopId])).toHaveLength(0);
+      await http()
+        .post(`/public/campaigns/unsubscribe?token=${tokenFromLogs(shared)}`)
+        .expect(201);
+      expect(
+        await db.query(`SELECT 1 FROM emailsuppression WHERE shopId = ?`, [
+          b.shopId,
+        ]),
+      ).toHaveLength(0);
       const consent = await db.query<RowDataPacket[]>(
         `SELECT cc.status FROM customerconsent cc JOIN customer c ON c.id = cc.customerId WHERE c.shopId = ?`,
         [b.shopId],
@@ -614,90 +796,200 @@ describe('Email campaigns (e2e)', () => {
       expect(consent[0].status).toBe('granted');
     });
 
-    it('the customer\'s own fresh opt-in lifts an unsubscribe, not a bounce', async () => {
+    it("the customer's own fresh opt-in lifts an unsubscribe, not a bounce", async () => {
       const s = await setupShop('cf-reopt');
       const email = `re-${s.slug}@mail.test`;
-      await db.execute(`UPDATE shop SET published = 1 WHERE id = ?`, [s.shopId]);
-      const cust = await registerCustomer(app.getHttpServer(), s.slug, '0501234567', email);
+      await db.execute(`UPDATE shop SET published = 1 WHERE id = ?`, [
+        s.shopId,
+      ]);
+      const cust = await registerCustomer(
+        app.getHttpServer(),
+        s.slug,
+        '0501234567',
+        email,
+      );
       await suppress(s.shopId, email, 'unsubscribe');
-      await asCustomer(app.getHttpServer(), cust, 'put', `/public/${s.slug}/account/consent`)
+      await asCustomer(
+        app.getHttpServer(),
+        cust,
+        'put',
+        `/public/${s.slug}/account/consent`,
+      )
         .send({ channel: 'email', granted: true })
         .expect(200);
-      expect(await db.query(`SELECT 1 FROM emailsuppression WHERE shopId = ? AND email = ?`, [s.shopId, email])).toHaveLength(0);
+      expect(
+        await db.query(
+          `SELECT 1 FROM emailsuppression WHERE shopId = ? AND email = ?`,
+          [s.shopId, email],
+        ),
+      ).toHaveLength(0);
       // A bounce is not the customer's to undo.
       await suppress(s.shopId, email, 'bounce');
-      await asCustomer(app.getHttpServer(), cust, 'put', `/public/${s.slug}/account/consent`)
+      await asCustomer(
+        app.getHttpServer(),
+        cust,
+        'put',
+        `/public/${s.slug}/account/consent`,
+      )
         .send({ channel: 'email', granted: false })
         .expect(200);
-      await asCustomer(app.getHttpServer(), cust, 'put', `/public/${s.slug}/account/consent`)
+      await asCustomer(
+        app.getHttpServer(),
+        cust,
+        'put',
+        `/public/${s.slug}/account/consent`,
+      )
         .send({ channel: 'email', granted: true })
         .expect(200);
-      expect(await db.query(`SELECT 1 FROM emailsuppression WHERE shopId = ? AND email = ?`, [s.shopId, email])).toHaveLength(1);
+      expect(
+        await db.query(
+          `SELECT 1 FROM emailsuppression WHERE shopId = ? AND email = ?`,
+          [s.shopId, email],
+        ),
+      ).toHaveLength(1);
     });
   });
 
   describe('newsletter double opt-in', () => {
     it('flag off: the widget behaves as before (no confirmation, 409 on repeat)', async () => {
       const s = await setupShop('cf-nl-off', { flag: false });
-      const r = await http().post(`/public/${s.slug}/newsletter-subscribe`).send({ email: `x-${s.slug}@mail.test` }).expect(201);
+      const r = await http()
+        .post(`/public/${s.slug}/newsletter-subscribe`)
+        .send({ email: `x-${s.slug}@mail.test` })
+        .expect(201);
       expect((r.body as Json).confirmationRequired).toBe(false);
-      await http().post(`/public/${s.slug}/newsletter-subscribe`).send({ email: `x-${s.slug}@mail.test` }).expect(409);
-      const row = await db.query<RowDataPacket[]>(`SELECT confirmedAt, confirmTokenHash FROM newslettersubscriber WHERE shopId = ?`, [s.shopId]);
+      await http()
+        .post(`/public/${s.slug}/newsletter-subscribe`)
+        .send({ email: `x-${s.slug}@mail.test` })
+        .expect(409);
+      const row = await db.query<RowDataPacket[]>(
+        `SELECT confirmedAt, confirmTokenHash FROM newslettersubscriber WHERE shopId = ?`,
+        [s.shopId],
+      );
       expect(row[0].confirmedAt).toBeNull();
       expect(row[0].confirmTokenHash).toBeNull();
-      expect(await db.query(`SELECT 1 FROM job WHERE shopId = ? AND idempotencyKey LIKE 'newsletter-confirm:%'`, [s.shopId])).toHaveLength(0);
+      expect(
+        await db.query(
+          `SELECT 1 FROM job WHERE shopId = ? AND idempotencyKey LIKE 'newsletter-confirm:%'`,
+          [s.shopId],
+        ),
+      ).toHaveLength(0);
     });
 
     it('flag on: a new row is unconfirmed until the link is POSTed; GET never confirms', async () => {
       const s = await setupShop('cf-nl-on');
       const email = `y-${s.slug}@mail.test`;
-      const before = (await db.query(`SELECT id FROM job WHERE shopId = ? AND type = 'send_email'`, [s.shopId])).length;
-      const r = await http().post(`/public/${s.slug}/newsletter-subscribe`).send({ email }).expect(201);
+      const before = (
+        await db.query(
+          `SELECT id FROM job WHERE shopId = ? AND type = 'send_email'`,
+          [s.shopId],
+        )
+      ).length;
+      const r = await http()
+        .post(`/public/${s.slug}/newsletter-subscribe`)
+        .send({ email })
+        .expect(201);
       expect((r.body as Json).confirmationRequired).toBe(true);
       const jobs = await db.query<RowDataPacket[]>(
         `SELECT id, payload FROM job WHERE shopId = ? AND type = 'send_email' ORDER BY id DESC LIMIT 1`,
         [s.shopId],
       );
-      const after = await db.query(`SELECT id FROM job WHERE shopId = ? AND type = 'send_email'`, [s.shopId]);
+      const after = await db.query(
+        `SELECT id FROM job WHERE shopId = ? AND type = 'send_email'`,
+        [s.shopId],
+      );
       expect(after.length).toBe(before + 1);
       await worker.processJobById(jobs[0].id as number);
       const line = sentTo().find((l) => l.includes(`to=${email}`));
       // The body holds a live link: the stub withholds it, as for any sensitive job.
       expect(line).toContain('Confirm your subscription');
-      const row = await db.query<RowDataPacket[]>(`SELECT confirmedAt, confirmTokenHash FROM newslettersubscriber WHERE shopId = ? AND email = ?`, [s.shopId, email]);
+      const row = await db.query<RowDataPacket[]>(
+        `SELECT confirmedAt, confirmTokenHash FROM newslettersubscriber WHERE shopId = ? AND email = ?`,
+        [s.shopId, email],
+      );
       expect(row[0].confirmedAt).toBeNull();
       expect(row[0].confirmTokenHash).toMatch(/^[0-9a-f]{64}$/);
       // Not in the audience yet.
       const c = await newDraft(s);
-      expect(((await http().get(`/campaigns/${c.id}/audience`).set(auth(s.token))).body as Json).count).toBe(0);
+      expect(
+        (
+          (await http().get(`/campaigns/${c.id}/audience`).set(auth(s.token)))
+            .body as Json
+        ).count,
+      ).toBe(0);
       // Recover the token: we know only its hash, so issue a known one.
       const token = randomBytes(16).toString('hex');
       await db.execute(
         `UPDATE newslettersubscriber SET confirmTokenHash = SHA2(?, 256) WHERE shopId = ? AND email = ?`,
         [token, s.shopId, email],
       );
-      const look = await http().get(`/public/newsletter/confirm?token=${token}`).expect(200);
+      const look = await http()
+        .get(`/public/newsletter/confirm?token=${token}`)
+        .expect(200);
       expect((look.body as Json).confirmed).toBe(false);
-      expect((await db.query<RowDataPacket[]>(`SELECT confirmedAt FROM newslettersubscriber WHERE shopId = ? AND email = ?`, [s.shopId, email]))[0].confirmedAt).toBeNull();
-      await http().post(`/public/newsletter/confirm?token=${token}`).expect(201);
-      await http().post(`/public/newsletter/confirm?token=${token}`).expect(201);
-      expect((await db.query<RowDataPacket[]>(`SELECT confirmedAt FROM newslettersubscriber WHERE shopId = ? AND email = ?`, [s.shopId, email]))[0].confirmedAt).not.toBeNull();
-      expect(((await http().get(`/campaigns/${c.id}/audience`).set(auth(s.token))).body as Json).count).toBe(1);
-      await http().post(`/public/newsletter/confirm?token=${'b'.repeat(32)}`).expect(404);
+      expect(
+        (
+          await db.query<RowDataPacket[]>(
+            `SELECT confirmedAt FROM newslettersubscriber WHERE shopId = ? AND email = ?`,
+            [s.shopId, email],
+          )
+        )[0].confirmedAt,
+      ).toBeNull();
+      await http()
+        .post(`/public/newsletter/confirm?token=${token}`)
+        .expect(201);
+      await http()
+        .post(`/public/newsletter/confirm?token=${token}`)
+        .expect(201);
+      expect(
+        (
+          await db.query<RowDataPacket[]>(
+            `SELECT confirmedAt FROM newslettersubscriber WHERE shopId = ? AND email = ?`,
+            [s.shopId, email],
+          )
+        )[0].confirmedAt,
+      ).not.toBeNull();
+      expect(
+        (
+          (await http().get(`/campaigns/${c.id}/audience`).set(auth(s.token)))
+            .body as Json
+        ).count,
+      ).toBe(1);
+      await http()
+        .post(`/public/newsletter/confirm?token=${'b'.repeat(32)}`)
+        .expect(404);
     });
 
     it('re-subscribing an old unconfirmed row sends a confirmation, throttled; a confirmed one is a 409', async () => {
       const s = await setupShop('cf-nl-legacy');
       const email = `old-${s.slug}@mail.test`;
       await newsletter(s.shopId, email, false);
-      await http().post(`/public/${s.slug}/newsletter-subscribe`).send({ email }).expect(201);
-      const first = await db.query<RowDataPacket[]>(`SELECT confirmTokenHash FROM newslettersubscriber WHERE shopId = ?`, [s.shopId]);
+      await http()
+        .post(`/public/${s.slug}/newsletter-subscribe`)
+        .send({ email })
+        .expect(201);
+      const first = await db.query<RowDataPacket[]>(
+        `SELECT confirmTokenHash FROM newslettersubscriber WHERE shopId = ?`,
+        [s.shopId],
+      );
       expect(first[0].confirmTokenHash).not.toBeNull();
-      await http().post(`/public/${s.slug}/newsletter-subscribe`).send({ email }).expect(201);
-      const second = await db.query<RowDataPacket[]>(`SELECT confirmTokenHash FROM newslettersubscriber WHERE shopId = ?`, [s.shopId]);
+      await http()
+        .post(`/public/${s.slug}/newsletter-subscribe`)
+        .send({ email })
+        .expect(201);
+      const second = await db.query<RowDataPacket[]>(
+        `SELECT confirmTokenHash FROM newslettersubscriber WHERE shopId = ?`,
+        [s.shopId],
+      );
       expect(second[0].confirmTokenHash).toBe(first[0].confirmTokenHash);
-      await db.execute(`UPDATE newslettersubscriber SET confirmedAt = NOW() WHERE shopId = ?`, [s.shopId]);
-      await http().post(`/public/${s.slug}/newsletter-subscribe`).send({ email }).expect(409);
+      await db.execute(
+        `UPDATE newslettersubscriber SET confirmedAt = NOW() WHERE shopId = ?`,
+        [s.shopId],
+      );
+      await http()
+        .post(`/public/${s.slug}/newsletter-subscribe`)
+        .send({ email })
+        .expect(409);
     });
 
     it('confirming lifts an unsubscribe suppression but not a bounce', async () => {
@@ -708,29 +1000,51 @@ describe('Email campaigns (e2e)', () => {
       await newsletter(s.shopId, e2, false);
       await suppress(s.shopId, e1, 'unsubscribe');
       await suppress(s.shopId, e2, 'bounce');
-      for (const [email, tok] of [[e1, randomBytes(16).toString('hex')], [e2, randomBytes(16).toString('hex')]]) {
-        await db.execute(`UPDATE newslettersubscriber SET confirmTokenHash = SHA2(?, 256) WHERE shopId = ? AND email = ?`, [tok, s.shopId, email]);
-        await http().post(`/public/newsletter/confirm?token=${tok}`).expect(201);
+      for (const [email, tok] of [
+        [e1, randomBytes(16).toString('hex')],
+        [e2, randomBytes(16).toString('hex')],
+      ]) {
+        await db.execute(
+          `UPDATE newslettersubscriber SET confirmTokenHash = SHA2(?, 256) WHERE shopId = ? AND email = ?`,
+          [tok, s.shopId, email],
+        );
+        await http()
+          .post(`/public/newsletter/confirm?token=${tok}`)
+          .expect(201);
       }
-      const left = await db.query<RowDataPacket[]>(`SELECT email FROM emailsuppression WHERE shopId = ?`, [s.shopId]);
-      expect(left.map((r) => r.email)).toEqual([e2]);
+      const left = await db.query<RowDataPacket[]>(
+        `SELECT email FROM emailsuppression WHERE shopId = ?`,
+        [s.shopId],
+      );
+      expect(left.map((r) => r.email as string)).toEqual([e2]);
     });
   });
 
   describe('tenant isolation', () => {
-    it('every campaign route 404s on another shop\'s campaign', async () => {
+    it("every campaign route 404s on another shop's campaign", async () => {
       const a = await audienceShop('cf-iso-a');
       const b = await setupShop('cf-iso-b');
       const c = await newDraft(a.s);
       const t = auth(b.token);
       await http().get(`/campaigns/${c.id}`).set(t).expect(404);
-      await http().patch(`/campaigns/${c.id}`).set(t).send({ name: 'x' }).expect(404);
+      await http()
+        .patch(`/campaigns/${c.id}`)
+        .set(t)
+        .send({ name: 'x' })
+        .expect(404);
       await http().get(`/campaigns/${c.id}/audience`).set(t).expect(404);
       await http().post(`/campaigns/${c.id}/test`).set(t).expect(404);
       await http().post(`/campaigns/${c.id}/send`).set(t).expect(404);
       await http().post(`/campaigns/${c.id}/cancel`).set(t).expect(404);
-      expect(((await http().get('/campaigns').set(t)).body as unknown[]).length).toBe(0);
-      expect(((await http().get(`/campaigns/${c.id}`).set(auth(a.s.token))).body as Json).status).toBe('draft');
+      expect(
+        ((await http().get('/campaigns').set(t)).body as unknown[]).length,
+      ).toBe(0);
+      expect(
+        (
+          (await http().get(`/campaigns/${c.id}`).set(auth(a.s.token)))
+            .body as Json
+        ).status,
+      ).toBe('draft');
     });
 
     it('a forged shopId/status in the body is rejected, never trusted', async () => {
@@ -743,17 +1057,37 @@ describe('Email campaigns (e2e)', () => {
     it('anonymising a customer scrubs their address from past campaign rows and suppresses it', async () => {
       const s = await setupShop('cf-pdpl');
       const email = `p-${s.slug}@mail.test`;
-      await db.execute(`UPDATE shop SET published = 1 WHERE id = ?`, [s.shopId]);
-      const cust = await registerCustomer(app.getHttpServer(), s.slug, '0501234568', email);
-      await asCustomer(app.getHttpServer(), cust, 'put', `/public/${s.slug}/account/consent`)
+      await db.execute(`UPDATE shop SET published = 1 WHERE id = ?`, [
+        s.shopId,
+      ]);
+      const cust = await registerCustomer(
+        app.getHttpServer(),
+        s.slug,
+        '0501234568',
+        email,
+      );
+      await asCustomer(
+        app.getHttpServer(),
+        cust,
+        'put',
+        `/public/${s.slug}/account/consent`,
+      )
         .send({ channel: 'email', granted: true })
         .expect(200);
       const c = await newDraft(s);
-      await http().post(`/campaigns/${c.id}/send`).set(auth(s.token)).expect(201);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
       await drain(c.id);
       expect(sentTo()).toHaveLength(1);
       const del = (
-        await asCustomer(app.getHttpServer(), cust, 'delete', `/public/${s.slug}/account/me`).expect(202)
+        await asCustomer(
+          app.getHttpServer(),
+          cust,
+          'delete',
+          `/public/${s.slug}/account/me`,
+        ).expect(202)
       ).body as Json;
       await asCustomer(
         app.getHttpServer(),
@@ -761,11 +1095,20 @@ describe('Email campaigns (e2e)', () => {
         'delete',
         `/public/${s.slug}/account/me/confirm?token=${del.confirmationToken}`,
       ).expect(200);
-      const rows = await db.query<RowDataPacket[]>(`SELECT email, status FROM campaignrecipient WHERE campaignId = ?`, [c.id]);
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT email, status FROM campaignrecipient WHERE campaignId = ?`,
+        [c.id],
+      );
       expect(rows).toEqual([{ email: null, status: 'sent' }]);
-      expect(await db.query(`SELECT 1 FROM emailsuppression WHERE shopId = ? AND email = ?`, [s.shopId, email])).toHaveLength(1);
+      expect(
+        await db.query(
+          `SELECT 1 FROM emailsuppression WHERE shopId = ? AND email = ?`,
+          [s.shopId, email],
+        ),
+      ).toHaveLength(1);
       // The old unsubscribe link now finds nothing to act on, and says so generically.
-      const done = ((await http().get(`/campaigns/${c.id}`).set(auth(s.token))).body as Json);
+      const done = (await http().get(`/campaigns/${c.id}`).set(auth(s.token)))
+        .body as Json;
       expect(done.counts.sent).toBe(1);
     });
   });

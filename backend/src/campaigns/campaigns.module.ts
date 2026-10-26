@@ -11,8 +11,17 @@ import { PublicCampaignUnsubscribeController } from './public-campaign-unsubscri
 
 // MKT-1 consent-gated email campaigns (behind the email_campaigns feature key).
 @Module({
-  imports: [AuditLogModule, CustomerCrmModule, JobsModule, SendingDomainsModule],
+  imports: [
+    AuditLogModule,
+    CustomerCrmModule,
+    JobsModule,
+    SendingDomainsModule,
+  ],
   controllers: [CampaignsController, PublicCampaignUnsubscribeController],
-  providers: [CampaignsService, CampaignSenderService, CampaignUnsubscribeService],
+  providers: [
+    CampaignsService,
+    CampaignSenderService,
+    CampaignUnsubscribeService,
+  ],
 })
 export class CampaignsModule {}

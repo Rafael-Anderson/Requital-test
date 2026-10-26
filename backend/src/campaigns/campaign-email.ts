@@ -31,7 +31,9 @@ const ENTITIES: Record<string, string> = {
 export function htmlToText(html: string): string {
   return html
     .replace(/<a\s[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gis, (_m, href, text) => {
-      const label = String(text).replace(/<[^>]+>/g, '').trim();
+      const label = String(text)
+        .replace(/<[^>]+>/g, '')
+        .trim();
       const target = String(href).replace(/&amp;/g, '&');
       return label && label !== target ? `${label} (${target})` : target;
     })
@@ -71,7 +73,8 @@ export function renderCampaignEmail(input: CampaignEmailInput): {
     htmlToText(input.bodyHtml),
     '--',
     reason,
-    identity.join(', ') + (input.contactEmail ? ` (${input.contactEmail})` : ''),
+    identity.join(', ') +
+      (input.contactEmail ? ` (${input.contactEmail})` : ''),
     unsub,
   ].join('\n\n');
   return { html, text };
@@ -80,7 +83,10 @@ export function renderCampaignEmail(input: CampaignEmailInput): {
 // RFC 2369 / RFC 8058. Both the mailto-free https form and the One-Click companion.
 // The URL is built server-side from our own origin and an opaque token; it is
 // still stripped of anything that could end a header value.
-export function unsubscribeHeaders(oneClickUrl: string): Record<string, string> {
+export function unsubscribeHeaders(
+  oneClickUrl: string,
+): Record<string, string> {
+  // eslint-disable-next-line no-control-regex
   const safe = oneClickUrl.replace(/[\s<>\u0000-\u001f]/g, '');
   return {
     'List-Unsubscribe': `<${safe}>`,

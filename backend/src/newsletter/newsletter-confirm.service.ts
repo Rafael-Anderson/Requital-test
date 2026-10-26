@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
@@ -83,10 +87,7 @@ export class NewsletterConfirmService {
     );
     if (res.affectedRows === 0) return;
     const name = shop.displayName || shop.name;
-    const url = storefrontUrl(
-      shop,
-      `/newsletter/confirm?token=${token}`,
-    );
+    const url = storefrontUrl(shop, `/newsletter/confirm?token=${token}`);
     await this.jobs.enqueue(
       shop.id,
       'send_email',
@@ -112,7 +113,8 @@ export class NewsletterConfirmService {
         WHERE n.confirmTokenHash = ? AND s.suspendedAt IS NULL`,
       [hashToken(token)],
     );
-    if (rows.length === 0) throw new NotFoundException('This link is not valid');
+    if (rows.length === 0)
+      throw new NotFoundException('This link is not valid');
     return rows[0];
   }
 
@@ -120,7 +122,7 @@ export class NewsletterConfirmService {
   async lookup(token: string | undefined) {
     const r = await this.findByToken(token);
     return {
-      shopName: ((r.displayName as string | null) || (r.name as string)),
+      shopName: (r.displayName as string | null) || (r.name as string),
       confirmed: r.confirmedAt != null,
     };
   }

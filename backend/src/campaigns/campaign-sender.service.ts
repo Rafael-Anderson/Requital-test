@@ -82,7 +82,10 @@ export class CampaignSenderService implements OnModuleInit {
 
   // The job's own shopId is the tenant; the payload's campaign id is only honoured
   // inside it.
-  async runBatch(p: SendCampaignBatchJobPayload, shopId: number): Promise<void> {
+  async runBatch(
+    p: SendCampaignBatchJobPayload,
+    shopId: number,
+  ): Promise<void> {
     const camps = await this.db.query<RowDataPacket[]>(
       `SELECT id, subject, bodyHtml, status FROM campaign WHERE id = ? AND shopId = ?`,
       [p.campaignId, shopId],
@@ -125,7 +128,8 @@ export class CampaignSenderService implements OnModuleInit {
       [shopId],
     );
     const shop = shopRows[0];
-    const shopName = (shop.displayName as string | null) || (shop.name as string);
+    const shopName =
+      (shop.displayName as string | null) || (shop.name as string);
     const body = sanitizeHtml(campaign.bodyHtml as string).html;
 
     const ids = await this.db.query<RowDataPacket[]>(
@@ -195,11 +199,20 @@ export class CampaignSenderService implements OnModuleInit {
       [recipientId, shopId],
     );
     const email = rows[0]?.email as string | null | undefined;
-    const finish = (status: 'sent' | 'skipped' | 'failed', note: string | null) =>
+    const finish = (
+      status: 'sent' | 'skipped' | 'failed',
+      note: string | null,
+    ) =>
       this.db.execute(
         `UPDATE campaignrecipient SET status = ?, note = ?, sentAt = ?
           WHERE id = ? AND shopId = ? AND status = 'pending'`,
-        [status, note, status === 'sent' ? new Date() : null, recipientId, shopId],
+        [
+          status,
+          note,
+          status === 'sent' ? new Date() : null,
+          recipientId,
+          shopId,
+        ],
       );
     if (!email) {
       await finish('skipped', 'no address');
@@ -221,7 +234,10 @@ export class CampaignSenderService implements OnModuleInit {
       address: c.shop.address as string | null,
       contactEmail: c.shop.email as string | null,
       bodyHtml: c.body,
-      unsubscribeUrl: storefrontUrl(c.shop as never, `/unsubscribe?token=${token}`),
+      unsubscribeUrl: storefrontUrl(
+        c.shop as never,
+        `/unsubscribe?token=${token}`,
+      ),
     });
     try {
       await sendEmailOrThrow(email, c.subject, text, {
@@ -230,7 +246,10 @@ export class CampaignSenderService implements OnModuleInit {
         shopId,
         requireShopIdentity: true,
         headers: unsubscribeHeaders(
-          storefrontUrl(c.shop as never, `/api/public/campaigns/unsubscribe?token=${token}`),
+          storefrontUrl(
+            c.shop as never,
+            `/api/public/campaigns/unsubscribe?token=${token}`,
+          ),
         ),
       });
       await finish('sent', null);

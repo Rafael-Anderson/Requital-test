@@ -40,7 +40,10 @@ export class CampaignsController {
   }
 
   @Get(':id')
-  get(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  get(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.service.get(ctx, id);
   }
 
@@ -63,7 +66,10 @@ export class CampaignsController {
 
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post(':id/test')
-  test(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  test(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.service.sendTest(ctx, id);
   }
 
@@ -71,7 +77,10 @@ export class CampaignsController {
   @RequiresVerifiedEmail({ action: 'sending a campaign' })
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post(':id/send')
-  send(@CurrentUser() ctx: TenantContext, @Param('id', ParseIntPipe) id: number) {
+  send(
+    @CurrentUser() ctx: TenantContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.service.send(ctx, id);
   }
 
