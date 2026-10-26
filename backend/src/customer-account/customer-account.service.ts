@@ -14,6 +14,7 @@ import { isDuplicateKeyError } from '../database/mysql-errors';
 import { buildSetClause } from '../database/update.util';
 import { trimDecimal } from '../database/decimal.util';
 import type { RowDataPacket } from 'mysql2/promise';
+import { normalizePhoneToE164 } from '../common/phone';
 import type { CustomerRow, ShopRow } from '../db/types';
 import type { CustomerContext } from '../customer-auth/customer-context';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -242,6 +243,8 @@ export class CustomerAccountService {
     return {
       exportedAt: new Date().toISOString(),
       profile: this.toProfileResponse(customer),
+      // When the holder last proved control of the phone with a one-time code.
+      phoneVerifiedAt: customer.phoneVerifiedAt,
       addresses: (customer.addresses as CustomerAddress[] | null) ?? [],
       wishlist: this.readWishlist(customer),
       // Custom-field values the merchant holds on this customer (personal
@@ -386,8 +389,28 @@ export class CustomerAccountService {
   // scope for this deletion, per the task), only the customer's own PII is
   // scrubbed.
   private async anonymiseCustomer(shopId: number, customerId: number) {
+    // One-time-code rows are keyed by the phone itself, which the UPDATE below
+    // overwrites, so they are deleted first (they hold only a code hash and a
+    // proof hash, but the phone is the personal data).
+    const phoneRows = await this.db.query<RowDataPacket[]>(
+      `SELECT c.phone, s.countryCode FROM customer c JOIN shop s ON s.id = c.shopId
+        WHERE c.id = ? AND c.shopId = ?`,
+      [customerId, shopId],
+    );
+    if (phoneRows[0]) {
+      const e164 = normalizePhoneToE164(
+        String(phoneRows[0].phone),
+        phoneRows[0].countryCode as string | null,
+      );
+      if (e164) {
+        await this.db.execute(
+          `DELETE FROM phoneotp WHERE shopId = ? AND phone = ?`,
+          [shopId, e164],
+        );
+      }
+    }
     await this.db.execute(
-      `UPDATE customer SET name = ?, email = ?, phone = ?, birthday = NULL, addresses = NULL, wishlist = NULL, passwordHash = NULL, verifiedEmail = NULL, emailVerifiedAt = NULL WHERE id = ?`,
+      `UPDATE customer SET name = ?, email = ?, phone = ?, birthday = NULL, addresses = NULL, wishlist = NULL, passwordHash = NULL, verifiedEmail = NULL, emailVerifiedAt = NULL, phoneVerifiedAt = NULL WHERE id = ?`,
       [
         'Deleted User',
         // Derived from the customer's own (globally unique) id, not a

@@ -29,6 +29,13 @@ export class RegisterCustomerDto {
   @MaxLength(255)
   email?: string;
 
+  // Proof from POST .../auth/phone-otp/verify. Read only for a shop with
+  // phone_otp_register on; ignored otherwise.
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  phoneProof?: string;
+
   @IsString()
   @MinLength(8)
   @MaxLength(72) // bcrypt silently truncates beyond 72 bytes
