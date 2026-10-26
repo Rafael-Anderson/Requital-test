@@ -24,11 +24,13 @@ export function sendEmailStub(
   subject: string,
   bodyText: string,
   sensitive = false,
+  headers?: Record<string, string>,
 ): void {
   // A message holding a live secret (delivery code, driver link) never reaches
   // the log, not even in the stub.
   const shown = sensitive ? '[withheld: sensitive]' : bodyText;
-  console.log(`[email:stub] to=${to} subject="${subject}"\n${shown}`);
+  const extra = headers ? ` headers=${JSON.stringify(headers)}` : '';
+  console.log(`[email:stub] to=${to} subject="${subject}"${extra}\n${shown}`);
 }
 
 // Exported for reuse by every call site's own HTML email template (see
@@ -95,6 +97,12 @@ interface SendEmailOptions {
   // that names the shop as sender); platform mail (no fromName) always goes
   // from the platform address even when a shopId is known.
   shopId?: number;
+  // MKT-1: extra headers (List-Unsubscribe). Stripped of CR/LF by the provider.
+  headers?: Record<string, string>;
+  // MKT-1: bulk mail must leave from the shop's VERIFIED sending domain and never
+  // fall back to the platform address (that would send marketing as Requital).
+  // With this set and no verified identity (or a failed first send) the call throws.
+  requireShopIdentity?: boolean;
 }
 
 // Same real-vs-stub resolution as sendEmail() below, but lets a real
@@ -121,7 +129,7 @@ export async function sendEmailOrThrow(
   // that real round-trip, multiplied across dozens of specs, is what was
   // making the e2e suite flaky under load.
   if (!apiKey || apiKey === 'test') {
-    sendEmailStub(to, subject, bodyText, options.sensitive);
+    sendEmailStub(to, subject, bodyText, options.sensitive, options.headers);
     return;
   }
   const provider = new ResendEmailProvider();
@@ -134,6 +142,7 @@ export async function sendEmailOrThrow(
     // A shop-named mail that leaves from the platform address is shown as
     // "<shop> via Requital"; platform mail keeps plain "Requital".
     viaPlatform: options.fromName !== undefined,
+    headers: options.headers,
     credentials: { apiKey },
   };
   let identity: SendingIdentity | null = null;
@@ -150,6 +159,11 @@ export async function sendEmailOrThrow(
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+  if (options.requireShopIdentity) {
+    if (!identity) throw new Error('shop sending domain is not verified');
+    await provider.sendEmail({ ...params, ...identity, viaPlatform: false });
+    return;
   }
   if (identity) {
     try {

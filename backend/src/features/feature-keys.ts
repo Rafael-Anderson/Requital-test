@@ -125,6 +125,17 @@ export const FEATURE_KEYS = {
     default: false,
     description: 'Phone one-time code required to register a storefront account',
   },
+  // MKT-1. Gates the campaign admin routes, the send itself (re-checked by every
+  // batch, so switching it off stops an in-flight campaign) and the newsletter
+  // double opt-in email. Ships off; the platform turns it on per shop. BEFORE
+  // enabling it for a shop: the shop needs a VERIFIED sending domain (the only
+  // way a campaign is sent), and the merchant should know that unconfirmed
+  // newsletter rows and customers with no recorded email consent are never mailed.
+  email_campaigns: {
+    source: 'table',
+    default: false,
+    description: 'Consent-gated email campaigns and newsletter confirmation',
+  },
 } as const satisfies Record<string, FeatureDef>;
 
 export type FeatureKey = keyof typeof FEATURE_KEYS;

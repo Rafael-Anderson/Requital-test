@@ -9,7 +9,8 @@ export type JobType =
   | 'recompute_customer_metrics'
   | 'send_conversion_event'
   | 'import_copy_image'
-  | 'delete_proof_photo';
+  | 'delete_proof_photo'
+  | 'send_campaign_batch';
 
 export interface SendEmailJobPayload {
   to: string;
@@ -117,7 +118,16 @@ export interface DeleteProofPhotoJobPayload {
   key: string;
 }
 
+// MKT-1: one throttled batch of a campaign's fan-out. Carries ids only (no address,
+// no body): the handler re-reads everything, and re-checks consent per recipient.
+// `batch` makes each chained job's idempotency key distinct.
+export interface SendCampaignBatchJobPayload {
+  campaignId: number;
+  batch: number;
+}
+
 export type JobPayload =
+  | SendCampaignBatchJobPayload
   | DeleteProofPhotoJobPayload
   | SendEmailJobPayload
   | SendMerchantWhatsAppAlertJobPayload
