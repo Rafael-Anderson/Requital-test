@@ -22,7 +22,7 @@ interface OutletRow {
   id: number;
 }
 interface CreateOrderResponseBody {
-  order: { id: number };
+  order: { id: number; trackingToken: string };
 }
 interface ExternalDelivery {
   status: string;
@@ -780,6 +780,155 @@ describe('Slider delivery integration (e2e)', () => {
     expect(typeof sent.payment_on_delivery.amount).toBe('number');
     expect(Number.isInteger(sent.payment_on_delivery.amount * 100)).toBe(true);
     expect(sent).not.toHaveProperty('schedule_at');
+  });
+
+  // F1: the dropoff point is the customer's own map pin, not a re-geocode of the
+  // typed text. The mocked Nominatim answers 25.10 / 55.20 for every address, so
+  // a pin anywhere else on the wire can only have come from the stored column.
+  describe('dropoff pin (F1)', () => {
+    const PIN = { lat: 25.22, lng: 55.31 };
+    const GEOCODED = { lat: 25.1, lng: 55.2 };
+
+    async function orderWithPin(
+      pin: { lat: number; lng: number } | null,
+      extra: Record<string, unknown> = {},
+    ) {
+      const res = await request(app.getHttpServer())
+        .post(`/public/${shopSlug}/orders`)
+        .send({
+          outletId,
+          customerName: 'Pin Customer',
+          customerPhone: '0501234567',
+          customerAddress: '1 Sheikh Zayed Rd',
+          orderType: 'delivery',
+          paymentMethod: 'cash_on_delivery',
+          ...(pin ? { latitude: pin.lat, longitude: pin.lng } : {}),
+          items: [{ productId, quantity: 1 }],
+          ...extra,
+        })
+        .expect(201);
+      return body<CreateOrderResponseBody>(res).order;
+    }
+    async function dispatchDropoff(orderId: number) {
+      distanceKm = 5;
+      lastCreateBody = null;
+      await request(app.getHttpServer())
+        .post(`/orders/${orderId}/slider-delivery`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ vehicleType: 'bike' })
+        .expect(201);
+      return lastCreateBody!.dropoff;
+    }
+    async function setStoredPin(
+      orderId: number,
+      lat: number | null,
+      lng: number | null,
+    ) {
+      await db.execute(
+        `UPDATE \`order\` SET dropoffLatitude = ?, dropoffLongitude = ? WHERE id = ? AND shopId = ?`,
+        [lat, lng, orderId, shopId],
+      );
+    }
+
+    it('stores the shopper pin at checkout and sends exactly it as the Slider dropoff', async () => {
+      const order = await orderWithPin(PIN);
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT dropoffLatitude, dropoffLongitude FROM \`order\` WHERE id = ? AND shopId = ?`,
+        [order.id, shopId],
+      );
+      expect(rows[0].dropoffLatitude).toBeCloseTo(PIN.lat, 6);
+      expect(rows[0].dropoffLongitude).toBeCloseTo(PIN.lng, 6);
+      const dropoff = await dispatchDropoff(order.id);
+      expect(dropoff.latitude).toBe(PIN.lat);
+      expect(dropoff.longitude).toBe(PIN.lng);
+    });
+
+    it('the quote is priced from the pin too (the geocoder is not asked)', async () => {
+      const order = await orderWithPin(PIN);
+      const nominatim = (global.fetch as unknown as jest.Mock).mock;
+      const before = nominatim.calls.filter((c: [string]) =>
+        c[0].includes('nominatim'),
+      ).length;
+      await request(app.getHttpServer())
+        .post(`/orders/${order.id}/slider-delivery/quote`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(201);
+      const after = nominatim.calls.filter((c: [string]) =>
+        c[0].includes('nominatim'),
+      ).length;
+      expect(after).toBe(before);
+    });
+
+    it('falls back to geocoding the address when the order has no pin', async () => {
+      const order = await orderWithPin(PIN);
+      await setStoredPin(order.id, null, null);
+      const dropoff = await dispatchDropoff(order.id);
+      expect(dropoff.latitude).toBe(GEOCODED.lat);
+      expect(dropoff.longitude).toBe(GEOCODED.lng);
+    });
+
+    it.each([
+      ['(0, 0)', 0, 0],
+      ['latitude out of range', 95, 55.3],
+      ['longitude out of range', 25.2, 200],
+      ['outside the UAE', 48.85, 2.35],
+    ])(
+      'ignores an unusable stored pin (%s) and geocodes instead',
+      async (_n, lat, lng) => {
+        const order = await orderWithPin(PIN);
+        await setStoredPin(order.id, lat, lng);
+        const dropoff = await dispatchDropoff(order.id);
+        expect(dropoff.latitude).toBe(GEOCODED.lat);
+        expect(dropoff.longitude).toBe(GEOCODED.lng);
+      },
+    );
+
+    it('stores no pin for a pickup order or a typed-address (Maps unavailable) order', async () => {
+      const pickup = await orderWithPin(PIN, {
+        orderType: 'pickup',
+        paymentMethod: 'cash_on_pickup',
+      });
+      const manual = await orderWithPin(null, { addressManual: true });
+      // A client that claims Maps was unavailable AND sends a pin is not trusted
+      // for a dropoff either.
+      const both = await orderWithPin(PIN, { addressManual: true });
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT id, dropoffLatitude, dropoffLongitude FROM \`order\` WHERE id IN (?, ?, ?)`,
+        [pickup.id, manual.id, both.id],
+      );
+      expect(rows).toHaveLength(3);
+      for (const r of rows) {
+        expect(r.dropoffLatitude).toBeNull();
+        expect(r.dropoffLongitude).toBeNull();
+      }
+    });
+
+    it('never returns the pin to a client (checkout response, staff list and detail, tracking)', async () => {
+      const order = await orderWithPin(PIN);
+      expect(order).not.toHaveProperty('dropoffLatitude');
+      expect(order).not.toHaveProperty('dropoffLongitude');
+      const detail = await request(app.getHttpServer())
+        .get(`/orders/${order.id}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(JSON.stringify(detail.body)).not.toMatch(
+        /dropoff(Latitude|Longitude)/,
+      );
+      const list = await request(app.getHttpServer())
+        .get('/orders')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(JSON.stringify(list.body)).not.toMatch(
+        /dropoff(Latitude|Longitude)/,
+      );
+      const tracking = await request(app.getHttpServer())
+        .get(`/public/orders/lookup`)
+        .query({ token: order.trackingToken, shop: shopSlug })
+        .expect(200);
+      expect(JSON.stringify(tracking.body)).not.toMatch(
+        /dropoff(Latitude|Longitude)/,
+      );
+    });
   });
 
   it('refuses to dispatch from an outlet with no phone number instead of sending Slider an empty contact_number', async () => {

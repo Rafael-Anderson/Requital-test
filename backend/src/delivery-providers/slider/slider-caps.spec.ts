@@ -2,6 +2,7 @@ import {
   assertPaymentOnDeliveryWithinCap,
   assertScheduleAtOk,
   assertVehicleDistanceOk,
+  isWithinUae,
 } from './slider-caps';
 
 describe('slider-caps', () => {
@@ -105,5 +106,14 @@ describe('assertPaymentOnDeliveryWithinCap currency guard', () => {
     expect(() =>
       assertPaymentOnDeliveryWithinCap('card_online', 9999, 'AED'),
     ).not.toThrow();
+  });
+});
+
+describe('isWithinUae', () => {
+  it('accepts UAE cities and rejects points elsewhere', () => {
+    expect(isWithinUae(25.2048, 55.2708)).toBe(true); // Dubai
+    expect(isWithinUae(24.4539, 54.3773)).toBe(true); // Abu Dhabi
+    expect(isWithinUae(24.7136, 46.6753)).toBe(false); // Riyadh
+    expect(isWithinUae(48.85, 2.35)).toBe(false);
   });
 });

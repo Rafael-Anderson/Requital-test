@@ -1,4 +1,4 @@
-import { haversineDistanceKm } from './geo';
+import { haversineDistanceKm, isUsablePin } from './geo';
 
 // Known-value checks derived from closed-form geodesy identities (not
 // dependent on any "real-world" city-pair distance I might misremember):
@@ -34,5 +34,19 @@ describe('haversineDistanceKm', () => {
     const a = haversineDistanceKm(25.2048, 55.2708, 24.4539, 54.3773);
     const b = haversineDistanceKm(24.4539, 54.3773, 25.2048, 55.2708);
     expect(a).toBeCloseTo(b, 9);
+  });
+});
+
+describe('isUsablePin', () => {
+  it('accepts a real pair and rejects (0,0), out of range, non-finite and non-numbers', () => {
+    expect(isUsablePin(25.2, 55.3)).toBe(true);
+    expect(isUsablePin(0, 55.3)).toBe(true);
+    expect(isUsablePin(0, 0)).toBe(false);
+    expect(isUsablePin(91, 10)).toBe(false);
+    expect(isUsablePin(10, -181)).toBe(false);
+    expect(isUsablePin(NaN, 10)).toBe(false);
+    expect(isUsablePin(10, Infinity)).toBe(false);
+    expect(isUsablePin(null, null)).toBe(false);
+    expect(isUsablePin('25.2', '55.3')).toBe(false);
   });
 });
