@@ -354,6 +354,11 @@ describe('Loyalty (e2e)', () => {
       expect(await balance(customer.customerId)).toBe(0);
       const rows = await entries(customer.customerId);
       expect(rows.filter((r) => r.entryType === 'clawback')).toHaveLength(2);
+      // exact: the two clawbacks sum to what was earned, no shortfall (a second
+      // return must not re-take what the first already took)
+      const claws = rows.filter((r) => r.entryType === 'clawback');
+      expect(claws.reduce((a, r) => a + (r.points as number), 0)).toBe(-earned);
+      expect(claws.every((r) => r.shortfall === 0)).toBe(true);
       // each return has exactly one clawback (unique returnId, entryType)
       const dup = await db.query<RowDataPacket[]>(
         `SELECT returnId, COUNT(*) AS n FROM loyaltyentry WHERE entryType = 'clawback' AND customerId = ? GROUP BY returnId HAVING n > 1`,
@@ -456,6 +461,21 @@ describe('Loyalty (e2e)', () => {
         'post',
         `/customers/${a.customer.customerId}/loyalty/adjustments`,
         { points: 70, reason: 'goodwill' },
+      ).expect(201);
+      // an earn job pointed at another shop's delivered order writes nothing
+      const aOrder = await delivered(a.shop, a.customer, a.product.id);
+      await loyalty
+        .earnForOrder({ shopId: b.shop.shopId, orderId: aOrder })
+        .catch(() => undefined);
+      expect(await balance(a.customer.customerId)).toBe(70);
+      await drain(aOrder);
+      const afterEarn = await balance(a.customer.customerId);
+      expect(afterEarn).toBeGreaterThan(70);
+      await admin(
+        a.shop,
+        'post',
+        `/customers/${a.customer.customerId}/loyalty/adjustments`,
+        { points: 70 - afterEarn, reason: 'reset' },
       ).expect(201);
       await admin(
         b.shop,
