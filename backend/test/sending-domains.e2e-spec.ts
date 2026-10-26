@@ -281,7 +281,9 @@ describe('Shop sending domains (e2e)', () => {
     // pending: platform address, shop display name honoured
     await put(a.token, domain).expect(200);
     let sent = await sendJob(a.shopId, { fromName: 'Rose Shop' });
-    expect(sent.at(-1)!.from).toBe('"Rose Shop" <noreply@requital.io>');
+    expect(sent.at(-1)!.from).toBe(
+      '"Rose Shop via Requital" <noreply@requital.io>',
+    );
     expect(sent.at(-1)!.reply_to).toBeUndefined();
 
     await verifyViaProvider(a.token, domain);
@@ -309,7 +311,7 @@ describe('Shop sending domains (e2e)', () => {
     // another shop never borrows A's domain
     fetchSpy.mockClear();
     sent = await sendJob(other.shopId, { fromName: 'Other' });
-    expect(sent[0].from).toBe('"Other" <noreply@requital.io>');
+    expect(sent[0].from).toBe('"Other via Requital" <noreply@requital.io>');
 
     // domain send rejected by the provider -> retried from the platform address
     fetchSpy.mockReset();
@@ -323,7 +325,7 @@ describe('Shop sending domains (e2e)', () => {
     sent = await sendJob(a.shopId, { fromName: 'Rose Shop' });
     expect(sent).toHaveLength(2);
     expect(sent[0].from).toBe(`"Rose Shop" <noreply@${domain}>`);
-    expect(sent[1].from).toBe('"Rose Shop" <noreply@requital.io>');
+    expect(sent[1].from).toBe('"Rose Shop via Requital" <noreply@requital.io>');
 
     // removing the domain stops using it at once
     fetchSpy.mockReset();
@@ -331,7 +333,7 @@ describe('Shop sending domains (e2e)', () => {
     await del(a.token).expect(200);
     expect(fake.calls.some((c) => c.startsWith('delete:'))).toBe(true);
     sent = await sendJob(a.shopId, { fromName: 'Rose Shop' });
-    expect(sent[0].from).toBe('"Rose Shop" <noreply@requital.io>');
+    expect(sent[0].from).toBe('"Rose Shop via Requital" <noreply@requital.io>');
     expect(((await get(a.token)).body as Json).sendingDomain).toBeNull();
   });
 
@@ -346,7 +348,7 @@ describe('Shop sending domains (e2e)', () => {
     await verifyViaProvider(a.token, d1);
     await put(a.token, domainFor('repl2')).expect(200);
     const sent = await sendJob(a.shopId, { fromName: 'R' });
-    expect(sent[0].from).toBe('"R" <noreply@requital.io>');
+    expect(sent[0].from).toBe('"R via Requital" <noreply@requital.io>');
   });
 
   it('provider outage: PUT fails 503 and stores nothing; verify keeps state and reports a generic error', async () => {
@@ -379,6 +381,8 @@ describe('Shop sending domains (e2e)', () => {
       `UPDATE shopsendingdomain SET claimedAt = DATE_SUB(NOW(), INTERVAL 49 HOUR) WHERE shopId = ?`,
       [b.shopId],
     );
+    const idOld = fake.idFor(db2)!;
+    const idNew = fake.idFor(da)!;
     await svc.runSweep();
     expect(((await get(a.token)).body as Json).sendingDomain?.status).toBe(
       'verified',
@@ -386,5 +390,48 @@ describe('Shop sending domains (e2e)', () => {
     expect(((await get(b.token)).body as Json).sendingDomain?.status).toBe(
       'failed',
     );
+    // The expired claim's provider registration was released; the verified
+    // one's was not.
+    expect(fake.calls).toContain(`delete:${idOld}`);
+    expect(fake.calls).not.toContain(`delete:${idNew}`);
+    const rows = await db.query<RowDataPacket[]>(
+      `SELECT providerDomainId p FROM shopsendingdomain WHERE shopId = ?`,
+      [b.shopId],
+    );
+    expect(rows[0].p).toBeNull();
+  });
+
+  it('sweep asks the provider to re-check pending claims (once per tick) and releases nothing it should keep', async () => {
+    const a = await setupShop('sd-sweepreq');
+    const d = domainFor('sweepreq');
+    await put(a.token, d).expect(200);
+    const id = fake.idFor(d)!;
+    await svc.runSweep();
+    expect(fake.calls.filter((c) => c === `verify:${id}`)).toHaveLength(1);
+    // A second immediate sweep is inside the backoff window: no second ask.
+    await svc.runSweep();
+    expect(fake.calls.filter((c) => c === `verify:${id}`)).toHaveLength(1);
+  });
+
+  it('PUT for a domain already registered at the provider returns a clear 409, not a 503, and stores nothing', async () => {
+    const a = await setupShop('sd-dupe');
+    fake.alreadyRegisteredNext();
+    const r = await put(a.token, domainFor('dupe')).expect(409);
+    expect((r.body as { message: string }).message).toMatch(
+      /already registered with the email provider.*support/i,
+    );
+    expect(((await get(a.token)).body as Json).sendingDomain).toBeNull();
+  });
+
+  it('a shop name that looks like an address cannot impersonate on the platform domain', async () => {
+    const a = await setupShop('sd-imp');
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ id: 'x' }),
+    });
+    const sent = await sendJob(a.shopId, {
+      fromName: 'support@paypal.com\u202e',
+    });
+    expect(sent[0].from).toBe('"support via Requital" <noreply@requital.io>');
   });
 });

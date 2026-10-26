@@ -1,4 +1,8 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import {
   RESEND_DOMAINS_ASSUMPTIONS as A,
   mapProviderStatus,
@@ -30,6 +34,10 @@ export interface SendingDomainsClient {
   deleteDomain(providerId: string): Promise<void>;
 }
 
+export const ALREADY_REGISTERED =
+  'This domain is already registered with the email provider. Contact support.';
+const REQUEST_TIMEOUT_MS = 10_000;
+
 export const SENDING_DOMAINS_CLIENT = Symbol('SENDING_DOMAINS_CLIENT');
 
 interface RawRecord {
@@ -58,17 +66,37 @@ export class ResendDomainsClient implements SendingDomainsClient {
     method: string,
     path: string,
     body?: unknown,
+    isCreate = false,
   ): Promise<RawDomain> {
-    const res = await fetch(`${A.baseUrl}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${A.baseUrl}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        // A hung provider must not hold a request (or a sweep tick) open.
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      // Timeout or network failure; the error text could carry request detail.
+      throw new ServiceUnavailableException(
+        'Sending domain provider unreachable',
+      );
+    }
     const data = (await res.json().catch(() => ({}))) as RawDomain;
     if (!res.ok) {
+      if (
+        isCreate &&
+        ((A.alreadyRegisteredStatuses as readonly number[]).includes(
+          res.status,
+        ) ||
+          A.alreadyRegisteredPattern.test(data.message ?? ''))
+      ) {
+        throw new ConflictException(ALREADY_REGISTERED);
+      }
       // Status code only: the provider's message could echo request detail.
       throw new ServiceUnavailableException(
         `Sending domain provider error (${res.status})`,
@@ -92,7 +120,12 @@ export class ResendDomainsClient implements SendingDomainsClient {
   }
 
   async createDomain(domain: string): Promise<ProviderDomain> {
-    const d = await this.call('POST', '', { [A.createBodyField]: domain });
+    const d = await this.call(
+      'POST',
+      '',
+      { [A.createBodyField]: domain },
+      true,
+    );
     if (!d.id)
       throw new ServiceUnavailableException('Sending domain provider error');
     return ResendDomainsClient.shape(d);

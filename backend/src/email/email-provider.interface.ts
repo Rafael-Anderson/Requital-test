@@ -10,6 +10,10 @@ export interface SendEmailParams {
   // MKT-3: full From address on a shop's VERIFIED sending domain (e.g.
   // noreply@shop.com). Absent = the platform address. fromName is always the
   // display name, sanitised by the provider.
+  // True when this mail names a shop as sender but leaves from the PLATFORM
+  // address: the display name is then rendered "<name> via Requital" with
+  // address-like text removed (a shop must not impersonate on our domain).
+  viaPlatform?: boolean;
   fromAddress?: string;
   // Reply-To, set together with fromAddress (the shop's own contact email).
   replyTo?: string;

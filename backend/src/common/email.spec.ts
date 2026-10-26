@@ -73,7 +73,9 @@ describe('sendEmail', () => {
     const [, init] = fetchSpy.mock.calls[0];
     expect(init.headers.Authorization).toBe('Bearer real-key');
     const sentBody = JSON.parse(init.body);
-    expect(sentBody.from).toBe('"Test Shop" <noreply@requital.io>');
+    expect(sentBody.from).toBe(
+      '"Test Shop via Requital" <noreply@requital.io>',
+    );
     expect(sentBody.text).toBe(
       'Thanks for your order.\n\nSee it here: https://example.com/o/1',
     );
@@ -209,7 +211,7 @@ describe('shop sending identity (MKT-3)', () => {
       shopId: 7,
     });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(bodyOf(1).from).toBe('"Roses" <noreply@requital.io>');
+    expect(bodyOf(1).from).toBe('"Roses via Requital" <noreply@requital.io>');
     expect(bodyOf(1).reply_to).toBeUndefined();
   });
 
@@ -221,7 +223,7 @@ describe('shop sending identity (MKT-3)', () => {
       shopId: 7,
     });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(bodyOf(0).from).toBe('"Roses" <noreply@requital.io>');
+    expect(bodyOf(0).from).toBe('"Roses via Requital" <noreply@requital.io>');
   });
 
   it('platform mail (no fromName) never uses a shop domain, shopId or not', async () => {

@@ -131,6 +131,9 @@ export async function sendEmailOrThrow(
     text: bodyText,
     html: options.html ?? textToSimpleHtml(bodyText),
     fromName: options.fromName ?? 'Requital',
+    // A shop-named mail that leaves from the platform address is shown as
+    // "<shop> via Requital"; platform mail keeps plain "Requital".
+    viaPlatform: options.fromName !== undefined,
     credentials: { apiKey },
   };
   let identity: SendingIdentity | null = null;
@@ -150,7 +153,7 @@ export async function sendEmailOrThrow(
   }
   if (identity) {
     try {
-      await provider.sendEmail({ ...params, ...identity });
+      await provider.sendEmail({ ...params, ...identity, viaPlatform: false });
       return;
     } catch (err) {
       // Never lose a transactional mail to a domain problem: retry once from

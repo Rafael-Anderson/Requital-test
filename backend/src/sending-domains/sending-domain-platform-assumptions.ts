@@ -26,6 +26,15 @@ export const RESEND_DOMAINS_ASSUMPTIONS = {
   // is not exactly 'verified' or 'failed' to "still waiting" (see mapStatus).
   verifiedStatus: 'verified',
   failedStatuses: ['failed', 'temporary_failure'],
+  // UNVERIFIED: a create for a domain already registered in the Resend account
+  // (for example another shop's, or a leftover) answers one of these statuses,
+  // or a message matching the pattern. We turn it into a clear "already
+  // registered, contact support" error instead of a generic 503.
+  alreadyRegisteredStatuses: [409, 422],
+  alreadyRegisteredPattern: /already|exist|registered/i,
+  // UNVERIFIED: POST :id/verify is what asks Resend to re-check DNS; Resend may
+  // not re-check on its own schedule. The sweep therefore calls it once per
+  // claim per backoff tick (idempotent as far as we know).
   // UNVERIFIED: Resend limits how many domains an account may hold (plan
   // dependent) and rate-limits the API (about 2 requests per second is
   // remembered). The 429/limit failure is surfaced to the merchant as a generic

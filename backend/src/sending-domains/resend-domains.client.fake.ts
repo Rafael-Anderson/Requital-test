@@ -1,4 +1,5 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
+import { ALREADY_REGISTERED } from './sending-domains.client';
 import type {
   ProviderDomain,
   SendingDomainRecord,
@@ -16,9 +17,14 @@ export class FakeSendingDomainsClient implements SendingDomainsClient {
     ProviderDomain & { name: string }
   >();
   private failures = 0;
+  private registeredNext = false;
 
   failNext(n = 1) {
     this.failures = n;
+  }
+  // The next createDomain answers "already registered" like the real client.
+  alreadyRegisteredNext() {
+    this.registeredNext = true;
   }
   setStatus(providerId: string, status: ProviderDomain['status']) {
     const d = this.domains.get(providerId);
@@ -62,6 +68,10 @@ export class FakeSendingDomainsClient implements SendingDomainsClient {
   createDomain(name: string): Promise<ProviderDomain> {
     this.calls.push(`create:${name}`);
     this.maybeFail();
+    if (this.registeredNext) {
+      this.registeredNext = false;
+      throw new ConflictException(ALREADY_REGISTERED);
+    }
     const providerId = `fake-dom-${++this.seq}`;
     const d = {
       providerId,

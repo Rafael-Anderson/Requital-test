@@ -200,9 +200,12 @@ export class SendingDomainsService implements OnModuleInit {
 
     let status;
     try {
-      if (trigger === 'manual') {
-        await this.client.requestVerification(row.providerDomainId);
-      }
+      // Ask the provider to re-check DNS (UNVERIFIED that it does so alone), for
+      // the manual button and once per sweep tick. Best effort: the status read
+      // below is what decides.
+      await this.client
+        .requestVerification(row.providerDomainId)
+        .catch(() => undefined);
       status = (await this.client.getDomain(row.providerDomainId)).status;
     } catch (err) {
       logger.warn('sending domain provider check failed', {
@@ -242,11 +245,12 @@ export class SendingDomainsService implements OnModuleInit {
         return { status: 'verified', verified: true };
       } catch (err) {
         if (isDuplicateKeyError(err) || isLockConflict(err)) {
-          await this.db.execute(
+          const lost = await this.db.execute(
             `UPDATE shopsendingdomain SET status = 'failed', lastCheckedAt = ?, lastError = ?
              WHERE shopId = ? AND id = ? AND status IN ${ACTIVE}`,
             [now, 'That domain is used by another store.', shopId, row.id],
           );
+          if (lost.affectedRows === 1) await this.releaseProvider(row);
           throw new ConflictException(
             'That domain was just verified by another store.',
           );
@@ -256,11 +260,12 @@ export class SendingDomainsService implements OnModuleInit {
     }
 
     if (status === 'failed') {
-      await this.db.execute(
+      const failedNow = await this.db.execute(
         `UPDATE shopsendingdomain SET status = 'failed', lastCheckedAt = ?, lastError = ?
          WHERE shopId = ? AND id = ? AND status IN ${ACTIVE}`,
         [now, 'The provider could not verify the DNS records.', shopId, row.id],
       );
+      if (failedNow.affectedRows === 1) await this.releaseProvider(row);
       return {
         status: 'failed',
         verified: false,
@@ -279,6 +284,26 @@ export class SendingDomainsService implements OnModuleInit {
       message:
         'The DNS records are not visible yet. DNS changes can take a while to propagate.',
     };
+  }
+
+  // A failed claim no longer needs its provider registration: delete it so a
+  // slot (and the hostname) is not held. Best effort, outside any transaction;
+  // errors are swallowed and logged as their status-only message.
+  private async releaseProvider(row: DomainRow): Promise<void> {
+    if (!row.providerDomainId) return;
+    try {
+      await this.client.deleteDomain(row.providerDomainId);
+      await this.db.execute(
+        `UPDATE shopsendingdomain SET providerDomainId = NULL
+         WHERE shopId = ? AND id = ? AND status = 'failed' AND providerDomainId = ?`,
+        [row.shopId, row.id, row.providerDomainId],
+      );
+    } catch (err) {
+      logger.warn('provider release of failed sending domain failed', {
+        shopId: row.shopId,
+        error: err instanceof Error ? err.message : 'error',
+      });
+    }
   }
 
   async verify(ctx: TenantContext): Promise<VerifyResult> {
@@ -342,13 +367,15 @@ export class SendingDomainsService implements OnModuleInit {
 
   async runSweep(): Promise<void> {
     const rows = await this.db.query<DomainRow[]>(
-      `SELECT * FROM shopsendingdomain WHERE status IN ${ACTIVE}`,
+      // Oldest-checked first so a backlog is drained fairly across ticks.
+      `SELECT * FROM shopsendingdomain WHERE status IN ${ACTIVE}
+       ORDER BY lastCheckedAt IS NULL DESC, lastCheckedAt ASC LIMIT 100`,
     );
     const now = Date.now();
     for (const row of rows) {
       const ageMs = now - new Date(row.claimedAt).getTime();
       if (ageMs > FAIL_AFTER_MS) {
-        await this.db.execute(
+        const expired = await this.db.execute(
           `UPDATE shopsendingdomain SET status = 'failed', lastCheckedAt = ?, lastError = ?
            WHERE shopId = ? AND id = ? AND status IN ${ACTIVE}`,
           [
@@ -358,6 +385,9 @@ export class SendingDomainsService implements OnModuleInit {
             row.id,
           ],
         );
+        // Free the provider-side slot only if THIS update made it failed (a
+        // claim that verified in the meantime is never released).
+        if (expired.affectedRows === 1) await this.releaseProvider(row);
         continue;
       }
       const intervalMs =

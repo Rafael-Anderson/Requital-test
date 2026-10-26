@@ -110,6 +110,31 @@ describe('ResendEmailProvider', () => {
       expect(body.reply_to).toBe('hello@roses.com');
     });
 
+    it('renders "<name> via Requital" on the platform address for shop mail', async () => {
+      const body = await send({
+        fromName: 'support@paypal.com',
+        viaPlatform: true,
+      });
+      expect(body.from).toBe('"support via Requital" <noreply@requital.io>');
+    });
+
+    it('keeps the plain shop name on a verified shop domain even with viaPlatform set', async () => {
+      const body = await send({
+        fromName: 'Rose Shop',
+        viaPlatform: true,
+        fromAddress: 'noreply@roses.com',
+      });
+      expect(body.from).toBe('"Rose Shop" <noreply@roses.com>');
+    });
+
+    it('a right-to-left override in the name cannot reach the header', async () => {
+      const body = await send({
+        fromName: 'Evil\u202e Shop',
+        viaPlatform: true,
+      });
+      expect(body.from).not.toContain('\u202e');
+    });
+
     it.each([
       [
         'CRLF header injection',

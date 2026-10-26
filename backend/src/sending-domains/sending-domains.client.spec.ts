@@ -1,4 +1,5 @@
 import {
+  ALREADY_REGISTERED,
   NotConfiguredSendingDomainsClient,
   ResendDomainsClient,
 } from './sending-domains.client';
@@ -57,6 +58,53 @@ describe('ResendDomainsClient (fetch mocked, UNVERIFIED shapes)', () => {
     expect(String((err as Error).message)).toBe(
       'Sending domain provider error (403)',
     );
+  });
+
+  it('passes an abort signal so a hung provider cannot hold the request', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ id: 'd1', status: 'pending', records: [] }),
+    });
+    await new ResendDomainsClient('k').getDomain('d1');
+    const init = (
+      fetchSpy.mock.calls as [string, { signal?: AbortSignal }][]
+    )[0][1];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('a network/timeout failure becomes a generic 503 with no detail', async () => {
+    fetchSpy.mockRejectedValue(new Error('connect ETIMEDOUT secret-key'));
+    const err = await new ResendDomainsClient('secret-key')
+      .getDomain('d1')
+      .catch((e: Error) => e);
+    expect((err as Error).message).toBe('Sending domain provider unreachable');
+  });
+
+  it.each([409, 422])(
+    'create answering %s maps to the clear already-registered message',
+    async (status) => {
+      fetchSpy.mockResolvedValue({
+        ok: false,
+        status,
+        json: () => Promise.resolve({ message: 'x' }),
+      });
+      const err = await new ResendDomainsClient('k')
+        .createDomain('roses.com')
+        .catch((e: Error) => e);
+      expect((err as Error).message).toBe(ALREADY_REGISTERED);
+    },
+  );
+
+  it('a 500 on create stays a generic provider error', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({}),
+    });
+    const err = await new ResendDomainsClient('k')
+      .createDomain('roses.com')
+      .catch((e: Error) => e);
+    expect((err as Error).message).toBe('Sending domain provider error (500)');
   });
 
   it('maps statuses: only the exact verified string verifies', () => {

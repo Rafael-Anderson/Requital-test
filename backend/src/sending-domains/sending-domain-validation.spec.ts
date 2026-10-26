@@ -1,5 +1,6 @@
 import {
   normalizeSendingDomain,
+  platformViaDisplayName,
   sanitizeDisplayName,
   sendingDomainProblem,
 } from './sending-domain-validation';
@@ -57,5 +58,50 @@ describe('sanitizeDisplayName', () => {
   it('keeps Arabic and caps the length', () => {
     expect(sanitizeDisplayName('متجر الورد')).toBe('متجر الورد');
     expect(sanitizeDisplayName('x'.repeat(200)).length).toBe(78);
+  });
+});
+
+describe('sanitizeDisplayName invisible controls', () => {
+  it.each([
+    '\u202e',
+    '\u200b',
+    '\u200f',
+    '\u2066',
+    '\u2069',
+    '\ufeff',
+    '\u0085',
+  ])('strips %j', (c) => {
+    const out = sanitizeDisplayName(`Ro${c}ses`);
+    expect(out).toBe('Ro ses');
+  });
+});
+
+describe('platformViaDisplayName (shop name on the platform domain)', () => {
+  it.each([
+    ['Rose Shop', 'Rose Shop via Requital'],
+    ['Mr. Roses', 'Mr. Roses via Requital'],
+    ['متجر الورد', 'متجر الورد via Requital'],
+    ['support@paypal.com', 'support via Requital'],
+    ['PayPal Support www.evil.com', 'PayPal Support via Requital'],
+    ['Visit https://evil.example/login now', 'Visit now via Requital'],
+    ['paypal.com', 'Store via Requital'],
+    ['paypal\u3002com Help', 'Help via Requital'],
+    ['a@b', 'a b via Requital'],
+    ['\u202egnihtoN', 'gnihtoN via Requital'],
+    ['', 'Store via Requital'],
+  ])('%j -> %j', (input, expected) => {
+    expect(platformViaDisplayName(input)).toBe(expected);
+  });
+
+  it('never exceeds 78 characters in total', () => {
+    expect(platformViaDisplayName('x'.repeat(200)).length).toBe(78);
+  });
+
+  it('never leaves an @, a link or a dot-TLD token', () => {
+    for (const n of ['ceo@requital.io', 'WWW.X.COM', 'http://a', 'a.b.cc d']) {
+      expect(platformViaDisplayName(n)).not.toMatch(
+        /@|https?:|www\.|\w\.\w{2,}/i,
+      );
+    }
   });
 });

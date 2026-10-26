@@ -4,7 +4,10 @@ import type {
   EmailSendResult,
   SendEmailParams,
 } from '../email-provider.interface';
-import { sanitizeDisplayName } from '../../sending-domains/sending-domain-validation';
+import {
+  platformViaDisplayName,
+  sanitizeDisplayName,
+} from '../../sending-domains/sending-domain-validation';
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
 const PLATFORM_FROM_ADDRESS = 'noreply@requital.io';
@@ -38,7 +41,7 @@ export class ResendEmailProvider implements EmailProvider {
       body: JSON.stringify({
         // The display name is sanitised (no CR/LF, quotes or angle brackets)
         // so a shop name can never inject a header or break out of the string.
-        from: `"${sanitizeDisplayName(params.fromName)}" <${params.fromAddress ?? PLATFORM_FROM_ADDRESS}>`,
+        from: `"${params.viaPlatform && !params.fromAddress ? platformViaDisplayName(params.fromName) : sanitizeDisplayName(params.fromName)}" <${params.fromAddress ?? PLATFORM_FROM_ADDRESS}>`,
         // UNVERIFIED: Resend's field name for Reply-To is `reply_to`.
         ...(params.replyTo ? { reply_to: params.replyTo } : {}),
         to: params.to,

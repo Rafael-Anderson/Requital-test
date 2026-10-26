@@ -127,14 +127,48 @@ export function sendingDomainProblem(domain: string): string | null {
 
 // A shop display name becomes the From display name. Strip everything that can
 // break out of the quoted string or inject a header: CR/LF and other control
-// characters, double quotes, backslashes, angle brackets. Never empty.
-export function sanitizeDisplayName(name: string | undefined | null): string {
+// characters, bidi and invisible controls (a U+202E could visually reorder the
+// rest of the line), double quotes, backslashes, angle brackets. Never empty.
+export function sanitizeDisplayName(
+  name: string | undefined | null,
+  max = 78,
+  fallback = 'Requital',
+): string {
   const cleaned = (name ?? '')
     // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001f\u007f\u2028\u2029"\\<>]/g, ' ')
+    .replace(
+      /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff"\\<>]/g,
+      ' ',
+    )
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 78)
+    .slice(0, max)
     .trim();
-  return cleaned || 'Requital';
+  return cleaned || fallback;
+}
+
+const VIA_SUFFIX = ' via Requital';
+
+// The From name when the mail leaves from the PLATFORM address on a shop's
+// behalf. The platform domain's reputation must not lend a shop credibility it
+// can choose freely, so the name is rendered "<name> via Requital" and anything
+// that reads as an address or a link ("support@paypal.com", "paypal.com",
+// "www.x", "https://x") is removed first. Total length stays within 78.
+export function platformViaDisplayName(
+  name: string | undefined | null,
+): string {
+  const base = sanitizeDisplayName(name, 78, '')
+    // lookalike dots: ideographic full stop, fullwidth/halfwidth full stop, one dot leader
+    .replace(/[\u3002\uff0e\uff61\u2024]/g, '.')
+    .replace(/@/g, ' ')
+    .split(' ')
+    .filter(
+      (t) =>
+        !/^(https?:|www\.)/i.test(t) && !/[\p{L}\p{N}-]\.\p{L}{2,}/u.test(t),
+    )
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const shown = sanitizeDisplayName(base, 78 - VIA_SUFFIX.length, 'Store');
+  return `${shown}${VIA_SUFFIX}`;
 }
