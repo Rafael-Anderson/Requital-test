@@ -3980,3 +3980,27 @@ export interface BillingUsage {
   /** Messaging level only: 0, 80, 100 or 120. Nothing is ever blocked. */
   level: 0 | 80 | 100 | 120;
 }
+
+// GET/PUT /shop/sending-domain (backend SendingDomainsService). Records are the
+// public DNS values the merchant publishes; nothing secret is ever returned.
+export type SendingDomainStatus = "pending" | "verifying" | "verified" | "failed";
+export interface SendingDomainRecord {
+  type: string;
+  name: string;
+  value: string;
+  priority?: number;
+  label?: string;
+}
+export interface SendingDomain {
+  domain: string;
+  status: SendingDomainStatus;
+  fromAddress: string;
+  records: SendingDomainRecord[];
+  lastError: string | null;
+  verifiedAt: string | null;
+}
+export interface VerifySendingDomainResult {
+  status: SendingDomainStatus | null;
+  verified: boolean;
+  message?: string;
+}

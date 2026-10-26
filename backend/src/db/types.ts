@@ -1924,3 +1924,21 @@ export interface ChannelunmappeditemRow {
   lastSeenAt: Date;
   resolvedAt: Date | null;
 }
+
+// MKT-3 (migration 20261126100000). `verifiedKey` is a generated column
+// (domain while verified, else NULL); never written.
+export interface ShopsendingdomainRow {
+  id: number;
+  shopId: number;
+  domain: string;
+  status: 'pending' | 'verifying' | 'verified' | 'failed';
+  providerDomainId: string | null;
+  recordsJson: unknown;
+  lastError: string | null;
+  claimedAt: Date;
+  lastCheckedAt: Date | null;
+  verifiedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  verifiedKey: string | null;
+}
