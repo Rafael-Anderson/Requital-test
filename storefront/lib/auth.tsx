@@ -8,7 +8,13 @@ interface AuthContextValue {
   customer: Customer | null;
   loading: boolean;
   login: (identifier: string, password: string) => Promise<void>;
-  register: (data: { name: string; phone: string; email?: string; password: string }) => Promise<void>;
+  register: (data: {
+    name: string;
+    phone: string;
+    email?: string;
+    password: string;
+    phoneProof?: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   // Re-fetches the profile and updates React state — called after a
   // profile edit so the header/account pages reflect it immediately
@@ -59,7 +65,7 @@ export function AuthProvider({ shopSlug, children }: { shopSlug: string; childre
   );
 
   const register = useCallback(
-    async (data: { name: string; phone: string; email?: string; password: string }) => {
+    async (data: { name: string; phone: string; email?: string; password: string; phoneProof?: string }) => {
       const result = await registerCustomer(shopSlug, data);
       setCustomer(result.customer);
     },

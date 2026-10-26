@@ -608,9 +608,19 @@ async function credentialedPost<T>(path: string, data: unknown): Promise<T> {
 
 export function registerCustomer(
   shopSlug: string,
-  data: { name: string; phone: string; email?: string; password: string },
+  data: { name: string; phone: string; email?: string; password: string; phoneProof?: string },
 ) {
   return credentialedPost<CustomerAuthResult>(`/public/${shopSlug}/auth/register`, data);
+}
+
+// Phone one-time code (only for a shop with shop.phoneOtpRequired). The send
+// answer is always the same, so it carries nothing to read.
+export async function sendPhoneOtp(shopSlug: string, phone: string): Promise<void> {
+  await post<unknown>(`/public/${shopSlug}/auth/phone-otp/send`, { phone });
+}
+
+export function verifyPhoneOtp(shopSlug: string, phone: string, code: string) {
+  return post<{ proof: string }>(`/public/${shopSlug}/auth/phone-otp/verify`, { phone, code });
 }
 
 export function loginCustomer(shopSlug: string, data: { identifier: string; password: string }) {

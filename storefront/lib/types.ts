@@ -30,6 +30,8 @@ export interface Shop {
   productDisplayOrientation: "grid" | "list";
   productImageZoomEnabled: boolean;
   showCollectionMenu: boolean;
+  // True when this shop asks for a phone code before an account can be created.
+  phoneOtpRequired?: boolean;
   taxRate: string;
   taxInclusive: boolean;
   taxDisplayText: string | null;
