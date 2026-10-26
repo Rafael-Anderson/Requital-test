@@ -2,7 +2,10 @@ import { Module } from '@nestjs/common';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { StoreCreditModule } from '../store-credit/store-credit.module';
-import { CustomerLoyaltyController, LoyaltyController } from './loyalty.controller';
+import {
+  CustomerLoyaltyController,
+  LoyaltyController,
+} from './loyalty.controller';
 import { LoyaltyService } from './loyalty.service';
 
 @Module({

@@ -74,9 +74,7 @@ export function clawbackTarget(
 ): number {
   if (earned <= 0 || refundedMinor <= 0 || refundableMinor <= 0) return 0;
   const ref = Math.min(refundedMinor, refundableMinor);
-  return Number(
-    (BigInt(earned) * BigInt(ref)) / BigInt(refundableMinor),
-  );
+  return Number((BigInt(earned) * BigInt(ref)) / BigInt(refundableMinor));
 }
 
 // Store credit (minor units) that `points` buy at `pointsPerUnit10000`

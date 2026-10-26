@@ -12,7 +12,16 @@ describe('loyalty math', () => {
     expect(parseRate('0.5')).toBe(5000n);
     expect(parseRate('12.3456')).toBe(123456n);
     expect(parseRate(2)).toBe(20000n);
-    for (const bad of ['-1', '1e3', '1.23456', '', 'abc', null, '١٢', '123456789'])
+    for (const bad of [
+      '-1',
+      '1e3',
+      '1.23456',
+      '',
+      'abc',
+      null,
+      '١٢',
+      '123456789',
+    ])
       expect(parseRate(bad)).toBeNull();
   });
 
@@ -30,7 +39,10 @@ describe('loyalty math', () => {
   });
   it('never goes negative', () => {
     expect(
-      earnBaseMinor({ ...o, total: '10', deliveryFee: '10', taxAmount: '5' }, 'net_paid'),
+      earnBaseMinor(
+        { ...o, total: '10', deliveryFee: '10', taxAmount: '5' },
+        'net_paid',
+      ),
     ).toBe(0);
   });
   it('rounds points down on the minor unit, for 2dp and 3dp currencies', () => {

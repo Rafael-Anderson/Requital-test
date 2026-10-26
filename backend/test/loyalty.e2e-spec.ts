@@ -270,7 +270,10 @@ describe('Loyalty (e2e)', () => {
       const orderId = await delivered(shop, customer, product.id);
       await db.execute(
         `UPDATE customer SET passwordHash = NULL, email = ? WHERE id = ?`,
-        [`deleted-${customer.customerId}@deleted.requital`, customer.customerId],
+        [
+          `deleted-${customer.customerId}@deleted.requital`,
+          customer.customerId,
+        ],
       );
       await drain(orderId);
       expect(await entries(customer.customerId)).toHaveLength(0);
@@ -331,13 +334,17 @@ describe('Loyalty (e2e)', () => {
       const { shop, customer, orderId, line } = await withEarned();
       const earned = (await entries(customer.customerId))[0].points as number;
       expect(earned).toBeGreaterThan(1);
-      await ret(shop, orderId, [{ orderItemId: line, quantity: 1 }]).expect(201);
+      await ret(shop, orderId, [{ orderItemId: line, quantity: 1 }]).expect(
+        201,
+      );
       const afterOne = await entries(customer.customerId);
       expect(afterOne).toHaveLength(2);
       expect(afterOne[1].entryType).toBe('clawback');
       expect(afterOne[1].points).toBeLessThan(0);
       expect(-(afterOne[1].points as number)).toBe(Math.floor(earned / 2));
-      await ret(shop, orderId, [{ orderItemId: line, quantity: 1 }]).expect(201);
+      await ret(shop, orderId, [{ orderItemId: line, quantity: 1 }]).expect(
+        201,
+      );
       expect(await balance(customer.customerId)).toBe(0);
       const rows = await entries(customer.customerId);
       expect(rows.filter((r) => r.entryType === 'clawback')).toHaveLength(2);
@@ -358,7 +365,9 @@ describe('Loyalty (e2e)', () => {
         `/customers/${customer.customerId}/loyalty/adjustments`,
         { points: -earned, reason: 'spent elsewhere' },
       ).expect(201);
-      await ret(shop, orderId, [{ orderItemId: line, quantity: 2 }]).expect(201);
+      await ret(shop, orderId, [{ orderItemId: line, quantity: 2 }]).expect(
+        201,
+      );
       const claw = (await entries(customer.customerId)).find(
         (r) => r.entryType === 'clawback',
       )!;
@@ -379,7 +388,9 @@ describe('Loyalty (e2e)', () => {
         `UPDATE shopfeatureoverride SET enabled = 0 WHERE shopId = ? AND featureKey = 'loyalty'`,
         [shop.shopId],
       );
-      await ret(shop, orderId, [{ orderItemId: line, quantity: 1 }]).expect(201);
+      await ret(shop, orderId, [{ orderItemId: line, quantity: 1 }]).expect(
+        201,
+      );
       expect(await entries(customer.customerId)).toHaveLength(1);
     });
   });
@@ -389,8 +400,12 @@ describe('Loyalty (e2e)', () => {
       const { shop, customer } = await setup('loy-adj');
       const url = `/customers/${customer.customerId}/loyalty/adjustments`;
       await admin(shop, 'post', url, { points: 50, reason: '' }).expect(400);
-      await admin(shop, 'post', url, { points: 0, reason: 'nothing' }).expect(400);
-      await admin(shop, 'post', url, { points: 1.5, reason: 'half' }).expect(400);
+      await admin(shop, 'post', url, { points: 0, reason: 'nothing' }).expect(
+        400,
+      );
+      await admin(shop, 'post', url, { points: 1.5, reason: 'half' }).expect(
+        400,
+      );
       await admin(shop, 'post', url, {
         points: 50,
         reason: 'goodwill',
@@ -409,7 +424,9 @@ describe('Loyalty (e2e)', () => {
         reason: 'goodwill',
         idempotencyKey: 'adj-key-0001',
       }).expect(409);
-      await admin(shop, 'post', url, { points: -51, reason: 'oops' }).expect(409);
+      await admin(shop, 'post', url, { points: -51, reason: 'oops' }).expect(
+        409,
+      );
       // concurrent deductions cannot both pass
       const res = await Promise.all(
         [30, 30, 30].map((p) =>
@@ -434,7 +451,11 @@ describe('Loyalty (e2e)', () => {
         `/customers/${a.customer.customerId}/loyalty/adjustments`,
         { points: 70, reason: 'goodwill' },
       ).expect(201);
-      await admin(b.shop, 'get', `/customers/${a.customer.customerId}/loyalty`).expect(404);
+      await admin(
+        b.shop,
+        'get',
+        `/customers/${a.customer.customerId}/loyalty`,
+      ).expect(404);
       await admin(
         b.shop,
         'post',
@@ -472,9 +493,12 @@ describe('Loyalty (e2e)', () => {
       points: number,
       key = `k${f.uniq()}`.slice(0, 36),
     ) =>
-      asCustomer(server(), sess, 'post', `/public/${shop.slug}/account/loyalty/redeem`).send(
-        { points, idempotencyKey: key },
-      );
+      asCustomer(
+        server(),
+        sess,
+        'post',
+        `/public/${shop.slug}/account/loyalty/redeem`,
+      ).send({ points, idempotencyKey: key });
     async function ready(prefix: string, redeemCfg: object = {}) {
       const s = await setup(prefix, {
         program: {
@@ -508,7 +532,8 @@ describe('Loyalty (e2e)', () => {
       expect(await credit(customer.customerId)).toBe(0);
       expect(await balance(customer.customerId)).toBe(100);
       expect(
-        body<{ redeem: unknown }>(await account(shop, customer).expect(200)).redeem,
+        body<{ redeem: unknown }>(await account(shop, customer).expect(200))
+          .redeem,
       ).toBeNull();
     });
 
@@ -553,7 +578,12 @@ describe('Loyalty (e2e)', () => {
       expect(r.points).toBe(-50);
       expect(r.storeCreditEntryId).not.toBeNull();
       // a body-supplied rate or currency is not a thing
-      await asCustomer(server(), customer, 'post', `/public/${shop.slug}/account/loyalty/redeem`)
+      await asCustomer(
+        server(),
+        customer,
+        'post',
+        `/public/${shop.slug}/account/loyalty/redeem`,
+      )
         .send({ points: 20, idempotencyKey: 'redeem-key-0002', rate: 1 })
         .expect(400);
     });
@@ -562,7 +592,9 @@ describe('Loyalty (e2e)', () => {
       const { shop, customer } = await ready('loy-rd-race');
       await override(shop.shopId, 'phone_otp_register');
       const res = await Promise.all(
-        [1, 2, 3, 4, 5].map((i) => redeem(shop, customer, 60, `race-key-000${i}`)),
+        [1, 2, 3, 4, 5].map((i) =>
+          redeem(shop, customer, 60, `race-key-000${i}`),
+        ),
       );
       expect(res.filter((r) => r.status === 201)).toHaveLength(1);
       expect(res.filter((r) => r.status === 409)).toHaveLength(4);
@@ -580,10 +612,15 @@ describe('Loyalty (e2e)', () => {
       );
       await override(shop.shopId, 'phone_otp_register');
       // give the other customer a balance so only the key rule can refuse
-      await admin(shop, 'post', `/customers/${other.customerId}/loyalty/adjustments`, {
-        points: 100,
-        reason: 'seed balance',
-      }).expect(201);
+      await admin(
+        shop,
+        'post',
+        `/customers/${other.customerId}/loyalty/adjustments`,
+        {
+          points: 100,
+          reason: 'seed balance',
+        },
+      ).expect(201);
       await redeem(shop, customer, 50, 'shared-key-0001').expect(201);
       // the same key from a different customer is its own redemption (keys are
       // namespaced per customer): it neither replays nor collides with theirs
@@ -594,7 +631,7 @@ describe('Loyalty (e2e)', () => {
   });
 
   describe('merge, export, anonymise', () => {
-    it('a merge moves the duplicate\'s entries; export carries the ledger; anonymise scrubs the staff reason', async () => {
+    it("a merge moves the duplicate's entries; export carries the ledger; anonymise scrubs the staff reason", async () => {
       const { shop, product, customer } = await setup('loy-pdpl');
       await f.storefrontOrder(shop, [{ productId: product.id, quantity: 1 }], {
         customerPhone: '0509990001',
@@ -610,10 +647,15 @@ describe('Loyalty (e2e)', () => {
         points: 40,
         reason: 'named Fatima',
       }).expect(201);
-      await admin(shop, 'post', `/customers/${customer.customerId}/loyalty/adjustments`, {
-        points: 10,
-        reason: 'goodwill',
-      }).expect(201);
+      await admin(
+        shop,
+        'post',
+        `/customers/${customer.customerId}/loyalty/adjustments`,
+        {
+          points: 10,
+          reason: 'goodwill',
+        },
+      ).expect(201);
       await admin(shop, 'post', `/customers/${customer.customerId}/merge`, {
         duplicateIds: [dupId],
         confirm: 'MERGE',
@@ -633,7 +675,12 @@ describe('Loyalty (e2e)', () => {
       expect(JSON.stringify(exp.loyalty)).not.toContain('Fatima');
 
       const req1 = body<{ confirmationToken: string }>(
-        await asCustomer(server(), customer, 'delete', `/public/${shop.slug}/account/me`).expect(202),
+        await asCustomer(
+          server(),
+          customer,
+          'delete',
+          `/public/${shop.slug}/account/me`,
+        ).expect(202),
       );
       await asCustomer(
         server(),
@@ -645,7 +692,10 @@ describe('Loyalty (e2e)', () => {
         `SELECT reason FROM loyaltyentry WHERE customerId = ?`,
         [customer.customerId],
       );
-      expect(reasons.map((r) => r.reason)).toEqual(['[removed]', '[removed]']);
+      expect(reasons.map((r) => r.reason as string)).toEqual([
+        '[removed]',
+        '[removed]',
+      ]);
       expect(await balance(customer.customerId)).toBe(50); // the ledger is kept
     });
   });

@@ -14,7 +14,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { FeaturesService } from '../features/features.service';
 import { JobsService } from '../jobs/jobs.service';
 import { JobsWorkerService } from '../jobs/jobs.worker.service';
-import type { JobPayload, LoyaltyEarnJobPayload } from '../jobs/jobs.types';
+import type { LoyaltyEarnJobPayload } from '../jobs/jobs.types';
 import {
   assertCustomerInShop,
   lockCustomerInShop,
@@ -53,7 +53,7 @@ const DEFAULT_PROGRAM = {
 type Program = typeof DEFAULT_PROGRAM;
 
 // A decimal(12,4) as the shortest string ("1.5000" -> "1.5", "100.0000" -> "100").
-function trimRate(v: unknown): string {
+function trimRate(v: string | number | null): string {
   const s = String(v ?? '0');
   return s.includes('.') ? s.replace(/\.?0+$/, '') || '0' : s;
 }
@@ -104,10 +104,10 @@ export class LoyaltyService implements OnModuleInit {
     return {
       id: r.id as number,
       enabled: Boolean(r.enabled),
-      earnRate: trimRate(r.earnRate),
+      earnRate: trimRate(r.earnRate as string),
       earnBase: r.earnBase as EarnBase,
       redeemEnabled: Boolean(r.redeemEnabled),
-      redeemPointsPerUnit: trimRate(r.redeemPointsPerUnit),
+      redeemPointsPerUnit: trimRate(r.redeemPointsPerUnit as string),
       redeemMinPoints: r.redeemMinPoints as number,
       redeemStepPoints: r.redeemStepPoints as number,
       redeemMaxPoints: (r.redeemMaxPoints as number | null) ?? null,
@@ -175,7 +175,10 @@ export class LoyaltyService implements OnModuleInit {
     };
     const next: Program = {
       enabled: dto.enabled ?? before.enabled,
-      earnRate: dto.earnRate !== undefined ? this.rateText(dto.earnRate, 'earnRate') : before.earnRate,
+      earnRate:
+        dto.earnRate !== undefined
+          ? this.rateText(dto.earnRate, 'earnRate')
+          : before.earnRate,
       earnBase: dto.earnBase ?? before.earnBase,
       redeemEnabled: dto.redeemEnabled ?? before.redeemEnabled,
       redeemPointsPerUnit:
@@ -249,10 +252,7 @@ export class LoyaltyService implements OnModuleInit {
 
   // ---- reads ----
 
-  private async balanceOf(
-    shopId: number,
-    customerId: number,
-  ): Promise<number> {
+  private async balanceOf(shopId: number, customerId: number): Promise<number> {
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT COALESCE(SUM(points), 0) AS b FROM loyaltyentry WHERE shopId = ? AND customerId = ?`,
       [shopId, customerId],
@@ -375,7 +375,8 @@ export class LoyaltyService implements OnModuleInit {
       throw new BadRequestException('points cannot be zero');
     }
     const reason = dto.reason.trim();
-    if (reason.length < 3) throw new BadRequestException('A reason is required');
+    if (reason.length < 3)
+      throw new BadRequestException('A reason is required');
     if (!(await this.features.isEnabled(ctx.shopId, 'loyalty'))) {
       throw new NotFoundException('Not found');
     }
@@ -466,7 +467,7 @@ export class LoyaltyService implements OnModuleInit {
     await this.jobs.enqueue(
       shopId,
       'loyalty_earn',
-      { shopId, orderId } satisfies LoyaltyEarnJobPayload as JobPayload,
+      { shopId, orderId } satisfies LoyaltyEarnJobPayload,
       `loyalty:earn:${orderId}`,
       { tx: conn },
     );
@@ -592,8 +593,11 @@ export class LoyaltyService implements OnModuleInit {
       [p.shopId, p.orderId],
     );
     const gross =
-      clawbackTarget(earn.points as number, p.refundedMinor, p.refundableMinor) -
-      Number(priorRows[0].gross);
+      clawbackTarget(
+        earn.points as number,
+        p.refundedMinor,
+        p.refundableMinor,
+      ) - Number(priorRows[0].gross);
     if (gross <= 0) return;
     const balance = await this.lockedBalance(conn, p.shopId, customerId);
     const taken = Math.min(gross, Math.max(balance, 0));
@@ -618,7 +622,11 @@ export class LoyaltyService implements OnModuleInit {
   async redeem(ctx: CustomerContext, dto: RedeemLoyaltyDto) {
     const key = `redeem:${ctx.customerId}:${dto.idempotencyKey}`;
     const out = await this.db.transaction(async (conn) => {
-      const customer = await lockCustomerInShop(conn, ctx.shopId, ctx.customerId);
+      const customer = await lockCustomerInShop(
+        conn,
+        ctx.shopId,
+        ctx.customerId,
+      );
       if (String(customer.email ?? '').endsWith('@deleted.requital')) {
         throw new NotFoundException('Not found');
       }
@@ -632,7 +640,12 @@ export class LoyaltyService implements OnModuleInit {
             'That idempotency key was already used for a different request',
           );
         }
-        return { replay: true, entryId: existing.id, creditMinor: 0, currency: '' };
+        return {
+          replay: true,
+          entryId: existing.id,
+          creditMinor: 0,
+          currency: '',
+        };
       }
 
       if (
