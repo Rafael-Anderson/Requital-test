@@ -13,6 +13,7 @@ import { CurrencyRatesModule } from '../currency-rates/currency-rates.module';
 import { RegionsModule } from '../regions/regions.module';
 import { GiftCardsModule } from '../gift-cards/gift-cards.module';
 import { StoreCreditModule } from '../store-credit/store-credit.module';
+import { LoyaltyModule } from '../loyalty/loyalty.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { StoreCreditModule } from '../store-credit/store-credit.module';
     CurrencyRatesModule,
     RegionsModule,
     StoreCreditModule,
+    LoyaltyModule,
     GiftCardsModule,
   ],
   controllers: [OrdersController],

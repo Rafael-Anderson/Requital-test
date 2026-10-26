@@ -8,6 +8,7 @@ import { GiftCardsModule } from '../gift-cards/gift-cards.module';
 import { ProductsModule } from '../products/products.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { StoreCreditModule } from '../store-credit/store-credit.module';
+import { LoyaltyModule } from '../loyalty/loyalty.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { StoreCreditModule } from '../store-credit/store-credit.module';
     ProductsModule,
     BranchRolesModule,
     StoreCreditModule,
+    LoyaltyModule,
   ],
   controllers: [ReturnsController],
   providers: [ReturnsService],

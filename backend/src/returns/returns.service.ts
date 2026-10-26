@@ -22,6 +22,7 @@ import { minorUnitFactor, roundMoney } from '../common/currency-minor-units';
 const logger = createLogger('ReturnsService');
 import { GiftCardsService } from '../gift-cards/gift-cards.service';
 import { StoreCreditService } from '../store-credit/store-credit.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { ProductsService } from '../products/products.service';
 import { defaultReturnRefundMinor } from './return-refund';
 import { CreateReturnDto } from './dto/create-return.dto';
@@ -50,6 +51,7 @@ export class ReturnsService {
     private readonly productsService: ProductsService,
     private readonly branchRolesService: BranchRolesService,
     private readonly storeCreditService: StoreCreditService,
+    private readonly loyaltyService: LoyaltyService,
   ) {}
 
   async findAllForOrder(ctx: TenantContext, orderId: number) {
@@ -449,6 +451,18 @@ export class ReturnsService {
           );
         }
       }
+
+      // CUS-5: take back the share of the earned points this refund represents
+      // (cumulative, idempotent per return, clamped at a zero balance). Order row
+      // lock is already held; this takes the customer lock next.
+      await this.loyaltyService.clawbackForReturn(conn, {
+        shopId: order.shopId,
+        orderId,
+        returnId: newReturnId,
+        customerId: ownerCustomerId,
+        refundedMinor: alreadyMinor + refundMinor,
+        refundableMinor: totalMinor - Math.round(Number(locked.deliveryFee ?? 0) * factor),
+      });
 
       // A refunded/returned order is no longer described by the invoice issued
       // for it (C2) - the document still records what was sold, but the order has

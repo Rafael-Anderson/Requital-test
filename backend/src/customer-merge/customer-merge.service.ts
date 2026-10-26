@@ -20,6 +20,7 @@ export interface MergeMoved {
   giftCards: number;
   discountRedemptions: number;
   storeCreditEntries: number;
+  loyaltyEntries: number;
   notes: number;
   tags: number;
   consentEvents: number;
@@ -102,6 +103,7 @@ export class CustomerMergeService {
         orders: await counts('order', 'customerId'),
         draftOrders: await counts('draftorder', 'customerId'),
         storeCreditEntries: await counts('storecreditentry', 'customerId'),
+        loyaltyEntries: await counts('loyaltyentry', 'customerId'),
         notes: await counts('customernote', 'customerId'),
       },
     };
@@ -285,6 +287,12 @@ export class CustomerMergeService {
       [p, d],
     );
     const storeCreditEntries = await this.moveLedger(conn, shopId, p, d, run);
+    // CUS-5: loyalty ledger rows are re-pointed too (RESTRICT FK, and the points
+    // are the duplicate's earnings): the primary's balance is exactly the sum.
+    const loyaltyEntries = await run(
+      `UPDATE loyaltyentry SET customerId = ? WHERE customerId = ? AND shopId = ?`,
+      [p, d, shopId],
+    );
     const notes = await run(
       `UPDATE customernote SET customerId = ? WHERE customerId = ? AND shopId = ?`,
       [p, d, shopId],
@@ -321,6 +329,7 @@ export class CustomerMergeService {
       giftCards,
       discountRedemptions,
       storeCreditEntries,
+      loyaltyEntries,
       notes,
       tags,
       consentEvents,

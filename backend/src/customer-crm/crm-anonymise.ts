@@ -46,6 +46,13 @@ export async function anonymiseCustomerCrm(
       WHERE customerId = ? AND shopId = ? AND entryType IN ('grant', 'deduct') AND reason IS NOT NULL`,
     [customerId, shopId],
   );
+  // Loyalty ledger: kept (it is a financial record, and holds no personal data
+  // once the profile is scrubbed) but the staff-typed reason on an adjustment goes.
+  await db.execute(
+    `UPDATE loyaltyentry SET reason = '[removed]'
+      WHERE customerId = ? AND shopId = ? AND entryType = 'adjust' AND reason IS NOT NULL`,
+    [customerId, shopId],
+  );
   // A merge record holding a duplicate's old contact details is personal data of
   // this customer too: the record stays (what moved, when), the contact snapshot goes.
   await db.execute(
