@@ -462,6 +462,13 @@ export class CustomerAccountService {
         WHERE customerId = ? AND shopId = ? AND attributionJson IS NOT NULL`,
       [customerId, shopId],
     );
+    // F1: the map pin the customer placed at checkout is location data. The
+    // order keeps its typed address (the merchant's record), not the coordinates.
+    await this.db.execute(
+      `UPDATE \`order\` SET dropoffLatitude = NULL, dropoffLongitude = NULL
+        WHERE customerId = ? AND shopId = ?`,
+      [customerId, shopId],
+    );
     // Deleting the account withdraws any consent to publish their feedback:
     // the review stops being served at once (the public read requires
     // publishConsent = 1) while the merchant's own order record is kept.

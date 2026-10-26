@@ -31,7 +31,7 @@ import { geocodeAddress, reverseGeocodeAddress } from '../common/nominatim';
 import { createLogger } from '../common/logging/logger';
 
 const logger = createLogger('PublicService');
-import { haversineDistanceKm } from '../common/geo';
+import { haversineDistanceKm, isUsablePin } from '../common/geo';
 import { withTrackingToken } from '../common/token-hash';
 import { lookupOrderView, type PublicOrderView } from './order-lookup';
 import {
@@ -2071,6 +2071,12 @@ export class PublicService {
       clientIp,
     });
     const { taxAmount, total } = totals;
+    const dropoffPin =
+      dto.orderType === 'delivery' &&
+      !dto.addressManual &&
+      isUsablePin(dto.latitude, dto.longitude)
+        ? { lat: dto.latitude!, lng: dto.longitude! }
+        : null;
     const itemsData = resolvedItems.map(
       (
         {
@@ -2282,8 +2288,9 @@ export class PublicService {
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
           giftCardId, giftCardCode, giftCardAmount, storeCreditAmount, total, paymentStatus, trackingToken, shopOrderNumber,
           currency, rateBaseCurrency, exchangeRate, attributionJson, addressUnverified,
+          dropoffLatitude, dropoffLongitude,
           idempotencyKey, idempotencyFingerprint
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
@@ -2340,6 +2347,11 @@ export class PublicService {
           // F9: typed address with no map pin (Maps unavailable): flagged so the
           // merchant confirms it with the customer.
           addressUnverified ? 1 : 0,
+          // F1: the shopper's own map pin, kept for the courier dropoff. Only a
+          // delivery order with a real, shopper-placed pin: never a pickup, never a
+          // typed address (addressManual: no pin exists, and the point the server
+          // geocodes for the radius check is a guess that is not stored).
+          ...(dropoffPin ? [dropoffPin.lat, dropoffPin.lng] : [null, null]),
           ...idemParams,
         ],
             ),
