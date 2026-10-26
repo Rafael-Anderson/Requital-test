@@ -147,4 +147,41 @@ describe('PaymentSettingsService.isUsable', () => {
       await service([row('paypal', true)], registry).isUsable(1, 'paypal'),
     ).toBe(false);
   });
+
+  // Stripe is not usable for a shop whose currency is KWD/BHD/OMR (checkout is
+  // blocked), so getShop hides "Pay online" and the order is refused before it
+  // exists. Other gateways and other currencies are untouched.
+  it.each([
+    ['KWD', false],
+    ['BHD', false],
+    ['OMR', false],
+    ['AED', true],
+    ['SAR', true],
+  ])('stripe with valid keys for a %s shop is usable: %s', async (cur, ok) => {
+    const registry = new PaymentProviderRegistry();
+    registry.register(new StripePaymentProvider());
+    registry.register(new TabbyPaymentProvider());
+    const rows = [
+      row('stripe', true, { secretKey: 'sk_x' }),
+      row('tabby', true, { secretKey: 's', publicKey: 'p' }),
+    ];
+    const db = {
+      query: jest.fn((sql: string, params: unknown[]) => {
+        if (sql.includes('FROM shop WHERE'))
+          return Promise.resolve([{ currency: cur }]);
+        // resolveCredentials asks for one provider's row; isEnabled for all.
+        if (sql.includes('AND provider = ?'))
+          return Promise.resolve(rows.filter((r) => r.provider === params[1]));
+        return Promise.resolve(rows);
+      }),
+    };
+    const svc = new PaymentSettingsService(
+      db as unknown as DatabaseService,
+      {} as ShopService,
+      registry,
+    );
+    expect(await svc.isUsable(1, 'stripe')).toBe(ok);
+    // Tabby is never blocked, whatever the currency.
+    expect(await svc.isUsable(1, 'tabby')).toBe(true);
+  });
 });

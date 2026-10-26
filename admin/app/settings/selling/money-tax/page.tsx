@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Check } from "lucide-react";
-import { getShop, updateShop } from "@/lib/api";
+import { getPaymentSettings, getShop, updateShop } from "@/lib/api";
+import { stripeBlockedForCurrency } from "@/lib/blocked-gateway-currencies";
+import StripeCurrencyNotice from "@/components/StripeCurrencyNotice";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
@@ -40,7 +42,22 @@ export default function MoneyTaxPage() {
   const [taxOnDelivery, setTaxOnDelivery] = useState(false);
   const [taxDisplayText, setTaxDisplayText] = useState("");
   const [saving, setSaving] = useState(false);
+  const [stripeEnabled, setStripeEnabled] = useState(false);
   const toast = useToast();
+
+  // Only decides whether the Stripe currency warning shows; a failure here
+  // just means no warning, never a broken page.
+  useEffect(() => {
+    let live = true;
+    getPaymentSettings()
+      .then((rows) => {
+        if (live) setStripeEnabled(rows.some((r) => r.provider === "stripe" && r.enabled));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // Try again bumps `reloadKey`; a failed request ends in an error with Try
   // again, never the skeleton for good.
@@ -121,6 +138,9 @@ export default function MoneyTaxPage() {
                 Applies to new orders. Orders already placed keep the currency they
                 were charged in, so past totals, invoices and reports do not change.
               </p>
+              {stripeEnabled && stripeBlockedForCurrency(currency) && (
+                <StripeCurrencyNotice className="mt-2" />
+              )}
             </Field>
           </div>
         </Card>
