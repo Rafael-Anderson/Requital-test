@@ -157,6 +157,12 @@ describe('Loyalty (e2e)', () => {
       const { shop, product, customer } = await setup('loy-off', {
         flag: false,
       });
+      // a program row that exists and is enabled (as if the grant was withdrawn
+      // later) must still do nothing while the platform flag is off
+      await db.execute(
+        `INSERT INTO loyaltyprogram (shopId, enabled, earnRate) VALUES (?, 1, 1)`,
+        [shop.shopId],
+      );
       await admin(shop, 'put', '/loyalty/program', {
         enabled: true,
         earnRate: '1',
