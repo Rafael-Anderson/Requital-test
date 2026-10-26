@@ -61,6 +61,29 @@ export class PaymentsService {
     private readonly giftCardsService: GiftCardsService,
   ) {}
 
+  // Pre-flight for a caller that is about to CREATE an order and then mint a
+  // link on it (draft-order "send invoice"): the order would be charged in the
+  // shop's current currency, so refuse before any order or stock hold exists.
+  async assertCardLinkAllowedForShop(shopId: number) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT paymentGateway, currency FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    const shop = rows[0];
+    if (
+      shop &&
+      isGatewayCurrencyBlocked(
+        shop.paymentGateway as string,
+        shop.currency as string,
+      )
+    ) {
+      throw new PaymentCurrencyNotSupportedException(
+        shop.paymentGateway as string,
+        shop.currency as string,
+      );
+    }
+  }
+
   async generateLink(ctx: TenantContext, orderId: number) {
     const outletId = resolveOutletFilter(ctx);
     const conditions = ['id = ?', 'shopId = ?'];
