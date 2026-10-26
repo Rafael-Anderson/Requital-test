@@ -887,7 +887,8 @@ describe('Order status customer email notifications (e2e)', () => {
       expect(sentBody.subject).toContain(
         `Order confirmation #${order.shopOrderNumber}`,
       );
-      expect(sentBody.from).toBe('Requital <noreply@requital.io>');
+      // The shop's display name is now honoured; the address stays the platform's.
+      expect(sentBody.from).toMatch(/^".+" <noreply@requital\.io>$/);
       expect(sentBody.html).toContain('<p style=');
 
       // Real path taken — the stub must not also have logged for this order.

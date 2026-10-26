@@ -31,6 +31,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     pages: [
       { href: "/settings/business/information", label: "Business Information", description: "Name, logo, legal details, contact and notifications" },
       { href: "/settings/business/domain", label: "Domain", description: "Your store address and custom domain" },
+      { href: "/settings/business/sending-domain", label: "Sending domain", description: "Send customer emails from your own domain" },
       { href: "/settings/business/store-configuration", label: "Store Configuration", description: "Business type, language, cart and checkout behaviour" },
       { href: "/settings/business/custom-fields", label: "Custom fields", description: "Extra fields on products and other records" },
       { href: "/settings/business/plan-billing", label: "Plan & Billing", description: "Your plan, this month's order usage and what the plan includes" },
@@ -138,6 +139,8 @@ const SETTINGS: SettingEntry[] = [
   { label: "Product editor mode", page: "/settings/business/information", keywords: "simple advanced" },
   // Domain
   { label: "Custom domain", page: "/settings/business/domain", keywords: "dns verification subdomain" },
+  // Sending domain
+  { label: "Sending domain", page: "/settings/business/sending-domain", keywords: "email from address dns spf dkim customer emails" },
   // Store Configuration (the settings that stayed)
   { label: "Business type", page: "/settings/business/store-configuration" },
   { label: "Default language", page: "/settings/business/store-configuration", keywords: "arabic english" },

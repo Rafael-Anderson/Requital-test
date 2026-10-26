@@ -42,6 +42,7 @@ import { DriversModule } from './drivers/drivers.module';
 import { MetafieldsModule } from './metafields/metafields.module';
 import { ShopAnalyticsModule } from './shop-analytics/shop-analytics.module';
 import { ShopModule } from './shop/shop.module';
+import { SendingDomainsModule } from './sending-domains/sending-domains.module';
 import { DeliveryZonesModule } from './delivery-zones/delivery-zones.module';
 import { RegionsModule } from './regions/regions.module';
 import { PublicModule } from './public/public.module';
@@ -162,6 +163,7 @@ function isSignupRequest(context: ExecutionContext): boolean {
     MetafieldsModule,
     ShopAnalyticsModule,
     ShopModule,
+    SendingDomainsModule,
     DeliveryZonesModule,
     RegionsModule,
     PublicModule,

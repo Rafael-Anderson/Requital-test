@@ -66,6 +66,20 @@ function textToSimpleHtml(bodyText: string): string {
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;">${paragraphs}</div>`;
 }
 
+// MKT-3. A shop's verified sending domain, resolved at send time. common/email
+// is a DI-free module, so SendingDomainsService registers the lookup at boot.
+export interface SendingIdentity {
+  fromAddress: string;
+  replyTo?: string;
+}
+let identityResolver:
+  ((shopId: number) => Promise<SendingIdentity | null>) | null = null;
+export function setSendingIdentityResolver(
+  fn: ((shopId: number) => Promise<SendingIdentity | null>) | null,
+): void {
+  identityResolver = fn;
+}
+
 interface SendEmailOptions {
   html?: string;
   // Display name in the From header. Defaults to "Requital" — right for the
@@ -77,6 +91,10 @@ interface SendEmailOptions {
   fromName?: string;
   // Keep the body out of the stub's log line (see sendEmailStub).
   sensitive?: boolean;
+  // MKT-3: the sending shop. Used ONLY together with an explicit fromName (mail
+  // that names the shop as sender); platform mail (no fromName) always goes
+  // from the platform address even when a shopId is known.
+  shopId?: number;
 }
 
 // Same real-vs-stub resolution as sendEmail() below, but lets a real
@@ -106,14 +124,51 @@ export async function sendEmailOrThrow(
     sendEmailStub(to, subject, bodyText, options.sensitive);
     return;
   }
-  await new ResendEmailProvider().sendEmail({
+  const provider = new ResendEmailProvider();
+  const params = {
     to,
     subject,
     text: bodyText,
     html: options.html ?? textToSimpleHtml(bodyText),
     fromName: options.fromName ?? 'Requital',
+    // A shop-named mail that leaves from the platform address is shown as
+    // "<shop> via Requital"; platform mail keeps plain "Requital".
+    viaPlatform: options.fromName !== undefined,
     credentials: { apiKey },
-  });
+  };
+  let identity: SendingIdentity | null = null;
+  if (
+    options.shopId !== undefined &&
+    options.fromName !== undefined &&
+    identityResolver
+  ) {
+    try {
+      identity = await identityResolver(options.shopId);
+    } catch (err) {
+      logger.warn('sending identity lookup failed, using platform address', {
+        shopId: options.shopId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  if (identity) {
+    try {
+      await provider.sendEmail({ ...params, ...identity, viaPlatform: false });
+      return;
+    } catch (err) {
+      // Never lose a transactional mail to a domain problem: retry once from
+      // the platform address. (Ceiling: a timeout after the provider accepted
+      // the first send could deliver twice.)
+      logger.warn(
+        'send from shop sending domain failed, using platform address',
+        {
+          shopId: options.shopId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      );
+    }
+  }
+  await provider.sendEmail(params);
 }
 
 // The single entry point every non-queued call site uses instead of
