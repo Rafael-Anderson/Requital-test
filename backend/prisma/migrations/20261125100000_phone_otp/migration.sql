@@ -27,3 +27,13 @@ CREATE TABLE `phoneotp` (
 -- When the account holder last proved control of the phone (NULL = never; no
 -- backfill, nothing recorded it before).
 ALTER TABLE `customer` ADD COLUMN `phoneVerifiedAt` DATETIME(3) NULL;
+
+-- PLT-1: every plan carries a planfeature row for every registered key. A security
+-- control is not a paid tier, so every plan is entitled; the shop's own preference
+-- (default off) and the platform override still decide whether it is on. Idempotent
+-- and insert-if-missing, like the seed it extends.
+INSERT INTO `planfeature` (`planId`, `featureKey`, `entitled`)
+SELECT p.`id`, 'phone_otp_register', 1 FROM `plan` p
+WHERE NOT EXISTS (
+  SELECT 1 FROM `planfeature` pf WHERE pf.`planId` = p.`id` AND pf.`featureKey` = 'phone_otp_register'
+);
