@@ -33,9 +33,10 @@ const MAX_JOBS_PER_TICK = 10;
 @Injectable()
 export class JobsWorkerService {
   private readonly handlers: Partial<
-    Record<JobType, (payload: JobPayload) => Promise<void>>
+    Record<JobType, (payload: JobPayload, shopId: number) => Promise<void>>
   > = {
-    send_email: (payload) => handleSendEmailJob(payload as SendEmailJobPayload),
+    send_email: (payload, shopId) =>
+      handleSendEmailJob(payload as SendEmailJobPayload, shopId),
     send_merchant_whatsapp_alert: (payload) =>
       handleSendMerchantWhatsAppAlertJob(
         payload as SendMerchantWhatsAppAlertJobPayload,
@@ -46,7 +47,7 @@ export class JobsWorkerService {
 
   registerHandler(
     type: JobType,
-    handler: (payload: JobPayload) => Promise<void>,
+    handler: (payload: JobPayload, shopId: number) => Promise<void>,
   ): void {
     this.handlers[type] = handler;
   }
@@ -107,7 +108,7 @@ export class JobsWorkerService {
       return;
     }
     try {
-      await handler(job.payload as unknown as JobPayload);
+      await handler(job.payload as unknown as JobPayload, job.shopId);
       await this.jobsService.completeJob(job.id, job.payload);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

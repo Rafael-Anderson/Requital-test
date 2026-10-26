@@ -145,6 +145,8 @@ import type {
   FailedJob,
   Shop,
   ShopDomainConfig,
+  SendingDomain,
+  VerifySendingDomainResult,
   BillingSubscription,
   BillingUsage,
   VerifyDomainResult,
@@ -834,6 +836,25 @@ export function updateShopDomain(
 // when the domain has been verified by another account.
 export function verifyShopDomain() {
   return apiFetch<VerifyDomainResult>("/shop/domain/verify", { method: "POST" });
+}
+
+export function getSendingDomain() {
+  return apiFetch<{ sendingDomain: SendingDomain | null }>("/shop/sending-domain");
+}
+
+export function putSendingDomain(domain: string) {
+  return apiFetch<SendingDomain>("/shop/sending-domain", {
+    method: "PUT",
+    body: JSON.stringify({ domain }),
+  });
+}
+
+export function verifySendingDomain() {
+  return apiFetch<VerifySendingDomainResult>("/shop/sending-domain/verify", { method: "POST" });
+}
+
+export function deleteSendingDomain() {
+  return apiFetch<{ removed: boolean }>("/shop/sending-domain", { method: "DELETE" });
 }
 
 export function uploadShopLogo(file: File) {

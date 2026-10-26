@@ -1,4 +1,4 @@
-import { sendEmail, sendEmailStub } from './email';
+import { sendEmail, sendEmailStub, setSendingIdentityResolver } from './email';
 
 describe('sendEmail', () => {
   let fetchSpy: jest.SpyInstance;
@@ -73,7 +73,9 @@ describe('sendEmail', () => {
     const [, init] = fetchSpy.mock.calls[0];
     expect(init.headers.Authorization).toBe('Bearer real-key');
     const sentBody = JSON.parse(init.body);
-    expect(sentBody.from).toBe('Requital <noreply@requital.io>');
+    expect(sentBody.from).toBe(
+      '"Test Shop via Requital" <noreply@requital.io>',
+    );
     expect(sentBody.text).toBe(
       'Thanks for your order.\n\nSee it here: https://example.com/o/1',
     );
@@ -153,5 +155,95 @@ describe('sendEmailStub', () => {
       '[email:stub] to=a@example.com subject="Subject"\nBody',
     );
     logSpy.mockRestore();
+  });
+});
+
+describe('shop sending identity (MKT-3)', () => {
+  type FetchCall = [string, { body: string }];
+  let fetchSpy: jest.SpyInstance;
+  const originalKey = process.env.RESEND_API_KEY;
+  const ok = { ok: true, json: () => Promise.resolve({ id: 're_1' }) };
+  const bodyOf = (i: number) => {
+    const calls = fetchSpy.mock.calls as FetchCall[];
+    return JSON.parse(calls[i][1].body) as Record<string, string>;
+  };
+  beforeEach(() => {
+    fetchSpy = jest.spyOn(global, 'fetch');
+    jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    process.env.RESEND_API_KEY = 're_real';
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    setSendingIdentityResolver(null);
+    if (originalKey === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = originalKey;
+  });
+
+  it('sends from the verified domain with Reply-To', async () => {
+    fetchSpy.mockResolvedValue(ok);
+    setSendingIdentityResolver(() =>
+      Promise.resolve({
+        fromAddress: 'noreply@roses.com',
+        replyTo: 'hi@roses.com',
+      }),
+    );
+    await sendEmail('c@example.com', 'S', 'B', {
+      fromName: 'Roses',
+      shopId: 7,
+    });
+    expect(bodyOf(0).from).toBe('"Roses" <noreply@roses.com>');
+    expect(bodyOf(0).reply_to).toBe('hi@roses.com');
+  });
+
+  it('falls back to the platform address when the domain send fails', async () => {
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        json: () => Promise.resolve({ message: 'domain not verified' }),
+      })
+      .mockResolvedValueOnce(ok);
+    setSendingIdentityResolver(() =>
+      Promise.resolve({ fromAddress: 'noreply@roses.com' }),
+    );
+    await sendEmail('c@example.com', 'S', 'B', {
+      fromName: 'Roses',
+      shopId: 7,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(bodyOf(1).from).toBe('"Roses via Requital" <noreply@requital.io>');
+    expect(bodyOf(1).reply_to).toBeUndefined();
+  });
+
+  it('falls back when the identity lookup throws', async () => {
+    fetchSpy.mockResolvedValue(ok);
+    setSendingIdentityResolver(() => Promise.reject(new Error('db down')));
+    await sendEmail('c@example.com', 'S', 'B', {
+      fromName: 'Roses',
+      shopId: 7,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(bodyOf(0).from).toBe('"Roses via Requital" <noreply@requital.io>');
+  });
+
+  it('platform mail (no fromName) never uses a shop domain, shopId or not', async () => {
+    fetchSpy.mockResolvedValue(ok);
+    const resolver = jest.fn(() =>
+      Promise.resolve({ fromAddress: 'noreply@roses.com' }),
+    );
+    setSendingIdentityResolver(resolver);
+    await sendEmail('c@example.com', 'S', 'B', { shopId: 7 });
+    expect(resolver).not.toHaveBeenCalled();
+    expect(bodyOf(0).from).toBe('"Requital" <noreply@requital.io>');
+  });
+
+  it('no shopId (direct callers) never consults the resolver', async () => {
+    fetchSpy.mockResolvedValue(ok);
+    const resolver = jest.fn(() =>
+      Promise.resolve({ fromAddress: 'noreply@roses.com' }),
+    );
+    setSendingIdentityResolver(resolver);
+    await sendEmail('c@example.com', 'S', 'B', { fromName: 'Roses' });
+    expect(resolver).not.toHaveBeenCalled();
   });
 });
