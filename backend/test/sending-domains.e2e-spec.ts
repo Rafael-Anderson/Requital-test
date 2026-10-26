@@ -165,7 +165,7 @@ describe('Shop sending domains (e2e)', () => {
     'not a domain',
     'http://x.com',
   ])('rejects %s', async (d) => {
-    const shop = await setupShop('sd-bad');
+    const shop = await setupShop(`sd-bad${++n}`);
     await put(shop.token, d).expect(400);
     expect((await get(shop.token).expect(200)).body).toEqual({
       sendingDomain: null,
@@ -283,7 +283,8 @@ describe('Shop sending domains (e2e)', () => {
     });
     expect(sent[0].from).not.toMatch(/[\r\n]/);
     expect(sent[0].from.endsWith(`<noreply@${domain}>`)).toBe(true);
-    expect(sent[0].from).not.toContain('a@b.c');
+    expect(sent[0].from).not.toContain('<a@b.c>');
+    expect(sent[0].from.match(/"/g)).toHaveLength(2);
 
     // platform mail from the same shop (no fromName): platform address
     fetchSpy.mockClear();
@@ -341,6 +342,7 @@ describe('Shop sending domains (e2e)', () => {
     fake.failNext(2); // requestVerification + (not reached) getDomain
     const r = (await verify(a.token).expect(201)).body as Json;
     expect(r.verified).toBe(false);
+    fake.failNext(0);
     expect(r.message).toMatch(/email provider/);
     expect(((await get(a.token)).body as Json).sendingDomain.status).toBe(
       'pending',
