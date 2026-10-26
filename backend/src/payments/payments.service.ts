@@ -27,6 +27,11 @@ import type { WebhookResult } from './payment-provider.interface';
 import { storefrontUrl, type ShopUrlFields } from '../common/storefront-url';
 import { minorUnitFactor } from '../common/currency-minor-units';
 import { amountDueMinor, amountDueDecimal } from '../common/amount-due';
+import {
+  CURRENCY_BLOCKED_MESSAGE,
+  PaymentCurrencyNotSupportedException,
+  isGatewayCurrencyBlocked,
+} from './blocked-gateway-currencies';
 
 // What a gateway may still be asked for (see common/amount-due.ts), as a
 // number of major units for the provider interface.
@@ -69,6 +74,7 @@ export class PaymentsService {
       // (see common/storefront-url.ts); `conditions` are all on `order`, so
       // they are qualified with o. here.
       `SELECT o.*, s.subdomain AS shopSubdomain,
+              s.paymentGateway AS shopPaymentGateway,
               s.customDomain AS shopCustomDomain,
               s.customDomainStatus AS shopCustomDomainStatus,
               s.domainType AS shopDomainType
@@ -103,6 +109,21 @@ export class PaymentsService {
     if (order.status === 'cancelled') {
       throw new BadRequestException(
         'Cannot generate a payment link for a cancelled order',
+      );
+    }
+
+    // The link would charge the ORDER's own currency through the shop's card
+    // processor: refuse to mint one that can only fail (and so that staff, and
+    // a draft-order invoice, are told now rather than the customer later).
+    if (
+      isGatewayCurrencyBlocked(
+        order.shopPaymentGateway as string,
+        order.currency as string,
+      )
+    ) {
+      throw new PaymentCurrencyNotSupportedException(
+        order.shopPaymentGateway as string,
+        order.currency as string,
       );
     }
 
@@ -186,6 +207,17 @@ export class PaymentsService {
       throw new GoneException('Payment link has expired');
     }
 
+    // A link issued before the block (or for an order whose currency the
+    // gateway cannot take): 409 before any session is minted. The provider's
+    // own guard is the backstop.
+    if (
+      isGatewayCurrencyBlocked(
+        order.shopPaymentGateway as string,
+        order.currency as string,
+      )
+    ) {
+      throw new ConflictException(CURRENCY_BLOCKED_MESSAGE);
+    }
     const provider = this.providerRegistry.get(
       order.shopPaymentGateway as string,
     );
