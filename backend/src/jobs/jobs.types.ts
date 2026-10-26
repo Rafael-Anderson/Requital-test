@@ -9,7 +9,8 @@ export type JobType =
   | 'recompute_customer_metrics'
   | 'send_conversion_event'
   | 'import_copy_image'
-  | 'delete_proof_photo';
+  | 'delete_proof_photo'
+  | 'loyalty_earn';
 
 export interface SendEmailJobPayload {
   to: string;
@@ -117,7 +118,16 @@ export interface DeleteProofPhotoJobPayload {
   key: string;
 }
 
+// CUS-5: award loyalty points for one delivered order. Carries ids only; the
+// handler re-reads the order, customer and program under locks, so a stale
+// payload can neither mint points nor move another tenant's.
+export interface LoyaltyEarnJobPayload {
+  shopId: number;
+  orderId: number;
+}
+
 export type JobPayload =
+  | LoyaltyEarnJobPayload
   | DeleteProofPhotoJobPayload
   | SendEmailJobPayload
   | SendMerchantWhatsAppAlertJobPayload
