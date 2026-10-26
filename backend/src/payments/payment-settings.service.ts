@@ -8,6 +8,10 @@ import type { PaymentProvider } from './payment-provider.interface';
 import type { TenantContext } from '../common/tenant-context';
 import { decrypt, encrypt } from '../common/crypto';
 import {
+  STRIPE_BLOCKED_CURRENCIES,
+  isGatewayCurrencyBlocked,
+} from './blocked-gateway-currencies';
+import {
   CARD_PROCESSOR_PROVIDERS,
   PAYMENT_GATEWAY_PROVIDERS,
   PROVIDER_CREDENTIAL_FIELDS,
@@ -279,6 +283,18 @@ export class PaymentSettingsService {
   // path). A provider that does not implement isUsable (a test double) is usable.
   async isUsable(shopId: number, provider: string): Promise<boolean> {
     if (!(await this.isEnabled(shopId, provider))) return false;
+    // Blocked for the shop's current currency (KWD/BHD/OMR on Stripe): not a
+    // payment method the shopper can complete, so getShop hides it and the
+    // order is rejected before it exists. Provider-name keyed read, so only
+    // blocked gateways cost the extra query.
+    if (STRIPE_BLOCKED_CURRENCIES[provider]) {
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT currency FROM shop WHERE id = ?`,
+        [shopId],
+      );
+      const currency = rows[0]?.currency as string | undefined;
+      if (currency && isGatewayCurrencyBlocked(provider, currency)) return false;
+    }
     let impl: PaymentProvider;
     try {
       impl = this.providerRegistry.get(provider);

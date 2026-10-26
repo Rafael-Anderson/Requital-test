@@ -17,6 +17,7 @@ vi.mock("@/lib/auth-context", () => ({ useAuth: () => auth }));
 // non-admin through, one of these would call its endpoint.
 vi.mock("@/lib/api", () => ({
   getShop: vi.fn().mockResolvedValue({}),
+  getPaymentSettings: vi.fn().mockResolvedValue([]),
   updateShop: vi.fn(),
   getWebhookLog: vi.fn().mockResolvedValue([]),
   listFailedJobs: vi.fn().mockResolvedValue([]),

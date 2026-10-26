@@ -11,6 +11,10 @@ import {
   CheckoutSessionOutcome,
 } from '../payment-provider.interface';
 import { toMinorUnits } from '../../common/currency-minor-units';
+import {
+  PaymentCurrencyNotSupportedException,
+  isGatewayCurrencyBlocked,
+} from '../blocked-gateway-currencies';
 
 @Injectable()
 export class StripePaymentProvider implements PaymentProvider {
@@ -63,6 +67,16 @@ export class StripePaymentProvider implements PaymentProvider {
   async createCheckoutSession(
     params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {
+    // MANDATORY GUARD: Stripe checkout is blocked for the three-decimal
+    // currencies until the owner decides the handling (see
+    // blocked-gateway-currencies.ts). Lives here, not only in the early
+    // rejections, so no call path can bypass it. Refunds are unaffected.
+    if (isGatewayCurrencyBlocked(this.name, params.currency)) {
+      throw new PaymentCurrencyNotSupportedException(
+        this.name,
+        params.currency,
+      );
+    }
     const stripe = this.clientFor(params.credentials?.secretKey);
     const session = await stripe.checkout.sessions.create(
       {

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Copy } from "lucide-react";
-import { API_URL, getPaymentSettings, updatePaymentProvider } from "@/lib/api";
+import { API_URL, getPaymentSettings, getShop, updatePaymentProvider } from "@/lib/api";
+import { stripeBlockedForCurrency } from "@/lib/blocked-gateway-currencies";
+import StripeCurrencyNotice from "@/components/StripeCurrencyNotice";
 import { useAuth } from "@/lib/auth-context";
 import {
   CARD_PROCESSOR_PROVIDERS,
@@ -103,6 +105,19 @@ export default function PaymentIntegrationsPage() {
   const toast = useToast();
   const { user } = useAuth();
   const [settings, setSettings] = useState<PaymentProviderSettings[] | null>(null);
+  // Only for the Stripe currency warning below; a failed read means no warning.
+  const [shopCurrency, setShopCurrency] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    getShop()
+      .then((s) => {
+        if (live) setShopCurrency(s.currency);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const [cardProcessor, setCardProcessor] = useState<PaymentGatewayProvider>("stripe");
   const [cardCredentials, setCardCredentials] = useState<Record<string, string>>({});
@@ -295,6 +310,7 @@ export default function PaymentIntegrationsPage() {
           maskedCredentials={rowFor(cardProcessor)?.maskedCredentials ?? null}
           onChange={(key, value) => setCardCredentials((prev) => ({ ...prev, [key]: value }))}
         />
+        {cardProcessor === "stripe" && stripeBlockedForCurrency(shopCurrency) && <StripeCurrencyNotice />}
         {cardProcessor === "stripe" && user && <StripeWebhookInstructions shopId={user.shopId} />}
         <div className="flex justify-end">
           <Button variant="primary" onClick={handleSaveCardProcessor} disabled={savingCard}>
