@@ -23,6 +23,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
 import { FeaturesModule } from './features/features.module';
+import { BillingModule } from './billing/billing.module';
 import { AuthModule } from './auth/auth.module';
 import { OutletsModule } from './outlets/outlets.module';
 import { ProductsModule } from './products/products.module';
@@ -141,6 +142,7 @@ function isSignupRequest(context: ExecutionContext): boolean {
     }),
     DatabaseModule,
     FeaturesModule,
+    BillingModule,
     AuthModule,
     OutletsModule,
     ProductsModule,

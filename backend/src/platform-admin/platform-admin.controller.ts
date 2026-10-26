@@ -20,6 +20,7 @@ import { PlatformAuditLogService } from './platform-audit-log.service';
 import { WebhookLogService } from '../webhook-log/webhook-log.service';
 import { SliderSettingsService } from '../delivery-providers/slider-settings.service';
 import { SetSliderAccountIdDto } from '../delivery-providers/dto/set-slider-account-id.dto';
+import { BillingService } from '../billing/billing.service';
 import { ListShopsQueryDto } from './dto/list-shops-query.dto';
 import { SetFeatureOverrideDto } from './dto/set-feature-override.dto';
 import { ListWebhookLogQueryDto } from './dto/list-webhook-log-query.dto';
@@ -62,6 +63,7 @@ export class PlatformAdminController {
     private readonly sliderSettingsService: SliderSettingsService,
     private readonly currencyRatesService: CurrencyRatesService,
     private readonly channelConnections: ChannelConnectionsService,
+    private readonly billing: BillingService,
   ) {}
 
   @Get('shops')
@@ -80,6 +82,19 @@ export class PlatformAdminController {
   @Get('shops/:shopId')
   getShop(@Param('shopId', ParseIntPipe) shopId: number) {
     return this.platformAdminService.getShopDetail(shopId);
+  }
+
+  // PLT-1: read-only billing view of one shop (plan, status, usage, last events,
+  // suspension reason). No write route exists in this slice.
+  @Get('shops/:shopId/billing')
+  getShopBilling(@Param('shopId', ParseIntPipe) shopId: number) {
+    return this.billing.getShopBilling(shopId);
+  }
+
+  // Shops with no shopsubscription row (covered by the fail-open rule).
+  @Get('billing/shops-without-subscription')
+  shopsWithoutSubscription() {
+    return this.billing.listShopsWithoutSubscription();
   }
 
   @Get('shops/:shopId/features')

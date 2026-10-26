@@ -145,6 +145,8 @@ import type {
   FailedJob,
   Shop,
   ShopDomainConfig,
+  BillingSubscription,
+  BillingUsage,
   VerifyDomainResult,
   StockMovementType,
   ThemeSettings,
@@ -804,6 +806,14 @@ export function resolveMapsHealth(code: string, host: string) {
     method: "POST",
     body: JSON.stringify({ code, host }),
   });
+}
+
+export function getBillingSubscription() {
+  return apiFetch<BillingSubscription>("/billing/subscription");
+}
+
+export function getBillingUsage() {
+  return apiFetch<BillingUsage>("/billing/usage");
 }
 
 export function getShopDomain() {

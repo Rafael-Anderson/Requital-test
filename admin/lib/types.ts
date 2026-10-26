@@ -3942,3 +3942,41 @@ export interface ChannelUnmappedItem {
     acceptBy: string | null;
   }[];
 }
+
+// PLT-1 billing, read only. Mirrors backend/src/billing/billing.service.ts.
+// Everything unknown is null (a legacy plan has no currency, interval or period).
+export interface BillingFeature {
+  key: string;
+  description: string;
+  entitled: boolean;
+}
+
+export interface BillingSubscription {
+  /** False when the shop has no subscription row (every feature is available). */
+  hasSubscription: boolean;
+  status: "trialing" | "active" | "past_due" | "suspended" | "cancelled" | null;
+  source: "legacy" | "stripe" | "comp" | null;
+  plan: {
+    code: string;
+    name: string;
+    kind: "legacy" | "standard" | "comp";
+    orderSoftCeiling: number | null;
+  } | null;
+  currency: string | null;
+  billingInterval: "month" | "year" | null;
+  trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  features: BillingFeature[];
+}
+
+export interface BillingUsage {
+  /** Calendar month in the shop's timezone, "YYYY-MM". */
+  periodKey: string;
+  used: number;
+  /** Orders per month on the plan; null = no ceiling. */
+  ceiling: number | null;
+  percent: number | null;
+  /** Messaging level only: 0, 80, 100 or 120. Nothing is ever blocked. */
+  level: 0 | 80 | 100 | 120;
+}

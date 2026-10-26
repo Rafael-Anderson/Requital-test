@@ -231,6 +231,11 @@ jobs:
           node tools/check-nested-pool.js --self-test
           node tools/check-nested-pool.js
 
+      - name: Billing-isolation guardrail (billing tables and module stay out of the order path)
+        run: |
+          node tools/check-billing-isolation.js --self-test
+          node tools/check-billing-isolation.js
+
       - name: Logical-properties guardrail (no physical ml/mr/pl/pr/left/right utilities)
         run: node tools/logical-properties-codemod.js --check
 

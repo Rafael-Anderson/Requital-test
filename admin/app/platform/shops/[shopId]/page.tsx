@@ -20,6 +20,7 @@ import { confirmSuspend, startImpersonation } from "@/lib/impersonation";
 import { formatMoney } from "@/lib/money";
 import StaffTwoFactorCard from "@/components/platform/StaffTwoFactorCard";
 import ChannelConnectionsCard from "@/components/platform/ChannelConnectionsCard";
+import BillingCard from "@/components/platform/BillingCard";
 
 const SLIDER_STATUS_STYLES: Record<string, string> = {
   connected: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -279,6 +280,8 @@ export default function PlatformShopDetailPage() {
           )}
         </Section>
 
+        <BillingCard shopId={shopId} />
+
         <Section title="Feature flags">
           <p className="mb-3 text-xs text-slate-500">
             An override beats the merchant&apos;s own setting for this shop only. Clear it to hand
@@ -299,6 +302,7 @@ export default function PlatformShopDetailPage() {
                   <div className="text-xs text-slate-500">
                     {f.key} / merchant setting:{" "}
                     {f.columnValue === null ? "none" : f.columnValue ? "on" : "off"}
+                    {f.entitled ? "" : " / not in the shop's plan"}
                     {f.override?.note ? ` / note: ${f.override.note}` : ""}
                   </div>
                 </div>

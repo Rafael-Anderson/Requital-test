@@ -304,30 +304,44 @@ export class PlatformAdminService {
     };
   }
 
+  // A platform suspension always records its reason and overwrites a billing one
+  // (the platform decision wins, so a later payment can no longer lift it). The
+  // change and its audit entry are one transaction.
   async suspend(platformAdminId: number, shopId: number) {
     await this.findShopOrThrow(shopId);
-    await this.db.execute(`UPDATE shop SET suspendedAt = ? WHERE id = ?`, [
-      new Date(),
-      shopId,
-    ]);
-    await this.platformAuditLogService.log(
-      platformAdminId,
-      'shop.suspend',
-      shopId,
-    );
+    await this.db.transaction(async (conn) => {
+      await conn.query(
+        `UPDATE shop SET suspendedAt = ?, suspensionReason = 'platform' WHERE id = ?`,
+        [new Date(), shopId],
+      );
+      await this.platformAuditLogService.log(
+        platformAdminId,
+        'shop.suspend',
+        shopId,
+        undefined,
+        conn,
+      );
+    });
     return this.getShopDetail(shopId);
   }
 
+  // Clears either reason: a platform admin may deliberately lift a billing
+  // suspension (comp). Billing's own lift is a separate CAS on reason = 'billing'.
   async unsuspend(platformAdminId: number, shopId: number) {
     await this.findShopOrThrow(shopId);
-    await this.db.execute(`UPDATE shop SET suspendedAt = NULL WHERE id = ?`, [
-      shopId,
-    ]);
-    await this.platformAuditLogService.log(
-      platformAdminId,
-      'shop.unsuspend',
-      shopId,
-    );
+    await this.db.transaction(async (conn) => {
+      await conn.query(
+        `UPDATE shop SET suspendedAt = NULL, suspensionReason = NULL WHERE id = ?`,
+        [shopId],
+      );
+      await this.platformAuditLogService.log(
+        platformAdminId,
+        'shop.unsuspend',
+        shopId,
+        undefined,
+        conn,
+      );
+    });
     return this.getShopDetail(shopId);
   }
 

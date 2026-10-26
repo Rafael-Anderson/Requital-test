@@ -267,6 +267,9 @@ export interface ShopFeatureStatus {
     updatedBy: number | null;
     updatedAt: string;
   } | null;
+  /** Does the shop's plan include the key. 'default' = no plan row decides it (fail open). */
+  entitled: boolean;
+  entitledBy: "plan" | "default";
   effective: boolean;
 }
 
@@ -291,6 +294,43 @@ export function clearShopFeatureOverride(shopId: number, key: string) {
     `/platform-admin/shops/${shopId}/features/${encodeURIComponent(key)}`,
     { method: "DELETE" },
   );
+}
+
+// PLT-1: read-only billing view of one shop. Mirrors BillingService.getShopBilling.
+export interface PlatformShopBilling {
+  subscription: {
+    hasSubscription: boolean;
+    status: string | null;
+    source: string | null;
+    plan: { code: string; name: string; kind: string; orderSoftCeiling: number | null } | null;
+    currency: string | null;
+    billingInterval: string | null;
+    trialEndsAt: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+  };
+  usage: {
+    periodKey: string;
+    used: number;
+    ceiling: number | null;
+    percent: number | null;
+    level: number;
+  };
+  suspension: { suspendedAt: string | null; reason: string | null };
+  events: {
+    id: number;
+    fromStatus: string | null;
+    toStatus: string;
+    fromPlanCode: string | null;
+    toPlanCode: string;
+    reason: string;
+    actorType: string;
+    createdAt: string;
+  }[];
+}
+
+export function getShopBilling(shopId: number) {
+  return platformFetch<PlatformShopBilling>(`/platform-admin/shops/${shopId}/billing`);
 }
 
 // Staff of one shop for the "Staff two-factor" card. The API never sends a
