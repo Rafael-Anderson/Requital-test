@@ -363,6 +363,62 @@ describe('Customer data export & self-serve deletion — UAE PDPL (e2e)', () => 
         .expect(401);
     });
 
+    it("anonymisation nulls the customer's map pin on their orders, leaves another customer's order untouched, and the export never carries it", async () => {
+      const shop = await setupShop('priv-pin');
+      const phone = '0507770020';
+      const otherPhone = '0507770021';
+      const mine = body<OrderCreateResponse>(
+        await guestOrder(shop.shopSlug, shop.outletId, shop.productId, phone),
+      ).order;
+      const theirs = body<OrderCreateResponse>(
+        await guestOrder(
+          shop.shopSlug,
+          shop.outletId,
+          shop.productId,
+          otherPhone,
+        ),
+      ).order;
+      // Checkout only stores a pin for a delivery order, which needs a delivery
+      // outlet: put one on both orders directly, the column is what is under test.
+      await db.execute(
+        `UPDATE \`order\` SET dropoffLatitude = 25.2, dropoffLongitude = 55.3 WHERE id IN (?, ?)`,
+        [mine.id, theirs.id],
+      );
+      const registered = sessionFromResponse(
+        await register(shop.shopSlug, phone, `priv-pin-${runId}@test.com`),
+      );
+      const exported = await request(app.getHttpServer())
+        .get(`/public/${shop.shopSlug}/account/export`)
+        .set('Cookie', registered.cookieHeaderStr)
+        .expect(200);
+      expect(JSON.stringify(exported.body)).not.toMatch(
+        /dropoff(Latitude|Longitude)|25\.2\b/,
+      );
+      const requested = body<RequestDeletionResponse>(
+        await request(app.getHttpServer())
+          .delete(`/public/${shop.shopSlug}/account/me`)
+          .set('Cookie', registered.cookieHeaderStr)
+          .set('X-CSRF-Token', registered.csrfToken)
+          .expect(202),
+      );
+      await request(app.getHttpServer())
+        .delete(
+          `/public/${shop.shopSlug}/account/me/confirm?token=${requested.confirmationToken!}`,
+        )
+        .set('Cookie', registered.cookieHeaderStr)
+        .set('X-CSRF-Token', registered.csrfToken)
+        .expect(200);
+      const rows = await db.query<RowDataPacket[]>(
+        `SELECT id, dropoffLatitude, dropoffLongitude FROM \`order\` WHERE id IN (?, ?)`,
+        [mine.id, theirs.id],
+      );
+      const byId = new Map(rows.map((r) => [r.id as number, r]));
+      expect(byId.get(mine.id)!.dropoffLatitude).toBeNull();
+      expect(byId.get(mine.id)!.dropoffLongitude).toBeNull();
+      expect(byId.get(theirs.id)!.dropoffLatitude).toBe(25.2);
+      expect(byId.get(theirs.id)!.dropoffLongitude).toBe(55.3);
+    });
+
     it('a second confirm with the same token is rejected (already used)', async () => {
       const shop = await setupShop('priv-delete-reuse');
       const phone = '0507770011';

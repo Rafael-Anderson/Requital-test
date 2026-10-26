@@ -75,3 +75,27 @@ describe("DeliveryAddressFields with Google Maps blocked", () => {
     expect(s.setCoords).toHaveBeenCalledWith({ latitude: 25.2, longitude: 55.3 });
   });
 });
+
+describe("DeliveryAddressFields pin follows the typed address", () => {
+  const pin = { latitude: 25.2, longitude: 55.3 };
+
+  it("clears a placed pin when the shopper edits the address by hand, and says so", () => {
+    const s = state({ coords: pin });
+    const { rerender } = render(<DeliveryAddressFields state={s} />);
+    const address = document.querySelector("textarea") as HTMLTextAreaElement;
+    fireEvent.change(address, { target: { value: "Villa 99, Street 4" } });
+    expect(s.setCustomerAddress).toHaveBeenCalledWith("Villa 99, Street 4");
+    expect(s.setCoords).toHaveBeenCalledWith(null);
+    // The parent re-renders with the cleared pin: the hint explains why.
+    rerender(<DeliveryAddressFields state={state({ coords: null, setCoords: s.setCoords })} />);
+    expect(screen.getByRole("status").textContent).toMatch(/pin was cleared/);
+  });
+
+  it("leaves coords alone when there was no pin, and when the map itself sets the address", () => {
+    const s = state({ coords: null });
+    render(<DeliveryAddressFields state={s} />);
+    fireEvent.change(document.querySelector("textarea") as HTMLTextAreaElement, { target: { value: "Villa 5" } });
+    expect(s.setCoords).not.toHaveBeenCalled();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});
