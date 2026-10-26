@@ -207,6 +207,25 @@ export class CreatePublicOrderDto {
   @IsBoolean()
   useStoreCredit?: boolean;
 
+  // F8: one opaque key per checkout ATTEMPT, minted by the storefront (a UUID kept
+  // in sessionStorage). A retry of the same attempt (double click, a response that
+  // never arrived, Back from the gateway) carries the same key and gets the SAME
+  // order back, never a second order or a second debit; the same key with a
+  // different request is a 409. Optional: no key = the old behaviour.
+  @IsOptional()
+  @IsString()
+  // A UUID, or at least 22 URL-safe characters (128 bits of base64url): a key is
+  // the only thing that lets a request be answered with someone's order, so a
+  // short or guessable one is refused.
+  @Matches(
+    /^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9_-]{22,64})$/,
+    {
+      message:
+        'idempotencyKey must be a UUID or 22 to 64 letters, digits, - or _',
+    },
+  )
+  idempotencyKey?: string;
+
   @IsArray()
   @ArrayNotEmpty()
   @ArrayMaxSize(MAX_ORDER_LINES)

@@ -17,7 +17,17 @@ export interface CreateCheckoutSessionParams {
   // (Stripe today) fall back to that for backward compatibility with shops
   // that predate per-shop credential storage.
   credentials?: Record<string, string> | null;
+  // Aborted when the caller gives up waiting (PublicService.startPaymentSession
+  // allows a provider call PROVIDER_CALL_TIMEOUT_MS, far below the session lease).
+  // Providers pass it to their HTTP call so an abandoned attempt does not keep a
+  // request open. Optional: a provider that ignores it is still bounded by the
+  // caller's own timeout.
+  signal?: AbortSignal;
 }
+
+// How long one create-session call may take before the caller abandons it. Must
+// stay well below the session lease (PublicService SESSION_LEASE_SECONDS).
+export const PROVIDER_CALL_TIMEOUT_MS = 30_000;
 
 export interface CheckoutSession {
   providerReference: string;
@@ -95,6 +105,13 @@ export interface PaymentProvider {
   ): Promise<CheckoutSessionOutcome | null>;
 
   readonly name: string;
+  // F8: can this provider create a session at all for a shop with these resolved
+  // credentials (the shop's own, else null = platform env fallback)? Mirrors the
+  // provider's own MANDATORY GUARD in createCheckoutSession, which stays: this is
+  // only the pre-commit/storefront-visibility answer, never a replacement for it.
+  // OPTIONAL: a provider that does not say is treated as usable (test doubles);
+  // every structural stub answers false.
+  isUsable?(credentials: Record<string, string> | null): boolean;
   createCheckoutSession(
     params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession>;

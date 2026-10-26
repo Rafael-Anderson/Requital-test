@@ -19,6 +19,8 @@ import { PaymentSettingsService } from './payment-settings.service';
 import { AffiliateModule } from '../affiliate/affiliate.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { OrdersModule } from '../orders/orders.module';
+import { OrderNotificationsModule } from '../orders/order-notifications.module';
+import { GiftCardsModule } from '../gift-cards/gift-cards.module';
 import { WebhookLogModule } from '../webhook-log/webhook-log.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { ShopAnalyticsModule } from '../shop-analytics/shop-analytics.module';
@@ -53,6 +55,8 @@ function paymentProviderRegistryFactory(): PaymentProviderRegistry {
     AffiliateModule,
     BranchRolesModule,
     OrdersModule,
+    OrderNotificationsModule,
+    GiftCardsModule,
     WebhookLogModule,
     ShopAnalyticsModule,
   ],

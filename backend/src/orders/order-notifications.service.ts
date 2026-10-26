@@ -520,6 +520,71 @@ export class OrderNotificationsService {
     }
   }
 
+  // F8: a payment arrived for an order that is already cancelled. The merchant must
+  // refund it by hand, so tell them, once per order (the job key). Never throws.
+  async alertLatePayment(shopId: number, orderId: number): Promise<boolean> {
+    return this.alertMerchantAboutOrder(
+      shopId,
+      orderId,
+      `order:${orderId}:late-payment`,
+      (n) =>
+        `Payment received for cancelled order #${n}. Refund it in the payment provider.`,
+    );
+  }
+
+  // F8: a SECOND payment arrived for an order that is already paid. Once per charge
+  // (the job key carries the charge reference). Never throws.
+  async alertDuplicatePayment(
+    shopId: number,
+    orderId: number,
+    chargeRef: string,
+  ): Promise<boolean> {
+    return this.alertMerchantAboutOrder(
+      shopId,
+      orderId,
+      `order:${orderId}:duplicate-payment:${chargeRef.slice(0, 80)}`,
+      (n) =>
+        `A second payment was received for order #${n}. Refund the duplicate in the payment provider.`,
+    );
+  }
+
+  private async alertMerchantAboutOrder(
+    shopId: number,
+    orderId: number,
+    jobKey: string,
+    text: (shopOrderNumber: number) => string,
+  ): Promise<boolean> {
+    try {
+      // The order is read here, scoped by shop, so the outlet that receives the
+      // alert is always this shop's own.
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT shopOrderNumber, outletId FROM \`order\` WHERE id = ? AND shopId = ?`,
+        [orderId, shopId],
+      );
+      if (!rows[0]) return false;
+      const to = await this.resolveMerchantAlertRecipient(
+        shopId,
+        rows[0].outletId as number,
+        orderId,
+      );
+      if (!to) return false;
+      await this.jobsService.enqueue(
+        shopId,
+        'send_merchant_whatsapp_alert',
+        { to, body: text(rows[0].shopOrderNumber as number), orderId },
+        jobKey,
+      );
+      return true;
+    } catch (err) {
+      logger.error(`order #${orderId}: merchant payment alert enqueue failed`, {
+        orderId,
+        shopId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return false;
+    }
+  }
+
   // The E.164 number that receives merchant alerts for an outlet (its WhatsApp,
   // else its phone), or null. Shared with the marketplace channels, which alert
   // the merchant about an order waiting for acceptance. A pool read: call it

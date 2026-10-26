@@ -69,6 +69,24 @@ export interface OrderRow {
   // Migration 20261119100000: a delivery order placed with a typed address and no
   // map pin because Maps was unavailable (the merchant should confirm it).
   addressUnverified: boolean;
+  // F8 (migration 20261120100000): the storefront checkout's per-attempt key and a
+  // fingerprint of the request it arrived with. NULL for every other channel and
+  // for orders placed before this existed. Never returned to a client
+  // (stripAttribution removes both).
+  idempotencyKey: string | null;
+  idempotencyFingerprint: string | null;
+  // Lease held while a request asks a payment gateway for a session for this order
+  // (same migration). NULL when nobody is.
+  paymentSessionClaimedAt: Date | null;
+  // Who holds that lease (a random token); guards recording a session and releasing
+  // the lease. NULL when nobody does.
+  paymentSessionClaimToken: string | null;
+  // When "we received your order" was announced (CAS from NULL, so once).
+  placedNotifiedAt: Date | null;
+  // The checkout URL last handed to the shopper for this order and when (DB clock);
+  // lets a replay return the same open session. Internal: stripAttribution removes it.
+  paymentSessionUrl: string | null;
+  paymentSessionAt: Date | null;
 }
 
 export interface MapsErrorLogRow {

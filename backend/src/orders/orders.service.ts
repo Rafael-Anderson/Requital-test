@@ -757,7 +757,8 @@ export class OrdersService {
         order,
       );
       await conn.query(
-        `UPDATE \`order\` SET deliveryFee = ?, taxAmount = ?, total = ?
+        `UPDATE \`order\` SET deliveryFee = ?, taxAmount = ?, total = ?,
+                paymentSessionUrl = NULL, paymentSessionAt = NULL
           WHERE id = ?`,
         [dto.deliveryFee, roundMoney(taxAmount, feeCurrency), total, id],
       );
@@ -1415,6 +1416,12 @@ export class OrdersService {
         taxAmount: roundedItemsTax,
         discountAmount,
         ...(discountDropped && { discountId: null, discountCode: null }),
+        // The amount changed: a checkout URL remembered for the OLD amount must not
+        // be handed back by a replay (PublicService.replayCheckout mints a fresh
+        // session at the new amount instead). paymentSessionId is left alone, so
+        // webhook and reconciliation behaviour is unchanged.
+        paymentSessionUrl: null,
+        paymentSessionAt: null,
       });
       await conn.query(`UPDATE \`order\` SET ${set!.setClause} WHERE id = ?`, [
         ...set!.params,
@@ -1628,84 +1635,16 @@ export class OrdersService {
     }
 
     await this.db.transaction(async (conn) => {
-      // Two CAS attempts instead of "read status, then decide" — that read
-      // is stale by the time we write under concurrency (e.g. a confirm and
-      // a cancel racing the same order), and the wrong branch would either
-      // skip a needed restock or double-restock. Whichever CAS actually
-      // matches the row's current status at lock time is authoritative.
-      const [fromPending] = await conn.query(
-        `UPDATE \`order\` SET status = 'cancelled' WHERE id = ? AND shopId = ? AND outletId = ? AND status = 'pending'`,
-        [id, ctx.shopId, order.outletId],
-      );
-      if ((fromPending as { affectedRows: number }).affectedRows === 1) {
-        // A cancelled order is no longer described by any invoice issued for it
-        // (C2). Marked in each successful CAS branch rather than after the
-        // transaction, so it commits with the cancellation or not at all.
-        await markInvoicesSuperseded(conn, id);
-        // Credit the order spent comes back as a ledger entry, in this same
-        // transaction. Idempotent (unique per order), so a retried cancel is safe.
-        await this.storeCreditService.reverseSpendForOrder(
-          conn,
-          ctx.shopId,
-          id,
-          'Order cancelled',
+      const done = await this.applyCancel(conn, ctx, {
+        id,
+        outletId: order.outletId,
+        channel: order.channel,
+      });
+      if (!done) {
+        throw new ConflictException(
+          'Order status changed before this cancellation could be applied: refresh and retry',
         );
-        // An order from an immediate-reservation channel already reserved
-        // stock at creation (decremented while still 'pending', not at
-        // confirm — see updateStatus above) — cancelling from 'pending' must
-        // restock it here, unlike the deferred-reservation path where
-        // nothing was ever decremented yet at this stage.
-        if (
-          IMMEDIATE_STOCK_RESERVATION_CHANNELS.includes(order.channel ?? '')
-        ) {
-          await this.adjustStockForOrder(
-            conn,
-            ctx,
-            id,
-            order.outletId,
-            1,
-          );
-        }
-        // Give the order's discount use back (global counter and per-customer
-        // row together), in the same transaction as the CAS that won. LAST on
-        // purpose: checkout locks stock rows, inserts the order, then locks the
-        // discount row (redeem), so cancel must take order, stock, discount in
-        // that same order or a checkout and a cancel sharing a code and an
-        // ingredient can deadlock (1213).
-        await releaseDiscountRedemption(conn, ctx.shopId, id);
-        return;
       }
-
-      const [fromStockDecremented] = await conn.query(
-        `UPDATE \`order\` SET status = 'cancelled'
-         WHERE id = ? AND shopId = ? AND outletId = ? AND status IN ('confirmed', 'preparing', 'out_for_delivery')`,
-        [id, ctx.shopId, order.outletId],
-      );
-      if ((fromStockDecremented as { affectedRows: number }).affectedRows === 1) {
-        await markInvoicesSuperseded(conn, id);
-        // Credit the order spent comes back as a ledger entry, in this same
-        // transaction. Idempotent (unique per order), so a retried cancel is safe.
-        await this.storeCreditService.reverseSpendForOrder(
-          conn,
-          ctx.shopId,
-          id,
-          'Order cancelled',
-        );
-        await this.adjustStockForOrder(
-          conn,
-          ctx,
-          id,
-          order.outletId,
-          1,
-        );
-        // Last, for the lock order explained in the branch above.
-        await releaseDiscountRedemption(conn, ctx.shopId, id);
-        return;
-      }
-
-      throw new ConflictException(
-        'Order status changed before this cancellation could be applied: refresh and retry',
-      );
     });
 
     const orders = await this.loadOrdersWithRelations([id]);
@@ -1726,6 +1665,164 @@ export class OrdersService {
       after: { status: 'cancelled' },
     });
     return cancelled;
+  }
+
+  // THE cancel transaction body, shared by the staff/webhook cancel above and the
+  // system cancel after a payment gateway failure below, so there is exactly one
+  // definition of "what a cancel gives back": store credit, stock, the discount
+  // use and the gift card balance, all in the caller's transaction and behind the
+  // status CAS that won. Returns false when no CAS matched (the order moved on).
+  //
+  // Lock order (see releaseOverpaidTenders): order row (the CAS) -> customer row
+  // (credit ledger) -> stock -> discount -> gift card.
+  //
+  // Two CAS attempts instead of "read status, then decide" — that read is stale
+  // by the time we write under concurrency (e.g. a confirm and a cancel racing
+  // the same order), and the wrong branch would either skip a needed restock or
+  // double-restock. Whichever CAS actually matches the row's current status at
+  // lock time is authoritative.
+  //
+  // `gatewayFailure` (the system cancel after a gateway failure): only a
+  // still-pending, still-unpaid order that has NO payment session recorded may be
+  // cancelled, and nobody may hold the session lease. An order with a recorded
+  // session has (or may have) a live session the shopper can still pay; cancelling
+  // it would let that payment land on a cancelled order with its stock and tenders
+  // already released. It stays pending and the session stays payable
+  // (reconciliation covers it). An order another attempt is creating a session for
+  // right now is left to that attempt, which cancels or settles it itself.
+  private async applyCancel(
+    conn: PoolConnection,
+    actor: { shopId: number; userId: number | null },
+    order: { id: number; outletId: number; channel: string | null },
+    opts: { gatewayFailure?: boolean } = {},
+  ): Promise<boolean> {
+    const { id, outletId } = order;
+    const [fromPending] = await conn.query(
+      `UPDATE \`order\` SET status = 'cancelled' WHERE id = ? AND shopId = ? AND outletId = ? AND status = 'pending'${opts.gatewayFailure ? " AND paymentStatus = 'unpaid' AND paymentSessionId IS NULL AND paymentSessionClaimToken IS NULL" : ''}`,
+      [id, actor.shopId, outletId],
+    );
+    if ((fromPending as { affectedRows: number }).affectedRows === 1) {
+      // A cancelled order is no longer described by any invoice issued for it
+      // (C2). Marked in each successful CAS branch rather than after the
+      // transaction, so it commits with the cancellation or not at all.
+      await markInvoicesSuperseded(conn, id);
+      // Credit the order spent comes back as a ledger entry, in this same
+      // transaction. Idempotent (unique per order), so a retried cancel is safe.
+      await this.storeCreditService.reverseSpendForOrder(
+        conn,
+        actor.shopId,
+        id,
+        'Order cancelled',
+      );
+      // An order from an immediate-reservation channel already reserved
+      // stock at creation (decremented while still 'pending', not at
+      // confirm — see updateStatus above) — cancelling from 'pending' must
+      // restock it here, unlike the deferred-reservation path where
+      // nothing was ever decremented yet at this stage.
+      if (IMMEDIATE_STOCK_RESERVATION_CHANNELS.includes(order.channel ?? '')) {
+        await this.adjustStockForOrder(conn, actor, id, outletId, 1);
+      }
+      // Give the order's discount use back (global counter and per-customer
+      // row together), in the same transaction as the CAS that won. LAST but
+      // one on purpose: checkout locks stock rows, inserts the order, then
+      // locks the discount row (redeem), so cancel must take order, stock,
+      // discount in that same order or a checkout and a cancel sharing a code
+      // and an ingredient can deadlock (1213).
+      await releaseDiscountRedemption(conn, actor.shopId, id);
+      // The gift card balance the order drew comes back too (F8: this was the
+      // one tender a cancel never returned). Idempotent: it zeroes the order's
+      // redemption record, so a second pass finds nothing to give back. Last,
+      // the same order checkout locks it in (it redeems the card after the
+      // discount).
+      await this.giftCardsService.releaseAllForOrder(conn, actor.shopId, id);
+      // Gift cards this order SOLD must not work either, whoever cancels it (staff,
+      // a BNPL webhook, the gateway-failure system cancel): last, new rows only.
+      await this.giftCardsService.voidIssuedForOrder(conn, actor.shopId, id);
+      return true;
+    }
+    if (opts.gatewayFailure) return false;
+
+    const [fromStockDecremented] = await conn.query(
+      `UPDATE \`order\` SET status = 'cancelled'
+       WHERE id = ? AND shopId = ? AND outletId = ? AND status IN ('confirmed', 'preparing', 'out_for_delivery')`,
+      [id, actor.shopId, outletId],
+    );
+    if ((fromStockDecremented as { affectedRows: number }).affectedRows === 1) {
+      await markInvoicesSuperseded(conn, id);
+      await this.storeCreditService.reverseSpendForOrder(
+        conn,
+        actor.shopId,
+        id,
+        'Order cancelled',
+      );
+      await this.adjustStockForOrder(conn, actor, id, outletId, 1);
+      // Last, for the lock order explained in the branch above.
+      await releaseDiscountRedemption(conn, actor.shopId, id);
+      await this.giftCardsService.releaseAllForOrder(conn, actor.shopId, id);
+      await this.giftCardsService.voidIssuedForOrder(conn, actor.shopId, id);
+      return true;
+    }
+    return false;
+  }
+
+  // F8: the order a storefront checkout just committed could not be handed to
+  // its payment gateway (the provider threw, was not configured, or timed out),
+  // so the shopper was never sent to pay and nothing will ever settle it. Cancel
+  // it NOW, by the same transaction body as any cancel, so the stock, discount
+  // use, store credit and gift card balance it took are all returned instead of
+  // sitting behind an unpayable pending order (which reconciliation never polls,
+  // it has no session id). Called by PublicService.createOrder only.
+  //
+  // SYSTEM action: no staff user, no outlet permission check (the order is the
+  // caller's own, created a moment ago). Tenant-scoped by shopId on every
+  // statement. Returns whether it cancelled; false means the order was no longer
+  // pending-and-unpaid (never throws for that), so the caller still reports the
+  // gateway failure. Gift cards the order SOLD are voided and their delivery
+  // email dismissed: the order will never be paid, so the codes must not work.
+  async cancelAfterGatewayFailure(
+    shopId: number,
+    orderId: number,
+    gateway: string,
+  ): Promise<boolean> {
+    // A pool read BEFORE the transaction (nothing inside it may touch the pool).
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, outletId, channel FROM \`order\` WHERE id = ? AND shopId = ?`,
+      [orderId, shopId],
+    );
+    const row = rows[0];
+    if (!row) return false;
+    const cancelled = await this.db.transaction(async (conn) => {
+      return this.applyCancel(
+        conn,
+        { shopId, userId: null },
+        {
+          id: row.id as number,
+          outletId: row.outletId as number,
+          channel: row.channel as string | null,
+        },
+        { gatewayFailure: true },
+      );
+    });
+    if (!cancelled) return false;
+    await this.affiliateService.syncOrderStatus(orderId, {
+      orderStatus: 'cancelled',
+    });
+    await this.auditLogService.log(
+      {
+        shopId,
+        actorUserId: null,
+        actorLabel: 'system (payment gateway failure)',
+      },
+      {
+        action: 'order.status_changed',
+        entityType: 'order',
+        entityId: orderId,
+        before: { status: 'pending' },
+        after: { status: 'cancelled' },
+        metadata: { reason: 'payment_gateway_failure', gateway },
+      },
+    );
+    return true;
   }
 
   // Backs the order detail modal's status timeline. Reuses findOne's
@@ -1800,7 +1897,10 @@ export class OrdersService {
   // that cannot be corrected, because what such an order took was never stored.
   private async adjustStockForOrder(
     conn: PoolConnection,
-    ctx: TenantContext,
+    // Only the shop and the actor id are read. userId is null for a SYSTEM
+    // action (the stock movement is then written with no actor, exactly like a
+    // storefront checkout's own reservation), a TenantContext otherwise.
+    ctx: { shopId: number; userId: number | null },
     orderId: number,
     outletId: number,
     direction: 1 | -1,

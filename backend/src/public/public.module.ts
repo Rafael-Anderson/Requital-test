@@ -7,6 +7,7 @@ import { PublicSurveyController } from './public-survey.controller';
 import { PublicShopsController } from './public-shops.controller';
 import { PublicAbandonedCartRecoveryController } from './public-abandoned-cart-recovery.controller';
 import { PublicService } from './public.service';
+import { OrdersModule } from '../orders/orders.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { CustomersModule } from '../customers/customers.module';
 import { AffiliateModule } from '../affiliate/affiliate.module';
@@ -36,6 +37,7 @@ import { StoreCreditModule } from '../store-credit/store-credit.module';
     // bypass — see PublicService.isAuthorizedPreview.
     JwtModule.register({ secret: process.env.JWT_SECRET }),
     PaymentsModule,
+    OrdersModule,
     CustomersModule,
     AffiliateModule,
     BioLinksModule,

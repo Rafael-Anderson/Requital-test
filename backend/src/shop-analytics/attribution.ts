@@ -79,7 +79,10 @@ function cleanLandingPath(value: unknown): string | undefined {
   return stripQuery(s);
 }
 
-function cleanTouch(raw: unknown, marketingConsent: boolean): TouchData | undefined {
+function cleanTouch(
+  raw: unknown,
+  marketingConsent: boolean,
+): TouchData | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const r = raw as Record<string, unknown>;
   const touch: TouchData = {};
@@ -122,7 +125,8 @@ export function sanitizeAttribution(raw: unknown): AttributionData | null {
     consentRaw && typeof consentRaw === 'object'
       ? (consentRaw as Record<string, unknown>).marketing
       : undefined;
-  const marketing = marketingRaw === true ? true : marketingRaw === false ? false : null;
+  const marketing =
+    marketingRaw === true ? true : marketingRaw === false ? false : null;
 
   const out: AttributionData = {
     v: ATTRIBUTION_VERSION,
@@ -197,10 +201,24 @@ export function attributionAdminView(value: unknown): {
 // ANY client. `SELECT *` over `order` is spread into responses all over the
 // backend, so a new column would otherwise leak by default; every such spot
 // strips it with this and the isolation e2e asserts none of them leak.
+// F8: also removes the checkout idempotency key and request fingerprint, the payment
+// session lease (claimedAt, claim token), the session URL/time and the
+// announcement marker, which are the same kind of column (internal, on the `order`
+// row, never for a client).
+const INTERNAL_ORDER_COLUMNS = [
+  'attributionJson',
+  'idempotencyKey',
+  'idempotencyFingerprint',
+  'paymentSessionClaimedAt',
+  'paymentSessionClaimToken',
+  'paymentSessionUrl',
+  'paymentSessionAt',
+  'placedNotifiedAt',
+] as const;
 export function stripAttribution<T extends object>(
   row: T,
-): Omit<T, 'attributionJson'> {
-  const copy = { ...row } as T & { attributionJson?: unknown };
-  delete copy.attributionJson;
-  return copy;
+): Omit<T, (typeof INTERNAL_ORDER_COLUMNS)[number]> {
+  const copy: Record<string, unknown> = { ...(row as Record<string, unknown>) };
+  for (const column of INTERNAL_ORDER_COLUMNS) delete copy[column];
+  return copy as Omit<T, (typeof INTERNAL_ORDER_COLUMNS)[number]>;
 }

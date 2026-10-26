@@ -3,6 +3,8 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { QueryParam } from '../database/database.service';
 import { ShopService } from '../shop/shop.service';
+import { PaymentProviderRegistry } from './payment-provider.registry';
+import type { PaymentProvider } from './payment-provider.interface';
 import type { TenantContext } from '../common/tenant-context';
 import { decrypt, encrypt } from '../common/crypto';
 import {
@@ -35,6 +37,7 @@ export class PaymentSettingsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly shopService: ShopService,
+    private readonly providerRegistry: PaymentProviderRegistry,
   ) {}
 
   async findAll(ctx: TenantContext): Promise<ProviderSettingsResponse[]> {
@@ -263,6 +266,27 @@ export class PaymentSettingsService {
         allRows.map((r) => [r.provider as string, r as { enabled: boolean; credentials: string | null }]),
       ),
     );
+  }
+
+  // F8: enabled AND able to take a payment right now, i.e. the provider is
+  // registered and says it has real credentials (the shop's own, else the
+  // platform env fallback). A toggle alone is not enough: a shop that never
+  // entered keys still reads "enabled" for Stripe (the legacy no-row default), and
+  // before this the storefront offered "Pay online" and the order was placed
+  // BEFORE the gateway said no. The Nomod/PayTabs/Telr structural stubs answer
+  // false whatever was saved. Never a replacement for the provider's own
+  // MANDATORY GUARD in createCheckoutSession (that stays, for every other call
+  // path). A provider that does not implement isUsable (a test double) is usable.
+  async isUsable(shopId: number, provider: string): Promise<boolean> {
+    if (!(await this.isEnabled(shopId, provider))) return false;
+    let impl: PaymentProvider;
+    try {
+      impl = this.providerRegistry.get(provider);
+    } catch {
+      return false;
+    }
+    if (!impl.isUsable) return true;
+    return impl.isUsable(await this.resolveCredentials(shopId, provider));
   }
 
   // Single source of truth for "is this provider enabled right now": the

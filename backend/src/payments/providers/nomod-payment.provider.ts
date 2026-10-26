@@ -22,6 +22,11 @@ const logger = createLogger('NomodPaymentProvider');
 export class NomodPaymentProvider implements PaymentProvider {
   readonly name = 'nomod';
 
+  // Structural stub: never usable, whatever credentials a shop saved.
+  isUsable(): boolean {
+    return false;
+  }
+
   createCheckoutSession(
     _params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {

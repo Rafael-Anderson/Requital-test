@@ -1,6 +1,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import Stripe from 'stripe';
 import {
+  PROVIDER_CALL_TIMEOUT_MS,
   CheckoutSession,
   CreateCheckoutSessionParams,
   PaymentProvider,
@@ -55,32 +56,39 @@ export class StripePaymentProvider implements PaymentProvider {
   // before, verifying against the platform's STRIPE_WEBHOOK_SECRET — for
   // shops that never configured their own Stripe credentials and stayed on
   // the platform account.
+  isUsable(credentials: Record<string, string> | null): boolean {
+    return !!(credentials?.secretKey ?? process.env.STRIPE_SECRET_KEY);
+  }
+
   async createCheckoutSession(
     params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession> {
     const stripe = this.clientFor(params.credentials?.secretKey);
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: params.currency.toLowerCase(),
-            product_data: { name: `Order #${params.orderNumber}` },
-            // Minor units, per the currency's own exponent - NOT a fixed
-            // x100. KWD/BHD/OMR are three-decimal, so a hardcoded 100
-            // understates them by 10x. Unreachable today (shop.currency is
-            // locked to AED by UpdateShopDto) but fixed at the source rather
-            // than left resting on that lock alone.
-            unit_amount: toMinorUnits(params.amount, params.currency),
+    const session = await stripe.checkout.sessions.create(
+      {
+        mode: 'payment',
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: params.currency.toLowerCase(),
+              product_data: { name: `Order #${params.orderNumber}` },
+              // Minor units, per the currency's own exponent - NOT a fixed
+              // x100. KWD/BHD/OMR are three-decimal, so a hardcoded 100
+              // understates them by 10x. Unreachable today (shop.currency is
+              // locked to AED by UpdateShopDto) but fixed at the source rather
+              // than left resting on that lock alone.
+              unit_amount: toMinorUnits(params.amount, params.currency),
+            },
+            quantity: 1,
           },
-          quantity: 1,
-        },
-      ],
-      metadata: { orderId: String(params.orderId) },
-      success_url: params.successUrl,
-      cancel_url: params.cancelUrl,
-    });
+        ],
+        metadata: { orderId: String(params.orderId) },
+        success_url: params.successUrl,
+        cancel_url: params.cancelUrl,
+      },
+      { timeout: PROVIDER_CALL_TIMEOUT_MS },
+    );
 
     if (!session.url) {
       throw new InternalServerErrorException(
@@ -89,7 +97,6 @@ export class StripePaymentProvider implements PaymentProvider {
     }
     return { providerReference: session.id, checkoutUrl: session.url };
   }
-
 
   // Fix 3a: what the reconciliation sweep asks when a webhook never arrived.
   //

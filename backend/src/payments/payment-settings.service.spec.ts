@@ -1,4 +1,5 @@
 import { PaymentSettingsService } from './payment-settings.service';
+import { PaymentProviderRegistry } from './payment-provider.registry';
 import type { DatabaseService } from '../database/database.service';
 import type { ShopService } from '../shop/shop.service';
 
@@ -24,6 +25,7 @@ function createMockDb(rows: { provider: string; enabled: boolean; credentials: s
 }
 
 const mockShopService = {} as ShopService;
+const registry = new PaymentProviderRegistry();
 
 describe('PaymentSettingsService.resolveTabbyMerchantCode', () => {
   const oldEnv = process.env.TABBY_PUBLIC_KEY;
@@ -33,7 +35,7 @@ describe('PaymentSettingsService.resolveTabbyMerchantCode', () => {
 
   it('returns null when Tabby is not enabled for the shop', async () => {
     const db = createMockDb([{ provider: 'tabby', enabled: false, credentials: JSON.stringify({ merchantCode: 'mc_1' }) }]);
-    const service = new PaymentSettingsService(db, mockShopService);
+    const service = new PaymentSettingsService(db, mockShopService, registry);
 
     expect(await service.resolveTabbyMerchantCode(1)).toBeNull();
   });
@@ -42,14 +44,14 @@ describe('PaymentSettingsService.resolveTabbyMerchantCode', () => {
     const db = createMockDb([
       { provider: 'tabby', enabled: true, credentials: JSON.stringify({ publicKey: 'pk_1', merchantCode: 'mc_1' }) },
     ]);
-    const service = new PaymentSettingsService(db, mockShopService);
+    const service = new PaymentSettingsService(db, mockShopService, registry);
 
     expect(await service.resolveTabbyMerchantCode(1)).toBe('mc_1');
   });
 
   it('falls back to publicKey when merchantCode is not set', async () => {
     const db = createMockDb([{ provider: 'tabby', enabled: true, credentials: JSON.stringify({ publicKey: 'pk_1' }) }]);
-    const service = new PaymentSettingsService(db, mockShopService);
+    const service = new PaymentSettingsService(db, mockShopService, registry);
 
     expect(await service.resolveTabbyMerchantCode(1)).toBe('pk_1');
   });
@@ -57,7 +59,7 @@ describe('PaymentSettingsService.resolveTabbyMerchantCode', () => {
   it('falls back to the platform TABBY_PUBLIC_KEY env var when the shop has no credentials at all', async () => {
     process.env.TABBY_PUBLIC_KEY = 'pk_platform';
     const db = createMockDb([{ provider: 'tabby', enabled: true, credentials: null }]);
-    const service = new PaymentSettingsService(db, mockShopService);
+    const service = new PaymentSettingsService(db, mockShopService, registry);
 
     expect(await service.resolveTabbyMerchantCode(1)).toBe('pk_platform');
   });
@@ -65,7 +67,7 @@ describe('PaymentSettingsService.resolveTabbyMerchantCode', () => {
   it('returns null when nothing is configured anywhere', async () => {
     delete process.env.TABBY_PUBLIC_KEY;
     const db = createMockDb([{ provider: 'tabby', enabled: true, credentials: null }]);
-    const service = new PaymentSettingsService(db, mockShopService);
+    const service = new PaymentSettingsService(db, mockShopService, registry);
 
     expect(await service.resolveTabbyMerchantCode(1)).toBeNull();
   });

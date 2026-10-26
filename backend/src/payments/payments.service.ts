@@ -17,6 +17,9 @@ import { PaymentSettingsService } from './payment-settings.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { OrdersService } from '../orders/orders.service';
+import { OrderNotificationsService } from '../orders/order-notifications.service';
+import { GiftCardsService } from '../gift-cards/gift-cards.service';
+import { resolveErrorTrackingProvider } from '../common/error-tracking/error-tracking.provider';
 import { WebhookLogService } from '../webhook-log/webhook-log.service';
 import { ConversionEventsService } from '../shop-analytics/conversion-events.service';
 import { createLogger } from '../common/logging/logger';
@@ -49,6 +52,8 @@ export class PaymentsService {
     private readonly ordersService: OrdersService,
     private readonly webhookLogService: WebhookLogService,
     private readonly conversionEventsService: ConversionEventsService,
+    private readonly orderNotificationsService: OrderNotificationsService,
+    private readonly giftCardsService: GiftCardsService,
   ) {}
 
   async generateLink(ctx: TenantContext, orderId: number) {
@@ -217,7 +222,8 @@ export class PaymentsService {
     // "never checked" state appear together.
     await this.db.transaction(async (conn) => {
       await conn.query(
-        `UPDATE \`order\` SET paymentSessionId = ?, paymentSessionGateway = ?
+        `UPDATE \`order\` SET paymentSessionId = ?, paymentSessionGateway = ?,
+                paymentSessionUrl = NULL, paymentSessionAt = NULL
           WHERE id = ?`,
         [
           session.providerReference,
@@ -342,6 +348,7 @@ export class PaymentsService {
       return { received: true };
     }
 
+    let outcome: 'applied' | 'cancelled' | 'duplicate' = 'applied';
     try {
       // The paymenttransaction insert and the order update live in one
       // transaction, guarded by a unique (gateway, gatewayReference) index —
@@ -350,7 +357,37 @@ export class PaymentsService {
       // If the insert violates the unique constraint, the whole transaction
       // (including the order update) rolls back, so a duplicate delivery
       // can't re-apply the paymentStatus change or insert a second row.
-      await this.db.transaction(async (conn) => {
+      outcome = await this.db.transaction(async (conn) => {
+        // The order row is locked FIRST (the same order a cancel takes it in),
+        // so the cancelled check and the paid write below cannot interleave with
+        // a cancel.
+        let cancelled = false;
+        let duplicate = false;
+        if (result.status === 'paid') {
+          const [rows] = await conn.query<RowDataPacket[]>(
+            `SELECT status, paymentStatus FROM \`order\` WHERE id = ? AND shopId = ? FOR UPDATE`,
+            [order.id, order.shopId],
+          );
+          cancelled = rows[0]?.status === 'cancelled';
+          // A second payment: the order is already paid, and by a DIFFERENT
+          // charge (the same payment reported again, say by the webhook after the
+          // reconciliation sweep, carries the same charge reference and is not
+          // one). Read before this event's own row is inserted.
+          if (
+            !cancelled &&
+            rows[0]?.paymentStatus === 'paid' &&
+            result.chargeReference
+          ) {
+            const [prior] = await conn.query<RowDataPacket[]>(
+              `SELECT id FROM paymenttransaction
+                WHERE orderId = ? AND status = 'paid'
+                  AND providerChargeReference IS NOT NULL AND providerChargeReference <> ?
+                LIMIT 1`,
+              [order.id, result.chargeReference],
+            );
+            duplicate = prior.length > 0;
+          }
+        }
         await conn.query(
           `INSERT INTO paymenttransaction (orderId, gateway, gatewayReference, providerChargeReference, amount, status, currency)
            VALUES (?, ?, ?, ?, ?, ?, (SELECT currency FROM \`order\` WHERE id = ?))`,
@@ -367,12 +404,22 @@ export class PaymentsService {
             order.id, // the currency subselect above
           ],
         );
-        if (result.status === 'paid') {
+        // A payment for an order that is ALREADY cancelled (a staff cancel, or
+        // a gateway session that outlived an auto-cancel) is recorded as the
+        // transaction it is, but the order is NOT marked paid and stays
+        // cancelled: its stock, discount and tenders were already given back, so
+        // calling it paid would be false. The money is real, so it is raised
+        // loudly below for the merchant to refund by hand (no auto-refund).
+        //
+        // A duplicate payment is recorded too and leaves the order exactly as it is
+        // (already paid); it is raised for refund the same way.
+        if (result.status === 'paid' && !cancelled && !duplicate) {
           await conn.query(
             `UPDATE \`order\` SET paymentStatus = 'paid' WHERE id = ?`,
             [order.id],
           );
         }
+        return cancelled ? 'cancelled' : duplicate ? 'duplicate' : 'applied';
       });
     } catch (error) {
       // Duplicate key (errno 1062): the unique (gateway, gatewayReference)
@@ -385,6 +432,17 @@ export class PaymentsService {
       // surfacing a 500 that would make the gateway retry a delivery that
       // already succeeded elsewhere.
       if (isDuplicateKeyError(error) || isLockConflict(error)) {
+        // A duplicate key proves the event is already recorded. A lock conflict
+        // proves nothing of the kind (our own transaction was the one rolled
+        // back), so unless the row is really there the failure is rethrown and the
+        // gateway retries the delivery rather than the payment being lost.
+        if (!isDuplicateKeyError(error)) {
+          const recorded = await this.db.query<RowDataPacket[]>(
+            `SELECT id FROM paymenttransaction WHERE gateway = ? AND gatewayReference = ?`,
+            [providerName, result.providerReference],
+          );
+          if (!recorded[0]) throw error;
+        }
         await this.webhookLogService.log(
           order.shopId as number,
           gateway,
@@ -396,10 +454,36 @@ export class PaymentsService {
         // that here. Idempotent (job key capi:purchase:<orderId>), so this can
         // never produce a second job.
         if (result.status === 'paid') {
-          await this.conversionEventsService.enqueuePurchase(
-            order.id as number,
-            { paid: true },
+          // The order's status NOW, not the one read before this delivery started:
+          // a cancel may have landed since.
+          const fresh = await this.db.query<RowDataPacket[]>(
+            `SELECT status, paymentStatus FROM \`order\` WHERE id = ? AND shopId = ?`,
+            [order.id as number, order.shopId as number],
           );
+          if (fresh[0]?.status === 'cancelled') {
+            // The delivery that recorded it may have died before alerting.
+            await this.raiseLatePayment(order, gateway, result);
+          } else {
+            await this.conversionEventsService.enqueuePurchase(
+              order.id as number,
+              { paid: true },
+            );
+            await this.sendPaidGiftCardCodes(order);
+            // A redelivery of a SECOND payment's event: if the delivery that
+            // recorded it died before alerting, alert now (idempotent by job key).
+            // Only a charge that differs from an EARLIER paid row counts, so the
+            // original payment's own redelivery is never mislabelled.
+            if (
+              fresh[0]?.paymentStatus === 'paid' &&
+              (await this.isLaterDifferentCharge(
+                order.id as number,
+                providerName,
+                result,
+              ))
+            ) {
+              await this.raiseDuplicatePayment(order, gateway, result);
+            }
+          }
         }
         return { received: true };
       }
@@ -412,6 +496,15 @@ export class PaymentsService {
       'success',
     );
 
+    if (outcome === 'cancelled') {
+      await this.raiseLatePayment(order, gateway, result);
+      return { received: true };
+    }
+    if (outcome === 'duplicate') {
+      await this.raiseDuplicatePayment(order, gateway, result);
+      return { received: true };
+    }
+
     if (result.status === 'paid') {
       await this.affiliateService.syncOrderStatus(order.id as number, {
         paymentPaid: true,
@@ -423,6 +516,7 @@ export class PaymentsService {
       await this.conversionEventsService.enqueuePurchase(order.id as number, {
         paid: true,
       });
+      await this.sendPaidGiftCardCodes(order);
     }
 
     if (result.advanceOrderStatus) {
@@ -434,6 +528,136 @@ export class PaymentsService {
     }
 
     return { received: true };
+  }
+
+  // Gift cards an ONLINE order sold are emailed only once it is paid (see
+  // GiftCardsService.issueForOrder's deferEmail). Idempotent (one job per order)
+  // and never throws: the payment is already recorded.
+  private async sendPaidGiftCardCodes(order: RowDataPacket) {
+    try {
+      await this.giftCardsService.sendIssuedEmailForOrder(
+        order.shopId as number,
+        order.id as number,
+      );
+    } catch (err) {
+      logger.error('gift card code email after payment failed', {
+        orderId: order.id as number,
+        shopId: order.shopId as number,
+        error: err instanceof Error ? err.name : 'non-error',
+      });
+    }
+  }
+
+  // Is this (already recorded) event a payment whose charge differs from a paid
+  // transaction recorded BEFORE it for the same order? False when its own row is
+  // not found or it carries no charge reference.
+  private async isLaterDifferentCharge(
+    orderId: number,
+    providerName: string,
+    result: WebhookResult,
+  ): Promise<boolean> {
+    if (!result.chargeReference) return false;
+    const mine = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM paymenttransaction WHERE gateway = ? AND gatewayReference = ?`,
+      [providerName, result.providerReference],
+    );
+    if (!mine[0]) return false;
+    const earlier = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM paymenttransaction
+        WHERE orderId = ? AND status = 'paid' AND id < ?
+          AND providerChargeReference IS NOT NULL AND providerChargeReference <> ?
+        LIMIT 1`,
+      [orderId, mine[0].id as number, result.chargeReference],
+    );
+    return earlier.length > 0;
+  }
+
+  // A second, different payment arrived for an order that is already paid (two
+  // sessions were open and the shopper paid both). Recorded, the order untouched,
+  // and raised for a manual refund exactly like a late payment: error line,
+  // error-tracking capture, and a merchant alert once per charge (job key).
+  private async raiseDuplicatePayment(
+    order: RowDataPacket,
+    gateway: string,
+    result: WebhookResult,
+  ) {
+    const context = {
+      orderId: order.id as number,
+      shopId: order.shopId as number,
+      gateway,
+    };
+    logger.error(
+      'second payment received for an already PAID order, refund it in the payment provider',
+      { ...context, providerReference: result.providerReference },
+    );
+    try {
+      resolveErrorTrackingProvider().captureException(
+        new Error('second payment received for a paid order'),
+        { shopId: order.shopId as number, route: `payment webhook ${gateway}` },
+      );
+      const alerted = await this.orderNotificationsService.alertDuplicatePayment(
+        order.shopId as number,
+        order.id as number,
+        result.chargeReference ?? result.providerReference,
+      );
+      if (!alerted) {
+        logger.error(
+          'duplicate payment on a paid order and NO merchant number to alert, refund it by hand',
+          context,
+        );
+      }
+    } catch (err) {
+      logger.error('duplicate-payment alert failed', {
+        ...context,
+        error: err instanceof Error ? err.name : 'non-error',
+      });
+    }
+  }
+
+  // Money arrived for an order that is cancelled. There is deliberately no
+  // auto-refund (owner decision), so the only safe thing is to make sure a human
+  // knows, once: a structured error line (and the error-tracking sink when one is
+  // configured), plus a merchant WhatsApp alert whose job key makes it once per
+  // order however many events or redeliveries arrive. Never throws (the payment
+  // is already recorded; a failing alert must not turn the webhook into a retry
+  // storm).
+  private async raiseLatePayment(
+    order: RowDataPacket,
+    gateway: string,
+    result: WebhookResult,
+  ) {
+    const context = {
+      orderId: order.id as number,
+      shopId: order.shopId as number,
+      gateway,
+    };
+    logger.error(
+      'payment received for a CANCELLED order, refund it in the payment provider',
+      { ...context, providerReference: result.providerReference },
+    );
+    try {
+      resolveErrorTrackingProvider().captureException(
+        new Error('payment received for a cancelled order'),
+        { shopId: order.shopId as number, route: `payment webhook ${gateway}` },
+      );
+      const alerted = await this.orderNotificationsService.alertLatePayment(
+        order.shopId as number,
+        order.id as number,
+      );
+      if (!alerted) {
+        // No merchant WhatsApp number to tell: the log line and the
+        // error-tracking capture above are the only signal, so say so with the id.
+        logger.error(
+          'late payment on a cancelled order and NO merchant number to alert, refund it by hand',
+          context,
+        );
+      }
+    } catch (err) {
+      logger.error('late-payment alert failed', {
+        ...context,
+        error: err instanceof Error ? err.name : 'non-error',
+      });
+    }
   }
 
   // BNPL-specific (Tabby/Tamara — see WebhookResult.advanceOrderStatus).

@@ -9,6 +9,8 @@ import type {
   WebhookResult,
 } from './payment-provider.interface';
 import type { BranchRolesService } from '../branch-roles/branch-roles.service';
+import type { GiftCardsService } from '../gift-cards/gift-cards.service';
+import type { OrderNotificationsService } from '../orders/order-notifications.service';
 import type { OrdersService } from '../orders/orders.service';
 import type { WebhookLogService } from '../webhook-log/webhook-log.service';
 import type { ConversionEventsService } from '../shop-analytics/conversion-events.service';
@@ -49,6 +51,8 @@ function createMockDb(opts: {
   } | null;
   createRejectsWith?: unknown;
   adminUser?: { id: number } | null;
+  // The paymenttransaction row for the event exists (the lookup after a lock conflict).
+  recorded?: boolean;
 }) {
   const order = opts.order ?? null;
   const insertCalls: unknown[][] = [];
@@ -78,6 +82,9 @@ function createMockDb(opts: {
     query: jest.fn((sql: string) => {
       if (sql.includes('FROM `order`')) {
         return Promise.resolve(order ? [order] : []);
+      }
+      if (sql.includes('FROM paymenttransaction')) {
+        return Promise.resolve(opts.recorded ? [{ id: 1 }] : []);
       }
       if (sql.includes('FROM user')) {
         const adminUser =
@@ -122,6 +129,8 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockOrdersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
+      {} as GiftCardsService,
     );
 
     const result = await service.handleWebhook(
@@ -158,6 +167,8 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockOrdersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
+      {} as GiftCardsService,
     );
 
     const result = await service.handleWebhook(
@@ -197,6 +208,8 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockOrdersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
+      {} as GiftCardsService,
     );
 
     await expect(
@@ -225,6 +238,8 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockOrdersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
+      {} as GiftCardsService,
     );
 
     const result = await service.handleWebhook(
@@ -248,6 +263,8 @@ describe('PaymentsService.handleWebhook — idempotency (shared across every gat
       mockOrdersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
+      {} as GiftCardsService,
     );
 
     await expect(
@@ -291,6 +308,8 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       ordersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
+      {} as GiftCardsService,
     );
 
     await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
@@ -340,6 +359,8 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       ordersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
+      {} as GiftCardsService,
     );
 
     await service.handleWebhook('fake', Buffer.from('{}'), 'sig');
@@ -388,6 +409,8 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       ordersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
+      {} as GiftCardsService,
     );
 
     const result = await service.handleWebhook(
@@ -432,6 +455,8 @@ describe('PaymentsService.handleWebhook — BNPL advanceOrderStatus (Tabby/Tamar
       ordersService,
       mockWebhookLogService,
       mockConversionEvents,
+      {} as OrderNotificationsService,
+      {} as GiftCardsService,
     );
 
     await expect(
@@ -466,5 +491,52 @@ describe('amountStillDue', () => {
       amountStillDue({ total: '20', storeCreditAmount: '20', currency: 'AED' }),
     ).toBe(0);
     expect(amountStillDue({ total: '20', currency: 'AED' })).toBe(20);
+  });
+});
+
+// LOW-1 (F8 review): a lock conflict (1213/1205) rolled OUR transaction back; it
+// says nothing about whether the event was recorded by someone else.
+describe('PaymentsService.handleWebhook after a lock conflict', () => {
+  function lockConflict() {
+    return Object.assign(new Error('Deadlock found'), { errno: 1213 });
+  }
+  function build(recorded: boolean) {
+    const registry = new PaymentProviderRegistry();
+    registry.register(
+      new FakeProvider({
+        providerReference: 'evt_lock',
+        orderId: 9,
+        status: 'paid',
+      }),
+    );
+    const { db } = createMockDb({
+      order: { id: 9, total: 10, shopId: 1, status: 'pending' },
+      createRejectsWith: lockConflict(),
+      recorded,
+    });
+    return new PaymentsService(
+      db,
+      registry,
+      {} as PaymentSettingsService,
+      mockAffiliateServicePaid,
+      mockBranchRolesService,
+      mockOrdersService,
+      mockWebhookLogService,
+      mockConversionEvents,
+      {} as OrderNotificationsService,
+      {} as GiftCardsService,
+    );
+  }
+
+  it('rethrows when the payment was NOT recorded, so the gateway retries the delivery', async () => {
+    await expect(
+      build(false).handleWebhook('fake', Buffer.from('{}'), 'sig'),
+    ).rejects.toMatchObject({ errno: 1213 });
+  });
+
+  it('is a duplicate no-op when the payment IS recorded', async () => {
+    await expect(
+      build(true).handleWebhook('fake', Buffer.from('{}'), 'sig'),
+    ).resolves.toEqual({ received: true });
   });
 });
