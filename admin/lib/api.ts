@@ -77,6 +77,9 @@ import type {
   CustomerConsent,
   CustomerSegment,
   StoreCreditOverview,
+  LoyaltyProgram,
+  LoyaltyProgramView,
+  CustomerLoyaltyOverview,
   CustomerMergePreview,
   CustomerMergeRecord,
   ConsentChannel,
@@ -2748,6 +2751,29 @@ export function adjustCustomerStoreCredit(
   },
 ) {
   return apiFetch<StoreCreditOverview>(`/customers/${customerId}/store-credit/adjustments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// ---- Loyalty (CUS-5). Program and writes admin only; a customer's ledger admin + viewer. ----
+export function getLoyaltyProgram() {
+  return apiFetch<LoyaltyProgramView>("/loyalty/program");
+}
+
+export function saveLoyaltyProgram(data: Partial<LoyaltyProgram>) {
+  return apiFetch<LoyaltyProgramView>("/loyalty/program", { method: "PUT", body: JSON.stringify(data) });
+}
+
+export function getCustomerLoyalty(customerId: number) {
+  return apiFetch<CustomerLoyaltyOverview>(`/customers/${customerId}/loyalty`);
+}
+
+export function adjustCustomerLoyalty(
+  customerId: number,
+  data: { points: number; reason: string; idempotencyKey: string },
+) {
+  return apiFetch<CustomerLoyaltyOverview>(`/customers/${customerId}/loyalty/adjustments`, {
     method: "POST",
     body: JSON.stringify(data),
   });

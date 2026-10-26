@@ -840,6 +840,15 @@ export interface MyConsent {
   channels: { channel: ConsentChannel; status: "granted" | "withdrawn" | null }[];
 }
 
+// CUS-5. `enabled: false` (and nothing else) when the shop has loyalty off.
+export type MyLoyalty =
+  | { enabled: false }
+  | {
+      enabled: true;
+      balance: number;
+      entries: { id: number; type: "earn" | "clawback" | "adjust" | "redeem"; points: number; orderNumber: number | null; createdAt: string }[];
+    };
+
 // CUS-6. Balances are per currency and are never summed across currencies.
 export interface MyStoreCredit {
   balances: { currency: string; balance: string; balanceMinor: number }[];
