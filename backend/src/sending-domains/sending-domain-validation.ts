@@ -125,6 +125,11 @@ export function sendingDomainProblem(domain: string): string | null {
   return null;
 }
 
+/* eslint-disable no-control-regex */
+const UNSAFE_NAME_CHARS =
+  /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff"\\<>]/g;
+/* eslint-enable no-control-regex */
+
 // A shop display name becomes the From display name. Strip everything that can
 // break out of the quoted string or inject a header: CR/LF and other control
 // characters, bidi and invisible controls (a U+202E could visually reorder the
@@ -135,11 +140,7 @@ export function sanitizeDisplayName(
   fallback = 'Requital',
 ): string {
   const cleaned = (name ?? '')
-    // eslint-disable-next-line no-control-regex
-    .replace(
-      /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff"\\<>]/g,
-      ' ',
-    )
+    .replace(UNSAFE_NAME_CHARS, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, max)
