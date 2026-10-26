@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { CheckoutFormState } from "@/lib/useCheckoutForm";
 import RegionSelect from "./RegionSelect";
 import MapPicker from "@/components/MapPicker";
@@ -26,6 +27,10 @@ export default function DeliveryAddressFields({ state }: { state: CheckoutFormSt
     shopSlug,
   } = state;
   const { regions } = useShop();
+  // The pin is what the courier is sent to, so a pin that no longer matches what
+  // the shopper typed must not ride along: editing the address by hand drops it
+  // and asks for it again. (Picking on the map, or Use my location, sets it anew.)
+  const [pinClearedByEdit, setPinClearedByEdit] = useState(false);
   // What "Find on map" looks up when Maps is unavailable: the typed address plus
   // the chosen region's name, which anchors it to the right country.
   const regionName = regions.find((r) => r.id === regionId)?.nameEn;
@@ -65,6 +70,11 @@ export default function DeliveryAddressFields({ state }: { state: CheckoutFormSt
           {locating ? "Locating…" : "📍 Use my location"}
         </button>
         {coords && <span className="text-xs text-zinc-500 self-center">Location captured</span>}
+        {!coords && pinClearedByEdit && (
+          <span role="status" className="text-xs text-zinc-500 self-center">
+            You changed the address, so the pin was cleared. Place it again to confirm the spot.
+          </span>
+        )}
       </div>
       <MapPicker
         shopSlug={shopSlug}
@@ -81,7 +91,13 @@ export default function DeliveryAddressFields({ state }: { state: CheckoutFormSt
         <textarea
           required
           value={customerAddress}
-          onChange={(e) => setCustomerAddress(e.target.value)}
+          onChange={(e) => {
+            setCustomerAddress(e.target.value);
+            if (coords) {
+              setCoords(null);
+              setPinClearedByEdit(true);
+            }
+          }}
           rows={2}
           className={TEXTAREA_CLASS}
         />
