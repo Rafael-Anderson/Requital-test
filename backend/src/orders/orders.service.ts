@@ -757,7 +757,8 @@ export class OrdersService {
         order,
       );
       await conn.query(
-        `UPDATE \`order\` SET deliveryFee = ?, taxAmount = ?, total = ?
+        `UPDATE \`order\` SET deliveryFee = ?, taxAmount = ?, total = ?,
+                paymentSessionUrl = NULL, paymentSessionAt = NULL
           WHERE id = ?`,
         [dto.deliveryFee, roundMoney(taxAmount, feeCurrency), total, id],
       );
@@ -1415,6 +1416,12 @@ export class OrdersService {
         taxAmount: roundedItemsTax,
         discountAmount,
         ...(discountDropped && { discountId: null, discountCode: null }),
+        // The amount changed: a checkout URL remembered for the OLD amount must not
+        // be handed back by a replay (PublicService.replayCheckout mints a fresh
+        // session at the new amount instead). paymentSessionId is left alone, so
+        // webhook and reconciliation behaviour is unchanged.
+        paymentSessionUrl: null,
+        paymentSessionAt: null,
       });
       await conn.query(`UPDATE \`order\` SET ${set!.setClause} WHERE id = ?`, [
         ...set!.params,

@@ -6,6 +6,7 @@ import { PaymentProviderRegistry } from '../src/payments/payment-provider.regist
 import { PaymentProviderNotConfiguredException } from '../src/payments/payment-provider-not-configured.exception';
 import { DatabaseService } from '../src/database/database.service';
 import { PaymentsService } from '../src/payments/payments.service';
+import { ReturnsService } from '../src/returns/returns.service';
 import { OrderNotificationsService } from '../src/orders/order-notifications.service';
 import type {
   CheckoutSession,
@@ -43,6 +44,8 @@ class ControllableProvider implements PaymentProvider {
   }
   // Holds every call open until released (a slow gateway).
   gate: Promise<void> | null = null;
+  // Present only for the test that exercises a refund lookup.
+  refundPayment?: PaymentProvider['refundPayment'];
   // Makes the next call fail (after its gate, if any) regardless of mode.
   nextError: Error | null = null;
   // Runs inside the gateway call, before it answers (the world moving on).
@@ -1472,6 +1475,143 @@ describe('Gateway failure recovery and idempotent checkout (e2e)', () => {
       await place(shop, body1).expect(201);
       await settle();
       expect(notifySpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('third review follow-ups', () => {
+    const payRef = (shop: Shop, orderId: number, ref: string, charge: string) =>
+      app.get(PaymentsService).applyWebhookResult(
+        'stripe',
+        'stripe',
+        {
+          providerReference: `${ref}_${f.runId}`,
+          orderId,
+          status: 'paid',
+          chargeReference: `${charge}_${f.runId}`,
+        },
+        shop.shopId,
+      );
+
+    it('editing an unpaid online order drops the remembered URL, so a replay gets a session at the NEW amount', async () => {
+      const { shop, product } = await shopWithStock('f8-edit');
+      const payload = {
+        paymentMethod: 'card_online',
+        items: [{ productId: product.id, quantity: 1 }],
+        idempotencyKey: newKey(),
+      };
+      const before = stripe.calls.length;
+      const first = await place(shop, payload).expect(201);
+      const id = body<{ order: { id: number } }>(first).order.id;
+      const url1 = body<{ checkoutUrl: string }>(first).checkoutUrl;
+      const amount1 = stripe.calls[before].amount;
+
+      // Inside the reuse window, an unchanged order hands back the same URL...
+      expect(
+        body<{ checkoutUrl: string }>(await place(shop, payload).expect(201))
+          .checkoutUrl,
+      ).toBe(url1);
+
+      // ...but after the amount changes it must not.
+      await f
+        .editItems(shop, id, [{ productId: product.id, quantity: 2 }])
+        .expect(200);
+      const row = (
+        await db.query<RowDataPacket[]>(
+          `SELECT paymentSessionUrl, paymentSessionAt, paymentSessionId FROM \`order\` WHERE id = ?`,
+          [id],
+        )
+      )[0];
+      expect(row.paymentSessionUrl).toBeNull();
+      expect(row.paymentSessionAt).toBeNull();
+      expect(row.paymentSessionId).toMatch(/^stub_stripe_/); // webhook/reconciliation unchanged
+
+      const again = await place(shop, payload).expect(201);
+      expect(body<{ checkoutUrl: string }>(again).checkoutUrl).not.toBe(url1);
+      expect(stripe.calls.length).toBe(before + 2);
+      expect(stripe.calls[before + 1].amount).toBeGreaterThan(amount1);
+    });
+
+    it('changing the delivery fee of an unpaid online order drops the remembered URL too', async () => {
+      const { shop, product } = await shopWithStock('f8-fee');
+      const payload = {
+        paymentMethod: 'card_online',
+        items: [{ productId: product.id, quantity: 1 }],
+        idempotencyKey: newKey(),
+      };
+      const before = stripe.calls.length;
+      const first = await place(shop, payload).expect(201);
+      const id = body<{ order: { id: number } }>(first).order.id;
+      const url1 = body<{ checkoutUrl: string }>(first).checkoutUrl;
+      await request(f.http())
+        .patch(`/orders/${id}/delivery-fee`)
+        .set(f.auth(shop))
+        .send({ deliveryFee: 25 })
+        .expect(200);
+      const again = await place(shop, payload).expect(201);
+      expect(body<{ checkoutUrl: string }>(again).checkoutUrl).not.toBe(url1);
+      expect(stripe.calls.length).toBe(before + 2);
+      expect(stripe.calls[before + 1].amount).toBeGreaterThan(
+        stripe.calls[before].amount,
+      );
+    });
+
+    it('a refund never targets a duplicate payment: the earliest paid charge is the real one', async () => {
+      const { shop, product } = await shopWithStock('f8-refund');
+      const res = await place(shop, {
+        paymentMethod: 'card_online',
+        items: [{ productId: product.id, quantity: 1 }],
+      }).expect(201);
+      const id = body<{ order: { id: number } }>(res).order.id;
+      await payRef(shop, id, 'evt_r1', 'ch_real');
+      await payRef(shop, id, 'evt_r2', 'ch_dup');
+      stripe.refundPayment = () =>
+        Promise.resolve({ providerReference: 're_x' });
+      try {
+        const target = await (
+          app.get(ReturnsService) as unknown as {
+            loadRefundTarget(
+              orderId: number,
+              shopId: number,
+            ): Promise<{ chargeReference: string } | null>;
+          }
+        ).loadRefundTarget(id, shop.shopId);
+        expect(target?.chargeReference).toBe(`ch_real_${f.runId}`);
+      } finally {
+        stripe.refundPayment = undefined;
+      }
+    });
+
+    it('redelivering a duplicate payment event recovers a lost alert, and the original payment redelivery raises none', async () => {
+      const { shop, product } = await shopWithStock('f8-redeliver');
+      const res = await place(shop, {
+        paymentMethod: 'card_online',
+        items: [{ productId: product.id, quantity: 1 }],
+      }).expect(201);
+      const id = body<{ order: { id: number } }>(res).order.id;
+      const jobs = () =>
+        db.query<RowDataPacket[]>(
+          `SELECT idempotencyKey FROM job WHERE idempotencyKey LIKE ?`,
+          [`order:${id}:duplicate-payment:%`],
+        );
+      await payRef(shop, id, 'evt_d1', 'ch_first');
+      await payRef(shop, id, 'evt_d2', 'ch_second');
+      expect(await jobs()).toHaveLength(1);
+
+      // The alert is lost (crash after the payment row committed).
+      await db.execute(`DELETE FROM job WHERE idempotencyKey LIKE ?`, [
+        `order:${id}:duplicate-payment:%`,
+      ]);
+      expect(await jobs()).toHaveLength(0);
+
+      // The original payment's event redelivered: nothing to flag.
+      await payRef(shop, id, 'evt_d1', 'ch_first');
+      expect(await jobs()).toHaveLength(0);
+      // The duplicate's event redelivered: the alert is recovered, once.
+      await payRef(shop, id, 'evt_d2', 'ch_second');
+      await payRef(shop, id, 'evt_d2', 'ch_second');
+      const recovered = await jobs();
+      expect(recovered).toHaveLength(1);
+      expect(recovered[0].idempotencyKey).toContain(`ch_second_${f.runId}`);
     });
   });
 });

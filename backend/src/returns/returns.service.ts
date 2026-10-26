@@ -488,7 +488,9 @@ export class ReturnsService {
     return this.toResponse(returns.get(result.returnId)!);
   }
 
-  // Looks up the order's most recent successful paid transaction and, when its
+  // Looks up the order's EARLIEST successful paid transaction (the real payment: a
+  // later paid row for a different charge is a duplicate payment raised for manual
+  // refund and must never be what a return refunds) and, when its
   // provider can refund, the credentials to do it with. Pool reads only, so it
   // runs BEFORE the return transaction opens (see create()). Any failure means
   // "no provider refund possible": the caller falls back to a manual refund.
@@ -500,7 +502,7 @@ export class ReturnsService {
       const rows = await this.db.query<RowDataPacket[]>(
         `SELECT * FROM paymenttransaction
          WHERE orderId = ? AND status = 'paid' AND providerChargeReference IS NOT NULL
-         ORDER BY createdAt DESC LIMIT 1`,
+         ORDER BY createdAt ASC, id ASC LIMIT 1`,
         [orderId],
       );
       const paidTransaction = rows[0];

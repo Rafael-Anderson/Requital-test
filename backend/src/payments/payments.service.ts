@@ -457,7 +457,7 @@ export class PaymentsService {
           // The order's status NOW, not the one read before this delivery started:
           // a cancel may have landed since.
           const fresh = await this.db.query<RowDataPacket[]>(
-            `SELECT status FROM \`order\` WHERE id = ? AND shopId = ?`,
+            `SELECT status, paymentStatus FROM \`order\` WHERE id = ? AND shopId = ?`,
             [order.id as number, order.shopId as number],
           );
           if (fresh[0]?.status === 'cancelled') {
@@ -469,6 +469,20 @@ export class PaymentsService {
               { paid: true },
             );
             await this.sendPaidGiftCardCodes(order);
+            // A redelivery of a SECOND payment's event: if the delivery that
+            // recorded it died before alerting, alert now (idempotent by job key).
+            // Only a charge that differs from an EARLIER paid row counts, so the
+            // original payment's own redelivery is never mislabelled.
+            if (
+              fresh[0]?.paymentStatus === 'paid' &&
+              (await this.isLaterDifferentCharge(
+                order.id as number,
+                providerName,
+                result,
+              ))
+            ) {
+              await this.raiseDuplicatePayment(order, gateway, result);
+            }
           }
         }
         return { received: true };
@@ -532,6 +546,30 @@ export class PaymentsService {
         error: err instanceof Error ? err.name : 'non-error',
       });
     }
+  }
+
+  // Is this (already recorded) event a payment whose charge differs from a paid
+  // transaction recorded BEFORE it for the same order? False when its own row is
+  // not found or it carries no charge reference.
+  private async isLaterDifferentCharge(
+    orderId: number,
+    providerName: string,
+    result: WebhookResult,
+  ): Promise<boolean> {
+    if (!result.chargeReference) return false;
+    const mine = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM paymenttransaction WHERE gateway = ? AND gatewayReference = ?`,
+      [providerName, result.providerReference],
+    );
+    if (!mine[0]) return false;
+    const earlier = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM paymenttransaction
+        WHERE orderId = ? AND status = 'paid' AND id < ?
+          AND providerChargeReference IS NOT NULL AND providerChargeReference <> ?
+        LIMIT 1`,
+      [orderId, mine[0].id as number, result.chargeReference],
+    );
+    return earlier.length > 0;
   }
 
   // A second, different payment arrived for an order that is already paid (two
