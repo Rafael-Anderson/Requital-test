@@ -146,6 +146,17 @@ export function createTierCsrf(opts: {
       ) {
         return true;
       }
+      // Customer phone one-time code send/verify: pre-session like register,
+      // and a forged one only mails a code to a number the forger typed or
+      // returns a proof they could not use without the code. Left protected, a
+      // stale access cookie would 403 a legitimate registration (the same
+      // failure the login exemption above exists for).
+      if (
+        req.method === 'POST' &&
+        /^\/public\/[^/]+\/auth\/phone-otp\/(send|verify)$/.test(reqPath)
+      ) {
+        return true;
+      }
       if (opts.skipPathPrefixes?.some((prefix) => reqPath.startsWith(prefix))) {
         return true;
       }

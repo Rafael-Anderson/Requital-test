@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { SchedulerService } from '../jobs/scheduler.service';
 import { DatabaseService } from '../database/database.service';
 import { FeaturesService } from '../features/features.service';
 import { isLockConflict } from '../database/mysql-errors';
@@ -40,6 +42,7 @@ export class PhoneOtpService {
   constructor(
     private readonly db: DatabaseService,
     private readonly features: FeaturesService,
+    private readonly scheduler: SchedulerService,
     @Inject(OTP_CHANNEL) private readonly channel: OtpChannel,
   ) {}
 
@@ -94,11 +97,6 @@ export class PhoneOtpService {
     const code = generateOtpCode();
     const now = Date.now();
 
-    // Housekeeping: rows older than the longest throttle window are dead weight.
-    await this.db.execute(`DELETE FROM phoneotp WHERE createdAt < ? LIMIT 200`, [
-      new Date(now - 2 * DAY),
-    ]);
-
     let issued = false;
     try {
       issued = await this.db.transaction(async (conn) => {
@@ -126,6 +124,8 @@ export class PhoneOtpService {
         );
         if (Number(shopDay[0].n) >= this.shopDailyCap()) return false;
 
+        // Reached only once every limit above has passed, so a throttled or
+        // rejected send never invalidates a code the customer still holds.
         // Only the newest code is live.
         await conn.query(
           `UPDATE phoneotp SET consumedAt = ? WHERE shopId = ? AND phone = ? AND consumedAt IS NULL`,
@@ -149,6 +149,29 @@ export class PhoneOtpService {
     // After the commit and outside it: a slow or failing provider holds no lock
     // or connection, and its failure must not change the answer.
     await this.channel.send(phone, code, { shopId: shop.id }).catch(() => undefined);
+  }
+
+  // Retention: a phone number must not outlive its usefulness when traffic stops
+  // (the old inline cleanup only ran on a send). Rows older than the longest
+  // throttle window (a day) plus slack go, in batches so no statement holds a
+  // long lock.
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async sweepExpiredRows() {
+    await this.scheduler.runLocked('phone-otp-retention-sweep', 600, async () => {
+      await this.deleteOlderThanTwoDays();
+    });
+  }
+
+  async deleteOlderThanTwoDays(batch = 1000): Promise<number> {
+    let total = 0;
+    for (;;) {
+      const res = await this.db.execute(
+        `DELETE FROM phoneotp WHERE createdAt < ? LIMIT ${Math.floor(batch)}`,
+        [new Date(Date.now() - 2 * DAY)],
+      );
+      total += res.affectedRows;
+      if (res.affectedRows < batch) return total;
+    }
   }
 
   // Exchanges a correct code for a single-use proof token bound to this shop and

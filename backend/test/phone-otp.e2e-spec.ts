@@ -11,6 +11,8 @@ import { verifySignupEmail } from './helpers/verify-signup-email';
 import { asCustomer, sessionFrom } from './helpers/customer-session';
 import { testOtpOutbox } from '../src/customer-auth/otp-channel';
 import { normalizePhoneToE164 } from '../src/common/phone';
+import { customerCookieNames } from '../src/customer-auth/customer-auth.constants';
+import { PhoneOtpService } from '../src/customer-auth/phone-otp.service';
 
 // Phone OTP on customer register (phone_otp_register). Flag off must be today's
 // behaviour; flag on must stop a caller who only knows a phone number from
@@ -204,7 +206,65 @@ describe('phone OTP register (e2e)', () => {
     });
   });
 
+  describe('flag OFF: concurrent claims of one guest row', () => {
+    it('exactly one wins, the rest get the existing-account 409', async () => {
+      const p = phone();
+      await guestCheckout(shopOff, p);
+      const rs = await Promise.all(
+        Array.from({ length: 4 }, () => register(shopOff, p)),
+      );
+      const statuses = rs.map((r) => r.status).sort();
+      expect(statuses.filter((x) => x === 201)).toHaveLength(1);
+      expect(statuses.filter((x) => x === 409)).toHaveLength(3);
+    });
+  });
+
   describe('flag ON', () => {
+    it('send/verify ignore a stale customer cookie with no CSRF token; a real mutating route still needs one', async () => {
+      const names = customerCookieNames(shopA.slug)!;
+      const stale = `${names.access}=stale.dead.jwt`;
+      const p = phone();
+      await request(server)
+        .post(`/public/${shopA.slug}/auth/phone-otp/send`)
+        .set('Cookie', stale)
+        .send({ phone: p })
+        .expect(202);
+      const code = testOtpOutbox.last(e164(p))!.code;
+      await request(server)
+        .post(`/public/${shopA.slug}/auth/phone-otp/verify`)
+        .set('Cookie', stale)
+        .send({ phone: p, code })
+        .expect(200);
+      // Not exempt: logout with the same stale cookie and no token is a 403.
+      await request(server)
+        .post(`/public/${shopA.slug}/auth/logout`)
+        .set('Cookie', stale)
+        .expect(403);
+    });
+
+    it('a throttled send does not invalidate the live code', async () => {
+      const p = phone();
+      await send(shopA, p).expect(202);
+      const code = testOtpOutbox.last(e164(p))!.code;
+      await send(shopA, p).expect(202); // inside 60 s: throttled
+      await verify(shopA, p, code).expect(200);
+    });
+
+    it('retention sweep deletes rows older than 2 days in batches and keeps fresh ones', async () => {
+      const p = phone();
+      for (let i = 0; i < 5; i++) {
+        await db.execute(
+          `INSERT INTO phoneotp (shopId, phone, codeHash, expiresAt, createdAt) VALUES (?, ?, ?, ?, ?)`,
+          [shopA.id, e164(p), 'a'.repeat(64), new Date(), new Date(Date.now() - 3 * 86400000)],
+        );
+      }
+      await send(shopA, p).expect(202);
+      const svc = app.get(PhoneOtpService);
+      const deleted = await svc.deleteOlderThanTwoDays(2);
+      expect(deleted).toBeGreaterThanOrEqual(5);
+      expect(await otpRows(shopA, p)).toHaveLength(1);
+    });
+
     it('the public payload exposes the boolean', async () => {
       const pub = await request(server).get(`/public/${shopA.slug}`).expect(200);
       expect(body<{ phoneOtpRequired: boolean }>(pub).phoneOtpRequired).toBe(true);

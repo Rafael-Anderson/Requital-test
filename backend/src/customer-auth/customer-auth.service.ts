@@ -111,8 +111,10 @@ export class CustomerAuthService {
     }
     let customerId: number;
     if (existing) {
-      await this.db.execute(
-        `UPDATE customer SET passwordHash = ?, registeredAt = ?, name = ?, email = ?, verifiedEmail = NULL, emailVerifiedAt = NULL WHERE id = ?`,
+      // Compare-and-swap on passwordHash IS NULL: two concurrent claims of one
+      // row cannot both win, the loser gets the same 409 as an existing account.
+      const claimed = await this.db.execute(
+        `UPDATE customer SET passwordHash = ?, registeredAt = ?, name = ?, email = ?, verifiedEmail = NULL, emailVerifiedAt = NULL WHERE id = ? AND passwordHash IS NULL`,
         [
           passwordHash,
           new Date(),
@@ -126,6 +128,11 @@ export class CustomerAuthService {
           existing.id,
         ],
       );
+      if (claimed.affectedRows === 0) {
+        throw new ConflictException(
+          'An account with this phone number already exists',
+        );
+      }
       customerId = existing.id;
     } else {
       const result = await this.db.execute(

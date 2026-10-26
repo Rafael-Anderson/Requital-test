@@ -108,8 +108,18 @@ export const FEATURE_KEYS = {
   },
   // Phone OTP on customer register-claim. Gates the send/verify routes and makes
   // register demand a proof of control of the phone. Ships off with a stub delivery
-  // channel: no SMS/WhatsApp provider is chosen yet, so turning it on for a shop
-  // before one exists makes registration impossible for that shop.
+  // channel. BEFORE enabling it for any shop:
+  //   - a real OtpChannel (SMS/WhatsApp provider, approved templates, sender-ID
+  //     registration per country) must exist: with the stub nothing is delivered
+  //     and registration is impossible for that shop;
+  //   - TRUST_PROXY=loopback must be set (it is in production), or every per-IP
+  //     throttle is one shared bucket;
+  //   - know that the per-phone (1/60s, 5/h, 10/day) and per-shop (daily cap)
+  //     send caps are also a denial-of-registration lever: someone can burn a
+  //     number's or a shop's quota to stop real customers getting a code;
+  //   - the allowed country is read live from shop.countryCode, so changing a
+  //     shop's country changes which numbers may receive a code (and E.164
+  //     normalisation for numbers already stored).
   phone_otp_register: {
     source: 'table',
     default: false,
