@@ -73,6 +73,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJobsService(),
       new PasswordPolicyService(),
       { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
+      { isRequired: jest.fn().mockResolvedValue(false) } as never, // phoneOtp
     );
     await service.login('test-shop', {
       identifier: customer.phone,
@@ -102,6 +103,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJobsService(),
       new PasswordPolicyService(),
       { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
+      { isRequired: jest.fn().mockResolvedValue(false) } as never, // phoneOtp
     );
     await expect(
       service.login('test-shop', {
@@ -130,6 +132,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJobsService(),
       new PasswordPolicyService(),
       { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
+      { isRequired: jest.fn().mockResolvedValue(false) } as never, // phoneOtp
     );
     await expect(
       service.login('test-shop', {
@@ -156,6 +159,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJobsService(),
       new PasswordPolicyService(),
       { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
+      { isRequired: jest.fn().mockResolvedValue(false) } as never, // phoneOtp
     );
     await expect(
       service.login('test-shop', {
@@ -186,6 +190,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJobsService(),
       new PasswordPolicyService(),
       { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
+      { isRequired: jest.fn().mockResolvedValue(false) } as never, // phoneOtp
     );
     await expect(
       service.login('test-shop', {
@@ -215,6 +220,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJobsService(),
       new PasswordPolicyService(),
       { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
+      { isRequired: jest.fn().mockResolvedValue(false) } as never, // phoneOtp
     );
     await service.login('test-shop', {
       identifier: customer.phone,
@@ -241,6 +247,7 @@ describe('CustomerAuthService.login — progressive lockout', () => {
       createMockJobsService(),
       new PasswordPolicyService(),
       { sendForCustomer: jest.fn().mockResolvedValue(undefined) } as never, // emailVerification
+      { isRequired: jest.fn().mockResolvedValue(false) } as never, // phoneOtp
     );
     await service.login('test-shop', {
       identifier: customer.phone,

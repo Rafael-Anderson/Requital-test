@@ -61,6 +61,9 @@ function createMockDb(opts: {
     if (sql.includes('DELETE FROM metafieldvalue')) {
       return Promise.resolve([]);
     }
+    if (sql.includes('FROM customer c JOIN shop s')) {
+      return Promise.resolve([{ phone: '0501234567', countryCode: null }]);
+    }
     if (sql.includes('FROM customerauthtoken WHERE tokenHash')) {
       return Promise.resolve(opts.authToken ? [opts.authToken] : []);
     }
@@ -314,6 +317,11 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
         ctx.customerId,
       ],
     );
+    // The number's one-time-code rows go with it (keyed by E.164 phone).
+    expect(db.execute).toHaveBeenCalledWith(
+      'DELETE FROM phoneotp WHERE shopId = ? AND phone = ?',
+      [ctx.shopId, '+971501234567'],
+    );
     // Custom-field values on the customer are scrubbed with the profile.
     expect(db.query).toHaveBeenCalledWith(
       expect.stringContaining('DELETE FROM metafieldvalue'),
@@ -451,6 +459,9 @@ describe('CustomerAccountService.requestDeletion / confirmDeletion', () => {
       }
       if (sql.includes('DELETE FROM metafieldvalue')) {
         return Promise.resolve([]);
+      }
+      if (sql.includes('FROM customer c JOIN shop s')) {
+        return Promise.resolve([{ phone: '0501234567', countryCode: null }]);
       }
       if (sql.includes('FROM customerauthtoken WHERE tokenHash')) {
         return Promise.resolve([authToken]);

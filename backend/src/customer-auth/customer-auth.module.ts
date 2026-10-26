@@ -4,6 +4,8 @@ import { CustomerAuthController } from './customer-auth.controller';
 import { CustomerAuthService } from './customer-auth.service';
 import { CustomerAuthGuard } from './customer-auth.guard';
 import { CustomerEmailVerificationService } from './customer-email-verification.service';
+import { PhoneOtpService } from './phone-otp.service';
+import { OTP_CHANNEL, StubOtpChannel } from './otp-channel';
 import { JobsModule } from '../jobs/jobs.module';
 
 // Session-cookie migration (security audit finding #1), phase 3 — this used
@@ -28,6 +30,9 @@ import { JobsModule } from '../jobs/jobs.module';
     CustomerAuthService,
     CustomerAuthGuard,
     CustomerEmailVerificationService,
+    PhoneOtpService,
+    // The real SMS/WhatsApp provider is an owner decision; until then, a stub.
+    { provide: OTP_CHANNEL, useClass: StubOtpChannel },
   ],
   // JwtModule itself must be exported too, not just CustomerAuthGuard —
   // @UseGuards(CustomerAuthGuard) in a *different* module (CustomerAccountModule)
