@@ -87,3 +87,9 @@ export function assertScheduleAtOk(
     );
   }
 }
+
+// Slider is UAE-only. A coarse bounding box around the country (a sanity bound,
+// not a border): a stored pin outside it is not used as a dropoff point.
+export function isWithinUae(lat: number, lng: number): boolean {
+  return lat >= 22.4 && lat <= 26.3 && lng >= 51.0 && lng <= 56.5;
+}

@@ -8,6 +8,7 @@ import { ExternalDeliveriesService } from '../external-deliveries/external-deliv
 import { SliderSettingsService } from './slider-settings.service';
 import { SliderDeliveryProvider } from './slider/slider-delivery.provider';
 import { geocodeAddress } from '../common/nominatim';
+import { isUsablePin } from '../common/geo';
 import { normalizePhoneToE164 } from '../common/phone';
 import { roundMoney } from '../common/currency-minor-units';
 import type { TenantContext } from '../common/tenant-context';
@@ -19,6 +20,7 @@ import {
   assertShopCountryIsUae,
   assertScheduleAtOk,
   assertVehicleDistanceOk,
+  isWithinUae,
 } from './slider/slider-caps';
 
 @Injectable()
@@ -207,6 +209,35 @@ export class SliderDeliveryService {
       throw new BadRequestException(
         'This outlet has no map location set: set one in Outlet settings before dispatching a Slider delivery',
       );
+    }
+    // The customer's own map pin (order.dropoffLatitude/Longitude, F1) is the
+    // dropoff when the order has a usable one: re-geocoding the typed text can land
+    // anywhere. An order with none (admin or draft order, typed address, placed
+    // before the column existed) or an unusable one falls back to the geocode.
+    // Read here, shop-scoped, because the order response strips the pin.
+    const pinRows = await this.db.query<
+      ({
+        dropoffLatitude: number | null;
+        dropoffLongitude: number | null;
+      } & RowDataPacket)[]
+    >(
+      `SELECT dropoffLatitude, dropoffLongitude FROM \`order\` WHERE id = ? AND shopId = ?`,
+      [order.id, ctx.shopId],
+    );
+    const pin = pinRows[0];
+    if (
+      pin &&
+      isUsablePin(pin.dropoffLatitude, pin.dropoffLongitude) &&
+      isWithinUae(pin.dropoffLatitude!, pin.dropoffLongitude!)
+    ) {
+      return {
+        outlet,
+        pickup: { latitude: outlet.latitude, longitude: outlet.longitude },
+        delivery: {
+          latitude: pin.dropoffLatitude!,
+          longitude: pin.dropoffLongitude!,
+        },
+      };
     }
     // Manual-trigger geocode (the merchant clicking "Send to Slider"), same
     // rate-limit-friendly usage pattern common/nominatim.ts already

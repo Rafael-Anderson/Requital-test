@@ -214,6 +214,10 @@ const INTERNAL_ORDER_COLUMNS = [
   'paymentSessionUrl',
   'paymentSessionAt',
   'placedNotifiedAt',
+  // F1: the customer's map pin (personal location data, used only server-side by
+  // the courier dispatch).
+  'dropoffLatitude',
+  'dropoffLongitude',
 ] as const;
 export function stripAttribution<T extends object>(
   row: T,

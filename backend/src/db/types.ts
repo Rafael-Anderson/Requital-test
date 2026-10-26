@@ -69,6 +69,11 @@ export interface OrderRow {
   // Migration 20261119100000: a delivery order placed with a typed address and no
   // map pin because Maps was unavailable (the merchant should confirm it).
   addressUnverified: boolean;
+  // F1 (migration 20261129100000): the customer's map pin at checkout, used as the
+  // courier dropoff point. NULL = no pin (never a guess). Personal data: nulled on
+  // anonymisation and stripped from every response (stripAttribution).
+  dropoffLatitude: number | null;
+  dropoffLongitude: number | null;
   // F8 (migration 20261120100000): the storefront checkout's per-attempt key and a
   // fingerprint of the request it arrived with. NULL for every other channel and
   // for orders placed before this existed. Never returned to a client
