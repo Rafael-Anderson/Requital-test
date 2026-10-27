@@ -54,9 +54,12 @@ export class JobsService {
       // The payload holds a live secret (link, one-time code): it is scrubbed
       // on completion and on dead-letter, never retried after a scrub.
       sensitive?: boolean;
+      // Not due before this instant (MKT-1: a throttled chain of batches).
+      runAfter?: Date;
     } = {},
   ): Promise<JobRecord> {
-    const { maxAttempts = 5, tx, sensitive } = options;
+    const { maxAttempts = 5, tx, sensitive, runAfter } = options;
+    const due = runAfter ?? new Date();
     if (sensitive) payload = { ...payload, sensitive: true };
     if (!Number.isInteger(shopId) || shopId <= 0) {
       throw new Error(
@@ -70,9 +73,9 @@ export class JobsService {
         // every other one in this schema — see CLAUDE.md's invoicecounter
         // note) so it's always set explicitly, on every insert.
         const [result] = await tx.query<ResultSetHeader>(
-          `INSERT INTO job (shopId, type, payload, idempotencyKey, maxAttempts, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [shopId, type, JSON.stringify(payload), idempotencyKey, maxAttempts, new Date()],
+          `INSERT INTO job (shopId, type, payload, idempotencyKey, maxAttempts, nextAttemptAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [shopId, type, JSON.stringify(payload), idempotencyKey, maxAttempts, due, new Date()],
         );
         const [rows] = await tx.query<RowDataPacket[]>(
           `SELECT * FROM job WHERE id = ?`,
@@ -81,9 +84,9 @@ export class JobsService {
         return this.parseJobRow(rows[0] as unknown as JobRow);
       }
       const result = await this.db.execute(
-        `INSERT INTO job (shopId, type, payload, idempotencyKey, maxAttempts, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [shopId, type, JSON.stringify(payload), idempotencyKey, maxAttempts, new Date()],
+        `INSERT INTO job (shopId, type, payload, idempotencyKey, maxAttempts, nextAttemptAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [shopId, type, JSON.stringify(payload), idempotencyKey, maxAttempts, due, new Date()],
       );
       const created = await this.findById(result.insertId);
       return created as JobRecord;

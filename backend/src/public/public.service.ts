@@ -23,7 +23,7 @@ import { GENERIC_GIFT_CARD_MESSAGE } from '../gift-cards/gift-card.constants';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService, type QueryParam } from '../database/database.service';
 import { trimDecimal } from '../database/decimal.util';
-import { isDuplicateKeyError } from '../database/mysql-errors';
+import { NewsletterConfirmService } from '../newsletter/newsletter-confirm.service';
 import { computeIsOpen, dateKeyInTimezone } from '../outlets/outlet-status';
 import { resolveProductIsNew } from '../products/product-is-new';
 import { generateValidTimeSlots } from './time-slots';
@@ -212,6 +212,7 @@ export class PublicService {
     private readonly reviewsService: ReviewsService,
     private readonly codeGuessLimiter: CodeGuessLimiter,
     private readonly ordersService: OrdersService,
+    private readonly newsletterConfirm: NewsletterConfirmService,
   ) {}
 
   // Backs the theme builder's live preview for a shop that hasn't published
@@ -343,18 +344,9 @@ export class PublicService {
   // idempotency patterns elsewhere in this codebase.
   async subscribeNewsletter(shopSlug: string, dto: SubscribeNewsletterDto) {
     const shop = await this.resolveShop(shopSlug);
-    try {
-      await this.db.execute(
-        `INSERT INTO newslettersubscriber (shopId, email, source) VALUES (?, ?, ?)`,
-        [shop.id, dto.email, 'newsletter_widget'],
-      );
-    } catch (error) {
-      if (isDuplicateKeyError(error)) {
-        throw new ConflictException('This email is already subscribed');
-      }
-      throw error;
-    }
-    return { subscribed: true };
+    // MKT-1: with email_campaigns on this records the subscription UNCONFIRMED and
+    // mails a double opt-in link; with it off it is the plain insert it always was.
+    return this.newsletterConfirm.subscribe(shop, dto.email);
   }
 
   async getShop(shopSlug: string) {

@@ -134,6 +134,20 @@ export class CustomerConsentService {
     granted: boolean,
   ) {
     const shopName = await this.shopName(shopId);
+    // MKT-1: the customer's OWN fresh opt-in lifts an earlier campaign unsubscribe,
+    // but ONLY when the account's email is VERIFIED (verifiedEmail equals email):
+    // otherwise anyone could register an account with a victim's address, tick the
+    // box and undo the victim's unsubscribe. Never a bounce, complaint or manual
+    // suppression, and never an admin-recorded grant.
+    if (granted && channel === 'email') {
+      await this.db.execute(
+        `DELETE s FROM emailsuppression s JOIN customer c
+            ON c.shopId = s.shopId AND c.email = s.email
+          WHERE c.id = ? AND c.shopId = ? AND s.reason = 'unsubscribe'
+            AND c.verifiedEmail IS NOT NULL AND c.verifiedEmail = c.email`,
+        [customerId, shopId],
+      );
+    }
     await this.record(shopId, customerId, {
       channel,
       status: granted ? 'granted' : 'withdrawn',

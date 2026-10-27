@@ -913,6 +913,10 @@ export interface NewslettersubscriberRow {
   email: string;
   source: string;
   createdAt: Date;
+  // MKT-1: NULL = unconfirmed (every pre-existing row). Only a set value is consent.
+  confirmedAt: Date | null;
+  confirmTokenHash: string | null;
+  confirmSentAt: Date | null;
 }
 
 export interface CustomerRow {
@@ -1976,5 +1980,45 @@ export interface LoyaltyentryRow {
   storeCreditEntryId: number | null;
   actorUserId: number | null;
   idempotencyKey: string | null;
+  createdAt: Date;
+}
+
+export interface CampaignRow {
+  id: number;
+  shopId: number;
+  name: string;
+  subject: string;
+  bodyHtml: string;
+  segmentId: number | null;
+  status: 'draft' | 'sending' | 'sent' | 'cancelled' | 'failed';
+  audienceCount: number | null;
+  failureReason: string | null;
+  createdBy: number | null;
+  sendingStartedAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CampaignrecipientRow {
+  id: number;
+  campaignId: number;
+  shopId: number;
+  // NULL once PDPL-anonymised.
+  email: string | null;
+  status: 'pending' | 'sent' | 'skipped' | 'failed';
+  claimedAt: Date | null;
+  sentAt: Date | null;
+  unsubTokenHash: string | null;
+  note: string | null;
+  createdAt: Date;
+}
+
+export interface EmailsuppressionRow {
+  id: number;
+  shopId: number;
+  email: string;
+  reason: 'unsubscribe' | 'bounce' | 'complaint' | 'manual';
+  campaignId: number | null;
   createdAt: Date;
 }

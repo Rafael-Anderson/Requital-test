@@ -1,4 +1,6 @@
 import type {
+  Campaign,
+  CampaignStatusInfo,
   DeliveryRunDetail,
   DeliveryRunListItem,
   DeliveryRunStatus,
@@ -2886,4 +2888,34 @@ export function rejectChannelOrder(id: number, reason?: string) {
     method: "POST",
     body: JSON.stringify(reason ? { reason } : {}),
   });
+}
+
+// ---- Email campaigns (MKT-1). Admin only server-side; behind the email_campaigns flag. ----
+export function getCampaignStatus() {
+  return apiFetch<CampaignStatusInfo>("/campaigns/status");
+}
+export function listCampaigns() {
+  return apiFetch<Campaign[]>("/campaigns");
+}
+export function getCampaign(id: number) {
+  return apiFetch<Campaign>(`/campaigns/${id}`);
+}
+export function createCampaign(data: { name: string; subject: string; bodyHtml: string; segmentId?: number | null }) {
+  return apiFetch<Campaign>("/campaigns", { method: "POST", body: JSON.stringify(data) });
+}
+export function updateCampaign(id: number, data: { name?: string; subject?: string; bodyHtml?: string; segmentId?: number | null }) {
+  return apiFetch<Campaign>(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+// Counts only: no address is ever returned.
+export function getCampaignAudience(id: number) {
+  return apiFetch<{ count: number }>(`/campaigns/${id}/audience`);
+}
+export function sendCampaignTest(id: number) {
+  return apiFetch<{ sent: boolean }>(`/campaigns/${id}/test`, { method: "POST", body: JSON.stringify({}) });
+}
+export function sendCampaign(id: number) {
+  return apiFetch<Campaign>(`/campaigns/${id}/send`, { method: "POST", body: JSON.stringify({}) });
+}
+export function cancelCampaign(id: number) {
+  return apiFetch<Campaign>(`/campaigns/${id}/cancel`, { method: "POST", body: JSON.stringify({}) });
 }

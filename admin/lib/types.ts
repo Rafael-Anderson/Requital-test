@@ -4038,3 +4038,40 @@ export interface LoyaltyEntry {
 export type CustomerLoyaltyOverview =
   | { available: false }
   | { available: true; programEnabled: boolean; balance: number; shortfallTotal: number; entries: LoyaltyEntry[] };
+
+// ---- Email campaigns (MKT-1). ----
+export type CampaignStatus = "draft" | "sending" | "sent" | "cancelled" | "failed";
+
+export interface CampaignCounts {
+  pending: number;
+  sent: number;
+  skipped: number;
+  failed: number;
+}
+
+export interface Campaign {
+  id: number;
+  name: string;
+  subject: string;
+  // Sanitised by the server. Only present on the single-campaign read.
+  bodyHtml?: string;
+  segmentId: number | null;
+  status: CampaignStatus;
+  audienceCount: number | null;
+  failureReason: string | null;
+  sendingStartedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  counts: CampaignCounts;
+  // Tags the server dropped from the body on save (create/update only).
+  removedTags?: string[];
+}
+
+export interface CampaignStatusInfo {
+  enabled: boolean;
+  sendingDomainVerified: boolean;
+  fromAddress: string | null;
+  dailyCap: number;
+  sentLast24Hours: number;
+}

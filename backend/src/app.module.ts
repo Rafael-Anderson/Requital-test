@@ -87,6 +87,7 @@ import { DomainsModule } from './domains/domains.module';
 import { DeliveryProvidersModule } from './delivery-providers/delivery-providers.module';
 import { WebhookLogModule } from './webhook-log/webhook-log.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
 import { PlatformAuthModule } from './platform-auth/platform-auth.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { ChannelsModule } from './channels/channels.module';
@@ -210,6 +211,7 @@ function isSignupRequest(context: ExecutionContext): boolean {
     DeliveryProvidersModule,
     WebhookLogModule,
     NewsletterModule,
+    CampaignsModule,
     PlatformAuthModule,
     PlatformAdminModule,
     PasswordPolicyModule,

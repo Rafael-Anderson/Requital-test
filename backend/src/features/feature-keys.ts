@@ -123,7 +123,22 @@ export const FEATURE_KEYS = {
   phone_otp_register: {
     source: 'table',
     default: false,
-    description: 'Phone one-time code required to register a storefront account',
+    description:
+      'Phone one-time code required to register a storefront account',
+  },
+  // MKT-1. Gates the campaign admin routes, the send itself (re-checked by every
+  // batch, so switching it off stops an in-flight campaign) and the newsletter
+  // double opt-in email. Ships off; the platform turns it on per shop. BEFORE
+  // enabling it for a shop: the shop needs a VERIFIED sending domain (the only
+  // way a campaign is sent), and the merchant should know that unconfirmed
+  // newsletter rows and customers with no recorded email consent are never mailed.
+  // Enabling it ALSO requires TRUST_PROXY=loopback (set in production): the public
+  // unsubscribe and newsletter-confirm routes are throttled per client IP (20/min),
+  // and without it every caller shares one bucket behind the proxy.
+  email_campaigns: {
+    source: 'table',
+    default: false,
+    description: 'Consent-gated email campaigns and newsletter confirmation',
   },
   // CUS-5. The platform grant for loyalty points. The merchant's own switch is
   // loyaltyprogram.enabled (default off), so BOTH must be on for anything to be
