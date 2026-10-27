@@ -54,6 +54,7 @@ import { releaseDiscountRedemption } from '../discounts/release-redemption';
 import { markInvoicesSuperseded } from '../invoices/invoice-superseded';
 import { computeOrderTotals } from '../public/order-pricing';
 import { CurrencyRatesService } from '../currency-rates/currency-rates.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { StoreCreditService } from '../store-credit/store-credit.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
 import {
@@ -107,6 +108,7 @@ export class OrdersService {
     private readonly regionsService: RegionsService,
     private readonly storeCreditService: StoreCreditService,
     private readonly giftCardsService: GiftCardsService,
+    private readonly loyaltyService: LoyaltyService,
   ) {}
 
   async findAll(ctx: TenantContext, query: ListOrdersQueryDto) {
@@ -869,6 +871,11 @@ export class OrdersService {
       );
     }
 
+    // CUS-5: read BEFORE the transaction (it would ask the pool for a second
+    // connection inside it). The earn job handler re-checks everything under
+    // locks, so this only avoids queueing for shops with loyalty off.
+    const queueLoyaltyEarn =
+      dto.status === 'delivered' && (await this.loyaltyService.isLive(ctx.shopId));
     await this.db.transaction(async (conn) => {
       // Compare-and-swap on the status column, not a plain update: the
       // WHERE clause re-checks `order.status` at the moment MySQL takes the
@@ -908,6 +915,11 @@ export class OrdersService {
           order.outletId,
           -1,
         );
+      }
+      // The job row commits with the status change, so a delivered order can
+      // never lose its earn job (and a rolled-back one never leaves one).
+      if (queueLoyaltyEarn) {
+        await this.loyaltyService.enqueueEarn(conn, ctx.shopId, id);
       }
     });
     return this.afterStatusChanged(ctx, id, order.status, dto.status);

@@ -24,6 +24,8 @@ import { SaveAddressDto } from './dto/save-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import { AddWishlistItemDto } from './dto/add-wishlist-item.dto';
 import { SetConsentDto } from './dto/set-consent.dto';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { RedeemLoyaltyDto } from '../loyalty/dto/loyalty.dto';
 import { CustomerAuthGuard } from '../customer-auth/customer-auth.guard';
 import { CurrentCustomer } from '../customer-auth/decorators/current-customer.decorator';
 import { Public } from '../auth/decorators/public.decorator';
@@ -43,6 +45,7 @@ import {
 export class CustomerAccountController {
   constructor(
     private readonly customerAccountService: CustomerAccountService,
+    private readonly loyaltyService: LoyaltyService,
   ) {}
 
   // Also the storefront's bootstrap point for both "am I logged in" (see
@@ -177,6 +180,23 @@ export class CustomerAccountController {
   @Get('store-credit')
   getStoreCredit(@CurrentCustomer() ctx: CustomerContext) {
     return this.customerAccountService.getStoreCredit(ctx);
+  }
+
+  // CUS-5: the customer's OWN loyalty balance and recent entries. `{ enabled:
+  // false }` when the shop's loyalty is off. The customer id is the session's.
+  @Get('loyalty')
+  getLoyalty(@CurrentCustomer() ctx: CustomerContext) {
+    return this.loyaltyService.accountOverview(ctx);
+  }
+
+  // CUS-5: points to store credit. 404 unless every redemption gate is on.
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('loyalty/redeem')
+  redeemLoyalty(
+    @CurrentCustomer() ctx: CustomerContext,
+    @Body() dto: RedeemLoyaltyDto,
+  ) {
+    return this.loyaltyService.redeem(ctx, dto);
   }
 
   // CUS-11: the customer's marketing-consent toggles. Unknown (never answered)

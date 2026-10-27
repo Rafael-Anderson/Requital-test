@@ -15,6 +15,7 @@ import type {
   ConsentChannel,
   MyConsent,
   MyStoreCredit,
+  MyLoyalty,
   Customer,
   CustomerAddress,
   CustomerAuthResult,
@@ -380,6 +381,10 @@ export function createOrder(shopSlug: string, payload: CreateOrderPayload) {
 }
 
 // The logged-in shopper's own store credit (CUS-6).
+export function getMyLoyalty(shopSlug: string) {
+  return authedFetch<MyLoyalty>(shopSlug, `/public/${shopSlug}/account/loyalty`);
+}
+
 export function getMyStoreCredit(shopSlug: string) {
   return authedFetch<MyStoreCredit>(shopSlug, `/public/${shopSlug}/account/store-credit`);
 }

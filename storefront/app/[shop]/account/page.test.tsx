@@ -39,6 +39,7 @@ vi.mock("@/lib/api", () => ({
   confirmMyAccountDeletion: vi.fn(),
   getMyConsent: vi.fn().mockResolvedValue({ wording: { version: "v", channels: { email: "", whatsapp: "", sms: "" } }, channels: [] }),
   setMyConsent: vi.fn(),
+  getMyLoyalty: vi.fn().mockResolvedValue({ enabled: false }),
 }));
 
 import {

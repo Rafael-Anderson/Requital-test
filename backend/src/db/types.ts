@@ -1952,6 +1952,37 @@ export interface ShopsendingdomainRow {
   verifiedKey: string | null;
 }
 
+// CUS-5 (migration 20261128100000)
+export interface LoyaltyprogramRow {
+  id: number;
+  shopId: number;
+  enabled: boolean;
+  earnRate: string;
+  earnBase: 'net_paid' | 'items_after_discount';
+  redeemEnabled: boolean;
+  redeemPointsPerUnit: string;
+  redeemMinPoints: number;
+  redeemStepPoints: number;
+  redeemMaxPoints: number | null;
+  updatedAt: Date;
+}
+
+export interface LoyaltyentryRow {
+  id: number;
+  shopId: number;
+  customerId: number;
+  entryType: 'earn' | 'clawback' | 'adjust' | 'redeem';
+  points: number;
+  shortfall: number;
+  reason: string | null;
+  orderId: number | null;
+  returnId: number | null;
+  storeCreditEntryId: number | null;
+  actorUserId: number | null;
+  idempotencyKey: string | null;
+  createdAt: Date;
+}
+
 export interface CampaignRow {
   id: number;
   shopId: number;

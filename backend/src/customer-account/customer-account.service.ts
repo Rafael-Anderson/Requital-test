@@ -25,6 +25,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { PublicService } from '../public/public.service';
 import { RegionsService, attachRegion } from '../regions/regions.service';
 import { generateOpaqueToken, hashToken } from '../common/token-hash';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 import { anonymiseCustomerCrm } from '../customer-crm/crm-anonymise';
 import { JobsService } from '../jobs/jobs.service';
 import { anonymiseCustomerDeliveryProofs } from '../drivers/proof-photo-cleanup';
@@ -95,6 +96,7 @@ export class CustomerAccountService {
     private readonly storeCreditService: StoreCreditService,
     private readonly jobs: JobsService,
     private readonly emailVerification: CustomerEmailVerificationService,
+    private readonly loyaltyService: LoyaltyService,
   ) {}
 
   getInvoiceHtml(ctx: CustomerContext, orderId: number) {
@@ -267,6 +269,11 @@ export class CustomerAccountService {
         ctx.shopId,
         ctx.customerId,
         true,
+      ),
+      // Loyalty points the shop holds for them: balance and every ledger entry.
+      loyalty: await this.loyaltyService.exportFor(
+        ctx.shopId,
+        ctx.customerId,
       ),
     };
   }

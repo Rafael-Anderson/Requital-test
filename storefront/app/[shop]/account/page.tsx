@@ -12,6 +12,7 @@ import { FIELD_CLASS, BUTTON_PRIMARY_CLASS, BUTTON_OUTLINE_CLASS } from "@/lib/f
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import DeleteAccountModal from "@/components/DeleteAccountModal";
 import MarketingConsentCard from "@/components/MarketingConsentCard";
+import LoyaltyCard from "@/components/LoyaltyCard";
 
 export default function AccountDashboardPage() {
   const router = useRouter();
@@ -253,6 +254,8 @@ export default function AccountDashboardPage() {
           </Link>
         )}
       </div>
+
+      <LoyaltyCard />
 
       <MarketingConsentCard />
 

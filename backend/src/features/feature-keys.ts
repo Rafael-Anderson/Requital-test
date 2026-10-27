@@ -140,6 +140,15 @@ export const FEATURE_KEYS = {
     default: false,
     description: 'Consent-gated email campaigns and newsletter confirmation',
   },
+  // CUS-5. The platform grant for loyalty points. The merchant's own switch is
+  // loyaltyprogram.enabled (default off), so BOTH must be on for anything to be
+  // earned, shown or written. Consumer: loyalty/loyalty.service.ts. Redeeming
+  // points for store credit additionally needs phone_otp_register.
+  loyalty: {
+    source: 'table',
+    default: false,
+    description: 'Loyalty points earned on delivered orders',
+  },
 } as const satisfies Record<string, FeatureDef>;
 
 export type FeatureKey = keyof typeof FEATURE_KEYS;

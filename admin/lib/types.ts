@@ -4005,6 +4005,40 @@ export interface VerifySendingDomainResult {
   message?: string;
 }
 
+// ---- Loyalty (CUS-5) ----
+export interface LoyaltyProgram {
+  enabled: boolean;
+  earnRate: string;
+  earnBase: "net_paid" | "items_after_discount";
+  redeemEnabled: boolean;
+  redeemPointsPerUnit: string;
+  redeemMinPoints: number;
+  redeemStepPoints: number;
+  redeemMaxPoints: number | null;
+}
+
+// `available: false` = the platform has not granted loyalty to this shop.
+export type LoyaltyProgramView =
+  | { available: false }
+  | { available: true; currency: string | null; phoneVerificationOn: boolean; program: LoyaltyProgram };
+
+export interface LoyaltyEntry {
+  id: number;
+  type: "earn" | "clawback" | "adjust" | "redeem";
+  points: number;
+  shortfall: number;
+  reason: string | null;
+  orderId: number | null;
+  orderNumber: number | null;
+  returnId: number | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export type CustomerLoyaltyOverview =
+  | { available: false }
+  | { available: true; programEnabled: boolean; balance: number; shortfallTotal: number; entries: LoyaltyEntry[] };
+
 // ---- Email campaigns (MKT-1). ----
 export type CampaignStatus = "draft" | "sending" | "sent" | "cancelled" | "failed";
 

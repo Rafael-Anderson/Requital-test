@@ -27,6 +27,7 @@ import CustomerTagsCard from "@/components/customers/CustomerTagsCard";
 import CustomerNotesCard from "@/components/customers/CustomerNotesCard";
 import CustomerConsentCard from "@/components/customers/CustomerConsentCard";
 import StoreCreditCard from "@/components/customers/StoreCreditCard";
+import LoyaltyCard from "@/components/customers/LoyaltyCard";
 import MergeCustomersModal from "@/components/customers/MergeCustomersModal";
 import MergeHistoryCard from "@/components/customers/MergeHistoryCard";
 
@@ -179,6 +180,7 @@ export default function CustomerDetailPage() {
             <CustomerConsentCard customerId={customerId} canEdit={user?.role === "admin"} />
           </div>
           <StoreCreditCard customerId={customerId} canEdit={user?.role === "admin"} />
+          <LoyaltyCard customerId={customerId} canEdit={user?.role === "admin"} />
           <MergeHistoryCard customerId={customerId} reloadKey={mergeTick} />
           <CustomerNotesCard customerId={customerId} canEdit={user?.role === "admin"} />
 

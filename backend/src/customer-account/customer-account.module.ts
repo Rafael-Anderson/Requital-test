@@ -9,6 +9,7 @@ import { RegionsModule } from '../regions/regions.module';
 import { CustomerCrmModule } from '../customer-crm/customer-crm.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { StoreCreditModule } from '../store-credit/store-credit.module';
+import { LoyaltyModule } from '../loyalty/loyalty.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { StoreCreditModule } from '../store-credit/store-credit.module';
     RegionsModule,
     CustomerCrmModule,
     StoreCreditModule,
+    LoyaltyModule,
     JobsModule,
   ],
   controllers: [CustomerAccountController],

@@ -10,6 +10,7 @@ export type JobType =
   | 'send_conversion_event'
   | 'import_copy_image'
   | 'delete_proof_photo'
+  | 'loyalty_earn'
   | 'send_campaign_batch';
 
 export interface SendEmailJobPayload {
@@ -118,6 +119,14 @@ export interface DeleteProofPhotoJobPayload {
   key: string;
 }
 
+// CUS-5: award loyalty points for one delivered order. Carries ids only; the
+// handler re-reads the order, customer and program under locks, so a stale
+// payload can neither mint points nor move another tenant's.
+export interface LoyaltyEarnJobPayload {
+  shopId: number;
+  orderId: number;
+}
+
 // MKT-1: one throttled batch of a campaign's fan-out. Carries ids only (no address,
 // no body): the handler re-reads everything, and re-checks consent per recipient.
 // `batch` makes each chained job's idempotency key distinct.
@@ -127,6 +136,7 @@ export interface SendCampaignBatchJobPayload {
 }
 
 export type JobPayload =
+  | LoyaltyEarnJobPayload
   | SendCampaignBatchJobPayload
   | DeleteProofPhotoJobPayload
   | SendEmailJobPayload

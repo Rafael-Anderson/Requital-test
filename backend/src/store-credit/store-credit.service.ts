@@ -394,6 +394,38 @@ export class StoreCreditService {
     );
   }
 
+  // CUS-5: the credit a loyalty redemption buys. A plain 'grant' with no actor
+  // (customer-initiated, the reason is ours, not typed text), keyed so one
+  // redemption can only ever mint one grant. Takes the customer row lock itself
+  // (the caller already holds it, so this is a no-op re-lock).
+  async grantForLoyaltyRedemption(
+    conn: PoolConnection,
+    shopId: number,
+    customerId: number,
+    currency: string,
+    amountMinor: number,
+    loyaltyEntryId: number,
+  ): Promise<number> {
+    if (!Number.isInteger(amountMinor) || amountMinor <= 0) {
+      throw new Error('grant needs a positive whole number of minor units');
+    }
+    await lockCustomerInShop(conn, shopId, customerId);
+    const [res] = await conn.query(
+      `INSERT INTO storecreditentry (shopId, customerId, currency, amount, entryType, reason, idempotencyKey)
+       VALUES (?, ?, ?, ?, 'grant', 'Loyalty points redeemed', ?)`,
+      [
+        shopId,
+        customerId,
+        currency,
+        minorToDecimal(amountMinor, currency),
+        // A colon: the admin grant key regex ([A-Za-z0-9_-]) can never produce it,
+        // so staff cannot pre-claim the key a redemption will use.
+        `loyalty:${loyaltyEntryId}`,
+      ],
+    );
+    return (res as { insertId: number }).insertId;
+  }
+
   // ---- internals ----
 
   // X-locks the order's one 'spend' row (no row, no lock that conflicts: the

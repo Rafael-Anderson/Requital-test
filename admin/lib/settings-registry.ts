@@ -44,6 +44,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     pages: [
       { href: "/settings/selling/money-tax", label: "Money & Tax", description: "Currency, tax rate, tax type and tax label" },
       { href: "/settings/business/tax-classes", label: "Tax Classes", description: "Standard, zero-rated and exempt tax treatments" },
+      { href: "/settings/selling/loyalty", label: "Loyalty", description: "Points customers earn on delivered orders" },
       { href: "/integrations/payments", label: "Payments", description: "Card processor and gateway credentials", external: true },
     ],
   },
