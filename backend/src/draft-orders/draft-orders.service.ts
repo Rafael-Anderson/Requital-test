@@ -339,6 +339,9 @@ export class DraftOrdersService {
       );
     }
 
+    // Before the order exists: a card link that can only fail must not leave a
+    // converted order (and its stock hold) behind.
+    await this.paymentsService.assertCardLinkAllowedForShop(ctx.shopId);
     const order = await this.convertToOrder(ctx, draft);
     const paymentLink = await this.paymentsService.generateLink(ctx, order.id as number);
     await this.db.execute(

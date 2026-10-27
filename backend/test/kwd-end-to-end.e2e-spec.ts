@@ -56,6 +56,11 @@ jest.setTimeout(240000);
 //   tax          5% exclusive -> 1.57575, rounded at persist to 1.576
 //   total        31.515 + 1.57575 = 33.09075, rounded at persist to 33.091
 //   Stripe       33.091 x 1000 = 33091 minor units   (x100 would be 3309)
+//
+// Stripe card checkout is BLOCKED for KWD/BHD/OMR (blocked-gateway-currencies.ts,
+// until the owner decides the handling), so this walk pays by cash on pickup. The
+// 33091 minor-unit conversion is still asserted, in stripe-payment.provider.spec.ts;
+// the block itself is block-stripe-3dp.e2e-spec.ts.
 const PRICE = 10.505;
 const QTY = 3;
 const LINE = 31.515;
@@ -249,7 +254,7 @@ describe('KWD end to end (e2e)', () => {
         customerPhone: '0501112222',
         customerAddress: 'Pickup',
         orderType: 'pickup',
-        paymentMethod: 'card_online',
+        paymentMethod: 'cash_on_pickup',
         items: [{ productId: shop.productId, quantity: QTY }],
       })
       .expect(201);
@@ -286,20 +291,12 @@ describe('KWD end to end (e2e)', () => {
   });
 
   // ── the charge ────────────────────────────────────────────────────────────
-  // The one that would have been wrong by a factor of ten.
-  it('hands the gateway KWD, and x1000 is the integer Stripe would receive', () => {
-    expect(stripe.calls).toHaveLength(1);
-    const call = stripe.calls[0];
-    expect(call.currency).toBe('KWD');
-    expect(call.amount).toBeCloseTo(TOTAL, 3);
-    // toMinorUnits is the exact function StripePaymentProvider applies to
-    // params.amount before sending it (see its unit_amount / amount fields), so
-    // this is what the real gateway would be charged.
-    expect(toMinorUnits(call.amount, call.currency)).toBe(MINOR);
-    // The bug this guards: a hardcoded x100 sends a tenth of the money.
-    expect(toMinorUnits(call.amount, call.currency)).not.toBe(
-      Math.round(TOTAL * 100),
-    );
+  // Cash on pickup never reaches a gateway. (The x1000 integer Stripe would
+  // receive is asserted in stripe-payment.provider.spec.ts, where the conversion
+  // lives; live Stripe checkout for KWD is blocked.)
+  it('a KWD cash order never calls the card gateway', () => {
+    expect(stripe.calls).toHaveLength(0);
+    expect(toMinorUnits(TOTAL, 'KWD')).toBe(MINOR);
   });
 
   // ── admin order detail ────────────────────────────────────────────────────
@@ -426,32 +423,49 @@ describe('KWD end to end (e2e)', () => {
   });
   // ── the payment-link path (W3) ─────────────────────────────────────────────
   // getCheckoutSession used to charge in the SHOP's live currency
-  // (shop.currency) with this order's figure. A shop that changed currency after
-  // the order was placed would have asked the gateway for 33.091 AED (3309 minor
-  // units) for what is a 33.091 KWD order. It now charges the ORDER's own
-  // currency, so the gateway gets KWD and 33091 minor units.
+  // (shop.currency) with this order's figure. It charges the ORDER's own
+  // currency. Proven with an order placed in AED on a shop that is then switched
+  // to KWD (a KWD order cannot take a Stripe link at all, see
+  // block-stripe-3dp.e2e-spec.ts): the gateway must still be asked for AED.
   it('the payment-link session is charged in the ORDER currency even after the shop currency changes', async () => {
+    await request(app.getHttpServer())
+      .patch('/shop')
+      .set('Authorization', `Bearer ${shop.adminToken}`)
+      .send({ currency: 'AED' })
+      .expect(200);
+    const created = await request(app.getHttpServer())
+      .post(`/public/${shop.slug}/orders`)
+      .send({
+        outletId: shop.outletId,
+        customerName: 'AED Customer',
+        customerPhone: '0501112223',
+        customerAddress: 'Pickup',
+        orderType: 'pickup',
+        paymentMethod: 'cash_on_pickup',
+        items: [{ productId: shop.productId, quantity: 1 }],
+      })
+      .expect(201);
+    const aedOrderId = body<{ order: IdRow }>(created).order.id;
     const link = await request(app.getHttpServer())
-      .post(`/orders/${orderId}/payment-link`)
+      .post(`/orders/${aedOrderId}/payment-link`)
       .set('Authorization', `Bearer ${shop.adminToken}`)
       .expect(201);
     const token = body<{ token: string }>(link).token;
     await request(app.getHttpServer())
       .patch('/shop')
       .set('Authorization', `Bearer ${shop.adminToken}`)
-      .send({ currency: 'AED' })
+      .send({ currency: 'KWD' })
       .expect(200);
 
     const before = stripe.calls.length;
     await request(app.getHttpServer()).get(`/pay/${token}`).expect(200);
     expect(stripe.calls).toHaveLength(before + 1);
     const call = stripe.calls[before];
-    expect(call.currency).toBe('KWD');
-    expect(toMinorUnits(call.amount, call.currency)).toBe(MINOR);
+    expect(call.currency).toBe('AED');
 
     const summary = await request(app.getHttpServer())
       .get(`/pay/${token}/summary`)
       .expect(200);
-    expect(body<{ currency: string }>(summary).currency).toBe('KWD');
+    expect(body<{ currency: string }>(summary).currency).toBe('AED');
   });
 });

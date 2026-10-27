@@ -345,15 +345,25 @@ describe('Delivery fee quote equals the charge (e2e)', () => {
     expect(q.reason).toBe((o.body as { message: string }).message);
   });
 
-  it('KWD (3 decimals): exact minor units agree across quote, order and gateway', async () => {
-    const r = await charged(kwd, {}, 3);
-    expect(r.currency).toBe('KWD');
-    expect(r.quote.deliveryFee).toBe('1.505');
+  // Stripe card checkout is blocked for KWD (blocked-gateway-currencies.ts), so
+  // the KWD case pays cash on delivery: quote and order must still agree to the
+  // third decimal. The x1000 gateway conversion is asserted in
+  // stripe-payment.provider.spec.ts.
+  it('KWD (3 decimals): exact minor units agree across quote and order', async () => {
+    const q = body<Quote>(await quote(kwd, {}, 3).expect(201));
+    const before = stripe.calls.length;
+    const res = await order(
+      kwd,
+      { paymentMethod: 'cash_on_delivery' },
+      3,
+    ).expect(201);
+    expect(stripe.calls.length).toBe(before);
+    expect(q.currency).toBe('KWD');
+    expect(q.deliveryFee).toBe('1.505');
     // 3 x 10.505 = 31.515; 5% tax = 1.57575; + 1.505 = 34.59575 -> 34.596 KWD
-    expect(r.quote.total).toBe('34.596');
-    expect(r.orderTotal).toBe('34.596');
-    expect(Math.round(r.gatewayAmount * minorUnitFactor('KWD'))).toBe(34596);
-    expect(Math.round(Number(r.quote.total) * 1000)).toBe(34596);
+    expect(q.total).toBe('34.596');
+    expect(body<OrderResponse>(res).order.total).toBe('34.596');
+    expect(Math.round(Number(q.total) * minorUnitFactor('KWD'))).toBe(34596);
   });
 
   it('needs_address before any address or pin: never a fee, never a guess', async () => {

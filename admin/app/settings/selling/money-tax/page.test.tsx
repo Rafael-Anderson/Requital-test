@@ -6,9 +6,10 @@ import type { Shop } from "@/lib/types";
 
 afterEach(cleanup);
 
-vi.mock("@/lib/api", () => ({ getShop: vi.fn(), updateShop: vi.fn() }));
+vi.mock("@/lib/api", () => ({ getShop: vi.fn(), updateShop: vi.fn(), getPaymentSettings: vi.fn() }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));
-import { getShop, updateShop } from "@/lib/api";
+import { getPaymentSettings, getShop, updateShop } from "@/lib/api";
+import type { PaymentProviderSettings } from "@/lib/types";
 
 const shop = {
   currency: "AED",
@@ -22,6 +23,37 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getShop).mockResolvedValue(shop);
   vi.mocked(updateShop).mockResolvedValue(shop);
+  vi.mocked(getPaymentSettings).mockResolvedValue([
+    { provider: "stripe", enabled: true },
+  ] as unknown as PaymentProviderSettings[]);
+});
+
+describe("Stripe currency warning", () => {
+  it("shows when the shop currency is KWD and Stripe is enabled", async () => {
+    vi.mocked(getShop).mockResolvedValue({ ...shop, currency: "KWD" } as unknown as Shop);
+    render(<MoneyTaxPage />);
+    expect(await screen.findByText(/Card payments through Stripe are unavailable/)).toBeInTheDocument();
+  });
+
+  it("shows as soon as a blocked currency is picked, and not for AED", async () => {
+    const user = userEvent.setup();
+    render(<MoneyTaxPage />);
+    await screen.findByRole("option", { name: "OMR" });
+    expect(screen.queryByText(/Card payments through Stripe are unavailable/)).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByRole("combobox"), "OMR");
+    expect(await screen.findByText(/Card payments through Stripe are unavailable/)).toBeInTheDocument();
+  });
+
+  it("does not show when Stripe is not enabled", async () => {
+    vi.mocked(getShop).mockResolvedValue({ ...shop, currency: "BHD" } as unknown as Shop);
+    vi.mocked(getPaymentSettings).mockResolvedValue([
+      { provider: "stripe", enabled: false },
+    ] as unknown as PaymentProviderSettings[]);
+    render(<MoneyTaxPage />);
+    await screen.findByRole("option", { name: "BHD" });
+    await waitFor(() => expect(getPaymentSettings).toHaveBeenCalled());
+    expect(screen.queryByText(/Card payments through Stripe are unavailable/)).not.toBeInTheDocument();
+  });
 });
 
 // Moved from the Store Configuration page test (Phase 2a/A6): all seven

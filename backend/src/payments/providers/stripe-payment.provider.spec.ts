@@ -1,4 +1,6 @@
 import { StripePaymentProvider } from './stripe-payment.provider';
+import { PaymentCurrencyNotSupportedException } from '../blocked-gateway-currencies';
+import { toMinorUnits } from '../../common/currency-minor-units';
 
 // The SDK is mocked so the assertion can be made against the exact object
 // handed to Stripe. Testing toMinorUnits alone would prove the helper is right
@@ -50,20 +52,43 @@ describe('StripePaymentProvider amount serialisation', () => {
     expect(priceData.currency).toBe('aed');
   });
 
-  // Not reachable while the currency lock stands, and fixed anyway: the old
-  // code multiplied by 100 unconditionally, so this would have been submitted
-  // as 1050 minor units - 1.050 KWD instead of 10.500, a 10x undercharge.
-  it('sends a three-decimal currency in thousandths, not hundredths', async () => {
-    const priceData = await checkout(10.5, 'KWD');
-    expect(priceData.unit_amount).toBe(10500);
-    expect(priceData.unit_amount).not.toBe(1050);
-    expect(priceData.currency).toBe('kwd');
+  // Live Stripe checkout is blocked for the three-decimal currencies until the
+  // owner decides the handling (blocked-gateway-currencies.ts). The guard throws
+  // BEFORE any Stripe client is built or called, so nothing can be charged.
+  it.each(['KWD', 'BHD', 'OMR', 'kwd'])(
+    'refuses to create a %s checkout session and never calls Stripe',
+    async (currency) => {
+      const provider = new StripePaymentProvider();
+      await expect(
+        provider.createCheckoutSession({
+          orderId: 1,
+          orderNumber: 1,
+          amount: 33.091,
+          currency,
+          successUrl: 'https://shop.example/success',
+          cancelUrl: 'https://shop.example/cancel',
+          credentials: { secretKey: 'sk_test_blocked' },
+        }),
+      ).rejects.toBeInstanceOf(PaymentCurrencyNotSupportedException);
+      expect(createSession).not.toHaveBeenCalled();
+    },
+  );
+
+  it('still creates checkout sessions for AED, SAR, QAR and USD', async () => {
+    for (const currency of ['AED', 'SAR', 'QAR', 'USD']) {
+      createSession.mockClear();
+      expect((await checkout(10.5, currency)).unit_amount).toBe(1050);
+    }
   });
 
-  it('applies the three-decimal factor to BHD and OMR too', async () => {
-    expect((await checkout(10.5, 'BHD')).unit_amount).toBe(10500);
-    createSession.mockClear();
-    expect((await checkout(10.5, 'OMR')).unit_amount).toBe(10500);
+  // The conversion itself stays correct and covered even though the live call
+  // is blocked (moved here from the KWD end-to-end spec): a 33.091 KWD total is
+  // 33091 minor units, and x100 would send a tenth of the money.
+  it('the three-decimal conversion is still x1000', () => {
+    expect(toMinorUnits(33.091, 'KWD')).toBe(33091);
+    expect(toMinorUnits(33.091, 'KWD')).not.toBe(Math.round(33.091 * 100));
+    expect(toMinorUnits(10.5, 'BHD')).toBe(10500);
+    expect(toMinorUnits(10.5, 'OMR')).toBe(10500);
   });
 
   it('always sends an integer amount', async () => {
@@ -136,6 +161,27 @@ describe('StripePaymentProvider amount serialisation', () => {
       // refund of 2.450 KWD against a 24.500 KWD charge.
       expect(calls[0][0].amount).toBe(24500);
     });
-  });
 
+    // Blocking checkout must not strand refunds: an order charged in KWD before
+    // the block still refunds through Stripe, in the 3-decimal factor.
+    it.each(['KWD', 'BHD', 'OMR'])(
+      'still refunds a %s charge (the checkout block does not apply to refunds)',
+      async (currency) => {
+        createRefund.mockReset();
+        createRefund.mockResolvedValue({ id: 're_test_blocked' });
+        const provider = new StripePaymentProvider();
+        const res = await provider.refundPayment({
+          chargeReference: 'pi_test_old',
+          amount: 33.091,
+          currency,
+          credentials: { secretKey: 'sk_test_refund' },
+        });
+        expect(res.providerReference).toBe('re_test_blocked');
+        const calls = createRefund.mock.calls as unknown as {
+          amount: number;
+        }[][];
+        expect(calls[0][0].amount).toBe(33091);
+      },
+    );
+  });
 });
