@@ -63,7 +63,7 @@ describe("NewsletterSection submit button hoverEffect/pressEffect (§8.7 item 1)
 describe("NewsletterSection successAnimation (§8.7 item 5)", () => {
   it("no-op: success renders the plain <p>, no animation class, no checkmark, when successAnimation is unset", async () => {
     themeConfig = { globalSettings: { buttons: { primary: {} } } };
-    vi.mocked(subscribeNewsletter).mockResolvedValue({ alreadySubscribed: false });
+    vi.mocked(subscribeNewsletter).mockResolvedValue({ alreadySubscribed: false, confirmationRequired: false });
     const { container } = renderNewsletter();
     await submitEmail();
     await waitFor(() => expect(screen.getByText("Thanks for subscribing!")).toBeInTheDocument());
@@ -74,7 +74,7 @@ describe("NewsletterSection successAnimation (§8.7 item 5)", () => {
 
   it("successAnimation on: success renders the animated div with a checkmark and the same text", async () => {
     themeConfig = { globalSettings: { buttons: { primary: {} } } };
-    vi.mocked(subscribeNewsletter).mockResolvedValue({ alreadySubscribed: false });
+    vi.mocked(subscribeNewsletter).mockResolvedValue({ alreadySubscribed: false, confirmationRequired: false });
     const { container } = renderNewsletter({ successAnimation: true } as SectionSettings);
     await submitEmail();
     await waitFor(() => expect(screen.getByText("Thanks for subscribing!")).toBeInTheDocument());
@@ -108,5 +108,22 @@ describe("NewsletterSection inputFields.focusAnimation (§8.13.C item 7)", () =>
     const { container } = renderNewsletter();
     expect(screen.getByPlaceholderText("you@example.com")).toBeInTheDocument();
     expect(container.querySelector(".theme-float-label")).toBeNull();
+  });
+});
+
+describe("NewsletterSection confirmation copy (MKT-1)", () => {
+  it("says to check the email when the shop requires confirmation", async () => {
+    vi.mocked(subscribeNewsletter).mockResolvedValue({ alreadySubscribed: false, confirmationRequired: true });
+    renderNewsletter();
+    await submitEmail();
+    await waitFor(() => expect(screen.getByText(/Check your email to confirm/)).toBeTruthy());
+    expect(screen.queryByText("Thanks for subscribing!")).toBeNull();
+  });
+
+  it("keeps the plain thanks when no confirmation is needed", async () => {
+    vi.mocked(subscribeNewsletter).mockResolvedValue({ alreadySubscribed: false, confirmationRequired: false });
+    renderNewsletter();
+    await submitEmail();
+    await waitFor(() => expect(screen.getByText("Thanks for subscribing!")).toBeTruthy());
   });
 });

@@ -393,7 +393,7 @@ export class CustomerAccountService {
     // overwrites, so they are deleted first (they hold only a code hash and a
     // proof hash, but the phone is the personal data).
     const phoneRows = await this.db.query<RowDataPacket[]>(
-      `SELECT c.phone, s.countryCode FROM customer c JOIN shop s ON s.id = c.shopId
+      `SELECT c.phone, c.email, s.countryCode FROM customer c JOIN shop s ON s.id = c.shopId
         WHERE c.id = ? AND c.shopId = ?`,
       [customerId, shopId],
     );
@@ -408,6 +408,24 @@ export class CustomerAccountService {
           [shopId, e164],
         );
       }
+    }
+    // MKT-1: campaign mail. The old address is read above (the UPDATE below
+    // overwrites it). Past campaign rows keep their counts but lose the address and
+    // the address goes on the shop's do-not-contact list: that record (an address
+    // and a reason, no name) is KEPT on purpose, because deleting it would let a
+    // confirmed newsletter row for the same address be mailed again.
+    const oldEmail = phoneRows[0]?.email as string | null | undefined;
+    if (oldEmail && !oldEmail.endsWith('@deleted.requital')) {
+      await this.db.execute(
+        `UPDATE campaignrecipient SET email = NULL
+          WHERE shopId = ? AND email = ?`,
+        [shopId, oldEmail],
+      );
+      await this.db.execute(
+        `INSERT INTO emailsuppression (shopId, email, reason)
+         VALUES (?, ?, 'manual') ON DUPLICATE KEY UPDATE id = id`,
+        [shopId, oldEmail],
+      );
     }
     await this.db.execute(
       `UPDATE customer SET name = ?, email = ?, phone = ?, birthday = NULL, addresses = NULL, wishlist = NULL, passwordHash = NULL, verifiedEmail = NULL, emailVerifiedAt = NULL, phoneVerifiedAt = NULL WHERE id = ?`,

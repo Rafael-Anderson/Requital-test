@@ -17,6 +17,10 @@ export interface SendEmailParams {
   fromAddress?: string;
   // Reply-To, set together with fromAddress (the shop's own contact email).
   replyTo?: string;
+  // Extra message headers (MKT-1: List-Unsubscribe and its One-Click companion).
+  // Names must be plain header tokens; values are stripped of CR/LF by the
+  // provider, so a value can never inject a second header.
+  headers?: Record<string, string>;
   // Platform-level Resend API key, resolved by common/email.ts from
   // RESEND_API_KEY — same bring-your-own-credentials shape as
   // WhatsAppProvider's `credentials` field, even though (unlike WhatsApp)

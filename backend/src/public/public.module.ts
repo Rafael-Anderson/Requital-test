@@ -27,6 +27,7 @@ import { ShopAnalyticsModule } from '../shop-analytics/shop-analytics.module';
 import { ReviewsModule } from '../reviews/reviews.module';
 import { CustomerAuthModule } from '../customer-auth/customer-auth.module';
 import { StoreCreditModule } from '../store-credit/store-credit.module';
+import { NewsletterModule } from '../newsletter/newsletter.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { StoreCreditModule } from '../store-credit/store-credit.module';
     ReviewsModule,
     CustomerAuthModule,
     StoreCreditModule,
+    NewsletterModule,
   ],
   controllers: [
     PublicController,

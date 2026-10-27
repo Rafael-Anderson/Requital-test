@@ -17,6 +17,8 @@ export const CONSENT_SOURCES = [
   'admin',
   'storefront_account',
   'account_deletion',
+  // MKT-1: the unsubscribe link in a campaign email (a withdrawal only).
+  'campaign_unsubscribe',
 ] as const;
 export type ConsentSource = (typeof CONSENT_SOURCES)[number];
 

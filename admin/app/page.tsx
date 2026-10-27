@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, ClipboardList, ShoppingBag, Package, Settings, Users, BarChart3, Palette, Share2, Link2, History, Plug } from "lucide-react";
+import { LayoutDashboard, ClipboardList, ShoppingBag, Package, Settings, Users, BarChart3, Palette, Share2, Link2, History, Plug, Mail } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getShop } from "@/lib/api";
 import PageShell from "@/components/ui/PageShell";
@@ -40,6 +40,7 @@ const ALL_SECTIONS: SectionDef[] = [
   { href: "/theme", label: "Theme", icon: Palette, description: "Storefront look & layout", group: "Storefront", adminOnly: true },
   { href: "/bio-links", label: "Bio Links", icon: Link2, description: "Your link-in-bio page", group: "Storefront", adminOnly: true },
   { href: "/affiliate", label: "Affiliate", icon: Share2, description: "Partner links & commissions", group: "Growth", adminOnly: true },
+  { href: "/marketing/campaigns", label: "Campaigns", icon: Mail, description: "Email customers who opted in", group: "Growth", adminOnly: true },
   { href: "/customers", label: "Customers", icon: Users, description: "Profiles, orders & history", group: "Growth", adminOnly: true },
   { href: "/reports", label: "Reports", icon: BarChart3, description: "Exportable business insights", group: "Growth", adminOnly: true },
   { href: "/activity-log", label: "Activity Log", icon: History, description: "Every change, who & when", group: "System", adminOnly: true },

@@ -450,20 +450,39 @@ export function validateGiftCard(shopSlug: string, code: string) {
 // asked to be on the list and they already are — so it's folded into the
 // resolved value rather than thrown like a real failure. Doesn't reuse the
 // generic post() helper since that always throws on a non-2xx status.
-export async function subscribeNewsletter(shopSlug: string, email: string): Promise<{ alreadySubscribed: boolean }> {
+export async function subscribeNewsletter(
+  shopSlug: string,
+  email: string,
+): Promise<{ alreadySubscribed: boolean; confirmationRequired: boolean }> {
   const res = await fetch(`${apiBase()}/public/${shopSlug}/newsletter-subscribe`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
   });
-  if (res.status === 409) return { alreadySubscribed: true };
+  if (res.status === 409) return { alreadySubscribed: true, confirmationRequired: false };
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new Error(
       Array.isArray(body?.message) ? body.message.join(", ") : (body?.message ?? `Request failed (${res.status})`),
     );
   }
-  return { alreadySubscribed: false };
+  // MKT-1: with email campaigns on, a new subscription must be confirmed from the email.
+  const body = (await res.json().catch(() => null)) as { confirmationRequired?: boolean } | null;
+  return { alreadySubscribed: false, confirmationRequired: body?.confirmationRequired === true };
+}
+
+// MKT-1. Token-only email links. A lookup never changes anything; the POST does.
+export function lookupCampaignUnsubscribe(token: string) {
+  return get<{ shopName: string }>(`/public/campaigns/unsubscribe?token=${encodeURIComponent(token)}`);
+}
+export function confirmCampaignUnsubscribe(token: string) {
+  return post<{ unsubscribed: boolean }>(`/public/campaigns/unsubscribe?token=${encodeURIComponent(token)}`, {});
+}
+export function lookupNewsletterConfirm(token: string) {
+  return get<{ shopName: string; confirmed: boolean }>(`/public/newsletter/confirm?token=${encodeURIComponent(token)}`);
+}
+export function confirmNewsletter(token: string) {
+  return post<{ confirmed: boolean }>(`/public/newsletter/confirm?token=${encodeURIComponent(token)}`, {});
 }
 
 // Fired once name+phone are both filled in at checkout — see

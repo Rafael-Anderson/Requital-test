@@ -41,6 +41,8 @@ export default function NewsletterSection({ sectionId, settings, blocks }: { sec
   const buttonHover = resolveButtonHoverClass(primaryButton?.hoverEffect, primaryButton?.pressEffect);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  // True when the shop asks new subscribers to confirm from an email first.
+  const [needsConfirm, setNeedsConfirm] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   // §8.7 item 5 — section.settings.successAnimation. Off/absent ⇒ the plain
@@ -70,7 +72,8 @@ export default function NewsletterSection({ sectionId, settings, blocks }: { sec
     if (previewMode) return;
     setStatus("submitting");
     try {
-      await subscribeNewsletter(shopSlug, email);
+      const result = await subscribeNewsletter(shopSlug, email);
+      setNeedsConfirm(result.confirmationRequired);
       setStatus("success");
       setEmail("");
     } catch (err) {
@@ -101,10 +104,12 @@ export default function NewsletterSection({ sectionId, settings, blocks }: { sec
         successAnimation ? (
           <div className="theme-newsletter-success flex items-center justify-center gap-2 text-sm font-medium">
             <Check className="size-5 text-accent" aria-hidden="true" />
-            Thanks for subscribing!
+            {needsConfirm ? "Almost done. Check your email to confirm." : "Thanks for subscribing!"}
           </div>
         ) : (
-          <p className="text-sm font-medium">Thanks for subscribing!</p>
+          <p className="text-sm font-medium">
+            {needsConfirm ? "Almost done. Check your email to confirm." : "Thanks for subscribing!"}
+          </p>
         )
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
