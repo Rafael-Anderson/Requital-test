@@ -39,8 +39,7 @@ the partial pieces named below.** This document remains the plan of record.
 > ONB-2 (Salla/Zid) which reuse its framework; INV-3 (receive-against-PO from the scan
 > flow), INV-5, INV-18, INV-6 (needs a currency on `ingredient.costPerUnit` first); a
 > platform-admin path to reset a SHOP admin's 2FA, remember-this-device, forced rotation
-> on a breach hit; `trust proxy` (the session IP column and every per-IP throttle see the
-> proxy's address); STF-4 for platform admins. An owner decision is open on whether a
+> on a breach hit; (`trust proxy` is now set in production, owner-confirmed 2026-10-22); STF-4 for platform admins. An owner decision is open on whether a
 > cancelled order should release its discount redemptions (see `CLAUDE.md`, "Open
 > follow-ups").
 >

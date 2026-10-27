@@ -447,7 +447,7 @@ VERIFIED fields as in section 2. Choices: `totalMinor` = `total_price` (Q5, INFE
 
 - (L2) `testConnection` can be run before staff verification, so a merchant can use the platform's sandbox credentials to list a location's live orders (brand and location they typed) in the sandbox. Recorded only; production credentials are never used by this code. Consider requiring verification before the test.
 
-- The throttle is per source IP and the real Deliveroo egress addresses are unknown; `TRUST_PROXY` must be on in production for `req.ip` to be the client (see CLAUDE.md, N6c) before this route is meaningful.
+- The throttle is per source IP and the real Deliveroo egress addresses are unknown; `TRUST_PROXY=loopback` is set in production (owner-confirmed 2026-10-22), so `req.ip` is the client (see CLAUDE.md, N6c); the per-IP limit on this route is meaningful once the real Deliveroo egress addresses are known.
 - A body between 100 KB and 1 MB is refused by the parser (413) and only recovered by polling.
 - The staleness window (2 h) and the 240/min throttle are INFERRED numbers.
 - Credentials are likely integrator-level: tenant isolation rests entirely on the staff-verified `location_id`; do not set `provesLocationOwnership` without a per-merchant proof.
