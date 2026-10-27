@@ -15,6 +15,7 @@ import { storefrontUrl } from '../common/storefront-url';
 import { audienceSql } from './campaign-audience';
 import { renderCampaignEmail, unsubscribeHeaders } from './campaign-email';
 import { dailySendCap } from './campaigns.service';
+import { stopCampaign } from './campaign-stop';
 
 const logger = createLogger('CampaignSender');
 
@@ -45,25 +46,13 @@ export class CampaignSenderService implements OnModuleInit {
     );
   }
 
-  // Ends a campaign that cannot continue; its unsent rows are skipped with the reason.
-  private async stop(
+  private stop(
     campaignId: number,
     shopId: number,
     status: 'failed' | 'sent',
     reason: string | null,
   ) {
-    const res = await this.db.execute(
-      `UPDATE campaign SET status = ?, failureReason = ?, completedAt = ?, updatedAt = ?
-        WHERE id = ? AND shopId = ? AND status = 'sending'`,
-      [status, reason, new Date(), new Date(), campaignId, shopId],
-    );
-    if (res.affectedRows > 0 && status === 'failed') {
-      await this.db.execute(
-        `UPDATE campaignrecipient SET status = 'skipped', note = 'campaign stopped'
-          WHERE campaignId = ? AND shopId = ? AND status = 'pending' AND claimedAt IS NULL`,
-        [campaignId, shopId],
-      );
-    }
+    return stopCampaign(this.db, campaignId, shopId, status, reason);
   }
 
   private async chain(
@@ -99,14 +88,23 @@ export class CampaignSenderService implements OnModuleInit {
     const identity = enabled
       ? await this.sendingDomains.resolveIdentity(shopId)
       : null;
-    if (!enabled || !identity) {
+    // A suspended shop sends nothing either (same switch the storefront and
+    // AuthGuard honour).
+    const susp = await this.db.query<RowDataPacket[]>(
+      `SELECT suspendedAt FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    const suspended = !susp[0] || susp[0].suspendedAt != null;
+    if (!enabled || !identity || suspended) {
       await this.stop(
         p.campaignId,
         shopId,
         'failed',
-        enabled
-          ? 'The sending domain is no longer verified'
-          : 'Email campaigns were switched off for this shop',
+        suspended
+          ? 'This shop is suspended'
+          : enabled
+            ? 'The sending domain is no longer verified'
+            : 'Email campaigns were switched off for this shop',
       );
       return;
     }

@@ -19,6 +19,7 @@ import type { TenantContext } from '../common/tenant-context';
 import type { CampaignRow } from '../db/types';
 import type { CompiledPredicate } from '../customer-segments/segment-rules';
 import { audienceSql } from './campaign-audience';
+import { stopCampaign } from './campaign-stop';
 import {
   htmlToText,
   renderCampaignEmail,
@@ -132,8 +133,41 @@ export class CampaignsService {
     };
   }
 
+  // A campaign that is `sending` always has a live (pending or processing) batch
+  // job: each batch enqueues the next before it completes. One with none, whose
+  // newest batch job has been quiet for two minutes, lost its chain (the last
+  // batch was dead-lettered, or the job rows are gone). It is marked failed rather
+  // than left `sending` forever. Shop-scoped; the CAS in stopCampaign makes a race
+  // or repeat harmless.
+  private async reapStuck(shopId: number) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT c.id,
+              (SELECT COUNT(*) FROM job j WHERE j.shopId = c.shopId AND j.type = 'send_campaign_batch'
+                  AND j.status IN ('pending', 'processing')
+                  AND JSON_EXTRACT(j.payload, '$.campaignId') = c.id) AS live,
+              (SELECT MAX(j.updatedAt) FROM job j WHERE j.shopId = c.shopId AND j.type = 'send_campaign_batch'
+                  AND JSON_EXTRACT(j.payload, '$.campaignId') = c.id) AS lastJob
+         FROM campaign c WHERE c.shopId = ? AND c.status = 'sending'`,
+      [shopId],
+    );
+    const quietBefore = Date.now() - 2 * 60_000;
+    for (const r of rows) {
+      if (Number(r.live) > 0) continue;
+      if (r.lastJob && new Date(r.lastJob as Date).getTime() > quietBefore)
+        continue;
+      await stopCampaign(
+        this.db,
+        r.id as number,
+        shopId,
+        'failed',
+        'Sending stopped unexpectedly. Emails already sent are not repeated.',
+      );
+    }
+  }
+
   async list(ctx: TenantContext) {
     await this.assertEnabled(ctx.shopId);
+    await this.reapStuck(ctx.shopId);
     const rows = await this.db.query<CampaignDb[]>(
       `SELECT id, shopId, name, subject, segmentId, status, audienceCount, failureReason,
               createdBy, sendingStartedAt, completedAt, createdAt, updatedAt
@@ -149,6 +183,7 @@ export class CampaignsService {
 
   async get(ctx: TenantContext, id: number) {
     await this.assertEnabled(ctx.shopId);
+    await this.reapStuck(ctx.shopId);
     const c = await this.load(ctx.shopId, id);
     const counts = await this.counts(ctx.shopId, [id]);
     return this.view(c, counts.get(id), true);

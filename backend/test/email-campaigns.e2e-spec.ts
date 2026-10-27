@@ -154,6 +154,12 @@ describe('Email campaigns (e2e)', () => {
        VALUES (?, ?, 'newsletter_widget', ?)`,
       [shopId, email, confirmed ? new Date() : null],
     );
+  // The account owner proved the address (what the email-verification flow records).
+  const verifyEmail = (customerId: number) =>
+    db.execute(
+      `UPDATE customer SET verifiedEmail = email, emailVerifiedAt = NOW() WHERE id = ?`,
+      [customerId],
+    );
   const suppress = (shopId: number, email: string, reason = 'manual') =>
     db.execute(
       `INSERT INTO emailsuppression (shopId, email, reason) VALUES (?, ?, ?)`,
@@ -808,6 +814,7 @@ describe('Email campaigns (e2e)', () => {
         '0501234567',
         email,
       );
+      await verifyEmail(cust.customerId);
       await suppress(s.shopId, email, 'unsubscribe');
       await asCustomer(
         app.getHttpServer(),
@@ -938,9 +945,18 @@ describe('Email campaigns (e2e)', () => {
       await http()
         .post(`/public/newsletter/confirm?token=${token}`)
         .expect(201);
+      // Single use: the token is cleared by the confirm, a repeat finds nothing.
       await http()
         .post(`/public/newsletter/confirm?token=${token}`)
-        .expect(201);
+        .expect(404);
+      expect(
+        (
+          await db.query<RowDataPacket[]>(
+            `SELECT confirmTokenHash FROM newslettersubscriber WHERE shopId = ? AND email = ?`,
+            [s.shopId, email],
+          )
+        )[0].confirmTokenHash,
+      ).toBeNull();
       expect(
         (
           await db.query<RowDataPacket[]>(
@@ -1053,6 +1069,190 @@ describe('Email campaigns (e2e)', () => {
     });
   });
 
+  describe('review fixes (PR 282)', () => {
+    it("M1: an unverified account cannot lift an unsubscribe or enter the audience with a stranger's address", async () => {
+      const s = await setupShop('cf-m1');
+      const victim = `victim-${s.slug}@mail.test`;
+      await db.execute(`UPDATE shop SET published = 1 WHERE id = ?`, [
+        s.shopId,
+      ]);
+      await suppress(s.shopId, victim, 'unsubscribe');
+      const cust = await registerCustomer(
+        app.getHttpServer(),
+        s.slug,
+        '0501234569',
+        victim,
+      );
+      await asCustomer(
+        app.getHttpServer(),
+        cust,
+        'put',
+        `/public/${s.slug}/account/consent`,
+      )
+        .send({ channel: 'email', granted: true })
+        .expect(200);
+      // Suppression stays, and the self-service grant of an UNVERIFIED address does
+      // not put it in the audience (even once the suppression is gone).
+      expect(
+        await db.query(
+          `SELECT 1 FROM emailsuppression WHERE shopId = ? AND email = ?`,
+          [s.shopId, victim],
+        ),
+      ).toHaveLength(1);
+      await db.execute(`DELETE FROM emailsuppression WHERE shopId = ?`, [
+        s.shopId,
+      ]);
+      const c = await newDraft(s);
+      const none = await http()
+        .get(`/campaigns/${c.id}/audience`)
+        .set(auth(s.token))
+        .expect(200);
+      expect((none.body as Json).count).toBe(0);
+      // Verified: now it counts. An admin-recorded grant never needed it.
+      await verifyEmail(cust.customerId);
+      const one = await http()
+        .get(`/campaigns/${c.id}/audience`)
+        .set(auth(s.token))
+        .expect(200);
+      expect((one.body as Json).count).toBe(1);
+      // If the address is later changed away from the verified one, it drops out.
+      await db.execute(
+        `UPDATE customer SET verifiedEmail = 'other@mail.test' WHERE id = ?`,
+        [cust.customerId],
+      );
+      const gone = await http()
+        .get(`/campaigns/${c.id}/audience`)
+        .set(auth(s.token))
+        .expect(200);
+      expect((gone.body as Json).count).toBe(0);
+    });
+
+    it('L1: a suspended shop sends nothing and the campaign fails', async () => {
+      const s = await setupShop('cf-l1');
+      await customer(s.shopId, `a-${s.slug}@mail.test`, 'granted');
+      const c = await newDraft(s);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
+      await db.execute(`UPDATE shop SET suspendedAt = NOW() WHERE id = ?`, [
+        s.shopId,
+      ]);
+      await drain(c.id);
+      expect(sentTo()).toHaveLength(0);
+      const row = await db.query<RowDataPacket[]>(
+        `SELECT status, failureReason FROM campaign WHERE id = ?`,
+        [c.id],
+      );
+      expect(row[0].status).toBe('failed');
+      expect(row[0].failureReason).toMatch(/suspended/);
+    });
+
+    it('L3: unsubscribing clears the newsletter confirmation token, so an old mail cannot re-confirm', async () => {
+      const { s, e } = await audienceShop('cf-l3');
+      // in2 is a confirmed newsletter row; give it a live confirmation token as if
+      // an old confirmation mail were still in the inbox.
+      const old = randomBytes(16).toString('hex');
+      await db.execute(
+        `UPDATE newslettersubscriber SET confirmTokenHash = SHA2(?, 256) WHERE shopId = ? AND email = ?`,
+        [old, s.shopId, e('in2')],
+      );
+      const c = await newDraft(s);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
+      await drain(c.id);
+      await http()
+        .post(`/public/campaigns/unsubscribe?token=${tokenFromLogs(e('in2'))}`)
+        .expect(201);
+      await http().post(`/public/newsletter/confirm?token=${old}`).expect(404);
+      const row = await db.query<RowDataPacket[]>(
+        `SELECT confirmedAt, confirmTokenHash FROM newslettersubscriber WHERE shopId = ? AND email = ?`,
+        [s.shopId, e('in2')],
+      );
+      expect(row[0].confirmedAt).toBeNull();
+      expect(row[0].confirmTokenHash).toBeNull();
+    });
+
+    it('L7: a campaign whose batch chain is dead is marked failed; one with a live job is left alone', async () => {
+      const { s } = await audienceShop('cf-l7');
+      const c = await newDraft(s);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
+      // Live (pending) job: stays sending however it is read.
+      expect(
+        (
+          (await http().get(`/campaigns/${c.id}`).set(auth(s.token)))
+            .body as Json
+        ).status,
+      ).toBe('sending');
+      // Dead-lettered a while ago, nothing else queued.
+      await db.execute(
+        `UPDATE job SET status = 'dead_letter', updatedAt = ? WHERE type = 'send_campaign_batch' AND JSON_EXTRACT(payload, '$.campaignId') = ?`,
+        [new Date(Date.now() - 10 * 60_000), c.id],
+      );
+      const got = (
+        await http().get(`/campaigns/${c.id}`).set(auth(s.token)).expect(200)
+      ).body as Json & { failureReason: string };
+      expect(got.status).toBe('failed');
+      expect(got.failureReason).toMatch(/stopped unexpectedly/);
+      expect((await recips(c.id)).every((r) => r.status === 'skipped')).toBe(
+        true,
+      );
+      // The list path reaps too, and another shop's campaigns are never touched.
+      const other = await audienceShop('cf-l7b');
+      const d = await newDraft(other.s);
+      await http()
+        .post(`/campaigns/${d.id}/send`)
+        .set(auth(other.s.token))
+        .expect(201);
+      await db.execute(
+        `UPDATE job SET status = 'dead_letter', updatedAt = ? WHERE type = 'send_campaign_batch' AND JSON_EXTRACT(payload, '$.campaignId') = ?`,
+        [new Date(Date.now() - 10 * 60_000), d.id],
+      );
+      await http().get('/campaigns').set(auth(s.token)).expect(200);
+      expect(
+        (
+          await db.query<RowDataPacket[]>(
+            `SELECT status FROM campaign WHERE id = ?`,
+            [d.id],
+          )
+        )[0].status,
+      ).toBe('sending');
+      await http().get('/campaigns').set(auth(other.s.token)).expect(200);
+      expect(
+        (
+          await db.query<RowDataPacket[]>(
+            `SELECT status FROM campaign WHERE id = ?`,
+            [d.id],
+          )
+        )[0].status,
+      ).toBe('failed');
+    });
+
+    it('L7: a job that is only recently quiet is not reaped', async () => {
+      const { s } = await audienceShop('cf-l7c');
+      const c = await newDraft(s);
+      await http()
+        .post(`/campaigns/${c.id}/send`)
+        .set(auth(s.token))
+        .expect(201);
+      await db.execute(
+        `UPDATE job SET status = 'dead_letter', updatedAt = ? WHERE type = 'send_campaign_batch' AND JSON_EXTRACT(payload, '$.campaignId') = ?`,
+        [new Date(), c.id],
+      );
+      expect(
+        (
+          (await http().get(`/campaigns/${c.id}`).set(auth(s.token)))
+            .body as Json
+        ).status,
+      ).toBe('sending');
+    });
+  });
+
   describe('PDPL', () => {
     it('anonymising a customer scrubs their address from past campaign rows and suppresses it', async () => {
       const s = await setupShop('cf-pdpl');
@@ -1066,6 +1266,7 @@ describe('Email campaigns (e2e)', () => {
         '0501234568',
         email,
       );
+      await verifyEmail(cust.customerId);
       await asCustomer(
         app.getHttpServer(),
         cust,

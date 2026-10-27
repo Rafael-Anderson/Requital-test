@@ -127,7 +127,7 @@ export class NewsletterConfirmService {
     };
   }
 
-  // One CAS: the first call sets confirmedAt, any repeat is a harmless no-op. A
+  // One CAS: the first call sets confirmedAt AND clears the token, so the link is single use (a repeat, or an old mail after an unsubscribe, finds nothing: the generic 404). A
   // fresh opt-in also lifts an earlier UNSUBSCRIBE suppression (the person has now
   // asked again); a bounce, complaint or manual suppression stays.
   async confirm(token: string | undefined) {
@@ -135,7 +135,7 @@ export class NewsletterConfirmService {
     const shopName = (r.displayName as string | null) || (r.name as string);
     await this.db.transaction(async (conn) => {
       const [res] = await conn.query<import('mysql2').ResultSetHeader>(
-        `UPDATE newslettersubscriber SET confirmedAt = ?
+        `UPDATE newslettersubscriber SET confirmedAt = ?, confirmTokenHash = NULL
           WHERE id = ? AND shopId = ? AND confirmedAt IS NULL`,
         [new Date(), r.id, r.shopId],
       );

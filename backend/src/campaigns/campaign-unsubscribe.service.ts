@@ -78,7 +78,7 @@ export class CampaignUnsubscribeService {
         });
       }
       await conn.query(
-        `UPDATE newslettersubscriber SET confirmedAt = NULL
+        `UPDATE newslettersubscriber SET confirmedAt = NULL, confirmTokenHash = NULL
           WHERE shopId = ? AND email = ?`,
         [shopId, email],
       );

@@ -6,7 +6,12 @@ import type { CompiledPredicate } from '../customer-segments/segment-rules';
 //
 // An address is in the audience only when ALL of these hold:
 //   (A) a customer of the shop has a customerconsent row for channel 'email' with
-//       status 'granted' (no row = UNKNOWN = out), and a non-empty email; OR
+//       status 'granted' (no row = UNKNOWN = out), and a non-empty email, AND the
+//       grant is either admin-recorded (the merchant attests how it was obtained) or
+//       the account's email is VERIFIED. A self-service grant on an unverified
+//       account proves nothing about who owns the address (anyone can register with
+//       a stranger's email and tick the box), so it is excluded; any other or
+//       future source is treated the same way; OR
 //   (B) a newsletter subscriber of the shop has a confirmedAt (double opt-in). An
 //       old, unconfirmed row never qualifies. A segment narrows (B) too: such an
 //       address is kept only if a customer with that email matches the segment;
@@ -35,7 +40,9 @@ export function audienceSql(
       WHERE c.shopId = ? AND c.email IS NOT NULL AND c.email <> ''
         AND EXISTS (SELECT 1 FROM customerconsent cc
                      WHERE cc.customerId = c.id AND cc.shopId = c.shopId
-                       AND cc.channel = 'email' AND cc.status = 'granted')`;
+                       AND cc.channel = 'email' AND cc.status = 'granted'
+                       AND (cc.source = 'admin'
+                            OR (c.verifiedEmail IS NOT NULL AND c.verifiedEmail = c.email)))`;
   params.push(shopId);
   if (segment) {
     a += ` AND ${segment.sql}`;
