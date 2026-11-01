@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Fake curl. Logs the URL; answers health, storefront/admin and redirect-map calls.
+echo "curl $*" >> "$FAKE_LOG"
+url=""; headers=0; wcode=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -D) headers=1; shift 2; continue ;;
+    -w) wcode=1; shift 2; continue ;;
+    -o|--max-time|-H) shift 2; continue ;;
+    -*) ;;
+    *) url="$1" ;;
+  esac
+  shift
+done
+if [ "$headers" = 1 ]; then
+  echo "HTTP/1.1 ${FAKE_MAP_CODE:-200} OK"
+  [ "${FAKE_NO_ETAG:-}" = 1 ] || echo 'ETag: "abc123"'
+  exit 0
+fi
+code=200
+case "$url" in
+  */health/ready) code="${FAKE_HEALTH:-200}" ;;
+esac
+[ "$wcode" = 0 ] || printf '%s' "$code"
+exit 0

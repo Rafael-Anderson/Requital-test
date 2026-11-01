@@ -248,6 +248,31 @@ jobs:
           node tools/check-no-em-dash.js --self-test
           node tools/check-no-em-dash.js
 
+      # Deploy pipeline tooling (tools/deploy, .github/workflows/deploy.yml).
+      # Added as steps INSIDE this already-required job: the job name above is a
+      # pinned branch-protection context and is not renamed.
+      - name: Deploy tooling - shellcheck
+        run: |
+          shellcheck --version
+          shellcheck -x tools/deploy/*.sh tools/deploy/lib/*.sh
+
+      - name: Deploy tooling - actionlint (pinned release, sha256 verified)
+        env:
+          ACTIONLINT_VERSION: "1.7.7"
+          ACTIONLINT_SHA256: "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -fsSL -o "$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/actionlint" actionlint
+          "$RUNNER_TEMP/actionlint/actionlint" .github/workflows/*.yml
+
+      # A glob, not the directory: `node --test <dir>` does not work on Node 22.
+      - name: Deploy tooling - tests (fakes, real temp git repos, no network)
+        run: node --test tools/deploy/test/*.test.js
+
   e2e:
     name: e2e (playwright)
     runs-on: ubuntu-latest

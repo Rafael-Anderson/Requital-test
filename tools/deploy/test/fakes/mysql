@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Fake mysql client. Answers the exact queries the deploy scripts run, from
+# canned values and state files; refuses to run if the password is in argv.
+for a in "$@"; do
+  case "$a" in -p*|--password*) echo "FAKE mysql: password in argv" >&2; exit 9 ;; esac
+done
+[ -n "${MYSQL_PWD:-}" ] || { echo "FAKE mysql: MYSQL_PWD not set" >&2; exit 9; }
+db=""; sql=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in -e) sql="$2"; shift 2; continue ;; --*) ;; *) db="$1" ;; esac
+  shift
+done
+echo "mysql[$db] $sql" >> "$FAKE_LOG"
+case "$sql" in
+  "SELECT 1") echo 1 ;;
+  "SELECT name FROM _migrations"*) cat "$FAKE_DIR/applied-migrations" ;;
+  "SELECT subdomain FROM shop"*) echo "${FAKE_SLUG-testshop}" ;;
+  "SELECT IFNULL(MAX("*) echo 100 ;;
+  *BIT_XOR*)
+    if [ -e "$FAKE_DIR/mutated" ]; then printf '5\t999\n'; else printf '5\t123456\n'; fi ;;
+  "SELECT (SELECT COUNT(*) FROM shop)"*)
+    case "$db" in
+      *_drill) echo "${FAKE_DRILL_COUNTS:-1	10	20	5	60}" ;;
+      *) echo "1	10	20	5	60" ;;
+    esac ;;
+  *) ;;
+esac
+exit 0

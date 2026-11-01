@@ -104,7 +104,7 @@ elif [[ "$CMD" =~ $RE_ROLLBACK ]]; then
   [ -x "$APP_DIR/tools/deploy/rollback.sh" ] || { echo "Error: $APP_DIR/tools/deploy/rollback.sh is missing." >&2; exit 2; }
   run_detached rollback "$APP_DIR/tools/deploy/rollback.sh" "$PREV"
 elif [ "$CMD" = "status" ]; then
-  latest="$(find "$LOG_DIR" -maxdepth 1 -type f \( -name 'deploy-*.log' -o -name 'rollback-*.log' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)"
+  latest="$( { find "$LOG_DIR" -maxdepth 1 -type f \( -name 'deploy-*.log' -o -name 'rollback-*.log' \) -printf '%T@ %p\n' 2>/dev/null || true; } | sort -nr | head -1 | cut -d' ' -f2-)"
   if [ -z "$latest" ]; then
     echo "STATUS: no deploy or rollback log found in $LOG_DIR."
     echo "LAST_DEPLOY_RESULT=none"

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Fake npx (ts-node billing-flag-matrix run). Prints the JSON shape the real
+# script prints; a flag file makes the "after" run differ.
+echo "npx $*" >> "$FAKE_LOG"
+shift_count=0
+n=1; [ ! -e "$FAKE_DIR/mutated-matrix" ] || n=2
+printf '{"shop":{"count":1,"bitXor":"1"},"order":{"count":%s,"bitXor":"9"},"shopfeatureoverride":{"count":0,"bitXor":"0"},"matrix":{"1":{"a":true,"b":%s}}}\n' "$RANDOM" "$([ "$n" = 1 ] && echo true || echo false)"
