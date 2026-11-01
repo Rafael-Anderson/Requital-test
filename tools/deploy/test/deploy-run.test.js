@@ -370,7 +370,7 @@ test('the per-row SQL: bounded by the captured max id, explicit columns, never G
   const pin = standardChange(sb);
   assert.equal(real(sb, pin).status, 0);
   const rowQueries = sb.calls().filter((c) => /MD5\(CONCAT_WS/.test(c) && !/BIT_XOR/.test(c));
-  assert.ok(rowQueries.length >= 18, `only ${rowQueries.length} per-row queries (9 tables x before/after)`);
+  assert.ok(rowQueries.length >= 24, `only ${rowQueries.length} per-row queries (12 dumps x before/after)`);
   for (const q of rowQueries) {
     assert.match(q, /WHERE `id` <= 100 ORDER BY `id`/);
     assert.doesNotMatch(q, /GROUP_CONCAT/);
@@ -384,7 +384,7 @@ test('the per-row SQL: bounded by the captured max id, explicit columns, never G
   const consumption = rowQueries.find((q) => /FROM `orderstockconsumption`/.test(q));
   assert.doesNotMatch(consumption, /updatedAt/, 'ON UPDATE CURRENT_TIMESTAMP would tolerate any migration UPDATE');
   const order = rowQueries.find((q) => /FROM `order`/.test(q) && /`regionId`/.test(q));
-  assert.doesNotMatch(order, /`customerId`/, 'customer merges rewrite order.customerId');
+  assert.doesNotMatch(order, /`customerId`/, 'customer merges rewrite order.customerId (capped set instead)');
 }));
 
 // ---- the lock must not be inherited by children ---------------------------------------
@@ -630,34 +630,101 @@ test('H1: the cap grows at 1% of the orders (2000 orders: 20 edits tolerated, 21
   assert.match(bad.out, /changed=21 cap=20/);
 }));
 
-// ---- M1: only trace-free-stable shop columns are strict -----------------------------------------------
-test('M1: a merchant changing the shop currency/timezone/domainType in the window does not stop the deploy', () => withSb((sb) => {
+// ---- M1: strict columns are immutable; the merchant/merge-rewritable ones have caps of their own ----------
+const shopsMutable = (n, changed, field = { currency: 'SAR' }) => Array.from({ length: n }, (_, i) => ({
+  id: i + 1, currency: 'AED', timezone: 'Asia/Dubai', domainType: 'subdomain', countryCode: 'AE', ...(i < changed ? field : {}),
+}));
+const strictShops = (n) => Array.from({ length: n }, (_, i) => `${i + 1}\tshop${i + 1}\n`).join('');
+
+function shopCase(sb, n, changed, field) {
+  rows(sb, 'shop', 'before', strictShops(n));
+  rows(sb, 'shop', 'after', strictShops(n));
+  data(sb, 'shopmutable', 'before', shopsMutable(n, 0));
+  data(sb, 'shopmutable', 'after', shopsMutable(n, changed, field));
+}
+
+test('M1: one shop changing currency, timezone and domain type in the window does not stop the deploy', () => withSb((sb) => {
   const pin = standardChange(sb);
-  data(sb, 'shop', 'before', [{ id: 1, subdomain: 'acme', countryCode: 'AE', currency: 'AED', timezone: 'Asia/Dubai', domainType: 'subdomain' }]);
-  data(sb, 'shop', 'after', [{ id: 1, subdomain: 'acme', countryCode: 'AE', currency: 'SAR', timezone: 'Asia/Riyadh', domainType: 'custom' }]);
+  rows(sb, 'shop', 'before', strictShops(5));
+  rows(sb, 'shop', 'after', strictShops(5));
+  data(sb, 'shopmutable', 'before', shopsMutable(5, 0));
+  data(sb, 'shopmutable', 'after', shopsMutable(5, 1, { currency: 'SAR', timezone: 'Asia/Riyadh', domainType: 'custom' }));
   const r = real(sb, pin);
   assert.equal(r.status, 0, r.out);
-  assert.match(r.out, /rows shop: checked=1 changed=0/);
+  assert.match(r.out, /rows shop \(capped set 0, cap max\(2, 0%\)\): checked=5 changed=1 tolerated=1 fatal=0/);
 }));
 
-test('M1: a shop whose subdomain or countryCode changed DOES stop the deploy', () => withSb((sb) => {
+test('M1: two shops are tolerated, THREE shops with a rewritten currency are fatal (cap 2)', () => withSb((sb) => {
   const pin = standardChange(sb);
-  data(sb, 'shop', 'before', [{ id: 1, subdomain: 'acme', countryCode: 'AE' }]);
-  data(sb, 'shop', 'after', [{ id: 1, subdomain: 'acme', countryCode: 'XX' }]);
+  shopCase(sb, 5, 2);
+  assert.equal(real(sb, pin).status, 0);
+  sb.git('reset', '-q', '--hard', sb.base);
+  fs.rmSync(path.join(sb.fakeDir, 'migrated'), { force: true });
+  shopCase(sb, 5, 3);
+  const bad = real(sb, pin);
+  assert.equal(bad.status, 1, bad.out);
+  assert.match(bad.out, /ROW CHECK FAILED shop \(capped set 0/);
+  assert.equal(restarts(sb).length, 3, 'only the first (tolerated) deploy restarted anything');
+}));
+
+test('M1: a shop country change is tolerated within the cap (countryCode is merchant-editable)', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  shopCase(sb, 5, 1, { countryCode: 'SA' });
+  const r = real(sb, pin);
+  assert.equal(r.status, 0, r.out);
+}));
+
+test('M1: a shop whose subdomain changed DOES stop the deploy (strict)', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  rows(sb, 'shop', 'before', '1\tshop1\n');
+  rows(sb, 'shop', 'after', '1\tshop1-renamed\n');
+  data(sb, 'shopmutable', 'before', shopsMutable(1, 0));
+  data(sb, 'shopmutable', 'after', shopsMutable(1, 0));
   const r = real(sb, pin);
   assert.equal(r.status, 1, r.out);
-  assert.match(r.out, /ROW CHECK FAILED shop/);
+  assert.match(r.out, /ROW CHECK FAILED shop:/);
 }));
 
-test('M1: a customer merge (order.customerId rewritten) is informational, not fatal', () => withSb((sb) => {
+test('M1: the strict shop hash holds no merchant-editable column', () => withSb((sb) => {
   const pin = standardChange(sb);
-  data(sb, 'order', 'before', [{ id: 1, shopId: 1, shopOrderNumber: 1, outletId: 1, orderType: 'delivery', currency: 'AED', exchangeRate: null, regionId: null, customerId: 5 }]);
-  data(sb, 'order', 'after', [{ id: 1, shopId: 1, shopOrderNumber: 1, outletId: 1, orderType: 'delivery', currency: 'AED', exchangeRate: null, regionId: null, customerId: 9 }]);
-  rows(sb, 'ordermoney', 'before', '1\tm1\n');
-  rows(sb, 'ordermoney', 'after', '1\tm1\n');
-  const r = real(sb, pin);
-  assert.equal(r.status, 0, r.out);
-  assert.match(r.out, /rows order: checked=1 changed=0/);
+  assert.equal(real(sb, pin).status, 0);
+  const strict = sb.calls().find((c) => /FROM `shop`/.test(c) && /MD5\(CONCAT_WS/.test(c) && !/BIT_XOR/.test(c));
+  assert.doesNotMatch(strict, /`currency`|`timezone`|`domainType`|`countryCode`|`updatedAt`/);
+  assert.match(strict, /`subdomain`/);
+}));
+
+function customerRefs(n, changed) {
+  return Array.from({ length: n }, (_, i) => `${i + 1}\tc${i + 1}${i < changed ? '-merged' : ''}\n`).join('');
+}
+function refCase(sb, n, changed, key) {
+  const same = Array.from({ length: n }, (_, i) => `${i + 1}\tx${i + 1}\n`).join('');
+  rows(sb, key === 'ordercustomer' ? 'order' : 'giftcard', 'before', same);
+  rows(sb, key === 'ordercustomer' ? 'order' : 'giftcard', 'after', same);
+  if (key === 'ordercustomer') { rows(sb, 'ordermoney', 'before', same); rows(sb, 'ordermoney', 'after', same); }
+  rows(sb, key, 'before', customerRefs(n, 0));
+  rows(sb, key, 'after', customerRefs(n, changed));
+}
+
+test('M1: a customer merge rewriting order.customerId is tolerated up to max(100, 5%), 101 of 2000 is fatal', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  refCase(sb, 2000, 100, 'ordercustomer');
+  const ok = real(sb, pin);
+  assert.equal(ok.status, 0, ok.out.slice(-500));
+  assert.match(ok.out, /rows order \(capped set 1, cap max\(100, 5%\)\): checked=2000 changed=100 tolerated=100 fatal=0/);
+  sb.git('reset', '-q', '--hard', sb.base);
+  fs.rmSync(path.join(sb.fakeDir, 'migrated'), { force: true });
+  refCase(sb, 2000, 101, 'ordercustomer');
+  const bad = real(sb, pin);
+  assert.equal(bad.status, 1, bad.out.slice(-500));
+  assert.match(bad.out, /ROW CHECK FAILED order \(capped set 1/);
+}));
+
+test('M1: the same cap applies to giftcard.purchasedByCustomerId', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  refCase(sb, 2000, 101, 'giftcardcustomer');
+  const bad = real(sb, pin);
+  assert.equal(bad.status, 1, bad.out.slice(-500));
+  assert.match(bad.out, /ROW CHECK FAILED giftcard \(capped set 2/);
 }));
 
 // ---- M2: no updatedAt tolerance for orderstockconsumption ------------------------------------------------
@@ -693,9 +760,9 @@ test('M3: the dry-run validates every protected-row query with LIMIT 1 (read-onl
   const pin = standardChange(sb);
   const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified']);
   assert.equal(r.status, 0, r.out);
-  assert.match(r.out, /protected-row queries: valid \(8 tables plus the order money columns\)/);
+  assert.match(r.out, /protected-row queries: valid \(8 strict tables, the order money columns, 3 capped sets\)/);
   const limited = sb.calls().filter((c) => /MD5\(CONCAT_WS/.test(c) && / LIMIT 1$/.test(c));
-  assert.equal(limited.length, 9);
+  assert.equal(limited.length, 12);
   assert.equal(sb.calls().filter((c) => /MD5\(CONCAT_WS/.test(c) && !/ LIMIT 1$/.test(c)).length, 0, 'no unbounded dump in a dry-run');
 }));
 
@@ -703,7 +770,7 @@ test('M3: a protected-row query naming a column that does not exist fails the DR
   const pin = standardChange(sb);
   const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified'], { FAKE_FAIL_SQL_MATCH: '`regionId`' });
   assert.notEqual(r.status, 0);
-  assert.match(r.out, /protected-row query for order is invalid/);
+  assert.match(r.out, /protected-row query for order \(order\) is invalid/);
   assert.equal(sb.hasMarker(pin), false, 'a failed dry-run must not authorise a real run');
 }));
 

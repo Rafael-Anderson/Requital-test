@@ -113,15 +113,14 @@ echo "deploy.sh: PIN=$PIN mode=$MODE ci_verified=$CI_VERIFIED user=$(id -un) at 
 # through <col>; "c" = a small number of legitimate changes or deletions is
 # normal (customer merges), tolerated up to the same cap as edited orders.
 # Columns are ones that cannot change after creation, or whose changes leave a
-# trace: a shop's currency/timezone/domainType are merchant-editable without any
-# trace, so they are informational below, and so are the columns a customer merge
-# rewrites (order.customerId, giftcard.purchasedByCustomerId). Columns come from
+# trace. Columns that a merchant or a customer merge may legitimately rewrite
+# without any trace are in CAPPED_SETS below. Columns come from
 # backend/src/db/types.ts; workflow.test.js keeps them honest.
 STRICT_SETS=(
   'order|id|id,shopId,shopOrderNumber,outletId,orderType,currency,exchangeRate,regionId|'
   'orderitem|id|id,orderId,productId,productName,variantId,priceAtPurchase,autoDiscountAmount|p:orderId'
   'paymenttransaction|id|id,orderId,gateway,gatewayReference,amount,currency|'
-  'shop|id|id,subdomain,countryCode|'
+  'shop|id|id,subdomain|'
   'customer|id|id,shopId,createdAt|c'
   'giftcard|id|id,shopId,code,initialValue,purchaseOrderId|u'
   'stockmovement|id|id,shopId,productId,variantId,ingredientId,type,delta,outletId,toOutletId|'
@@ -133,15 +132,37 @@ STRICT_SETS=(
 # orderstockconsumption rows legitimate. More than max(10, ~1% of the orders)
 # edited in one window is not a shop trading: it is fatal (see lib/row-diff.js).
 ORDER_MONEY_SET='order|id|id,total,taxAmount,deliveryFee,discountAmount,giftCardAmount,storeCreditAmount|'
+# Columns a merchant (or a customer merge) can rewrite without leaving any trace:
+# name|bound|columns|capMin,capPct%. A few changed rows are normal; more than
+# max(capMin, capPct% of the rows) is not a shop trading, it is fatal. Shops change
+# their currency/timezone/domain/country rarely (cap 2); a customer merge rewrites
+# every order and gift card of the merged customer (cap max(100, 5%)).
+CAPPED_SETS=(
+  'shop|id|id,currency,timezone,domainType,countryCode|2,0'
+  'order|id|id,customerId|100,5'
+  'giftcard|id|id,purchasedByCustomerId|100,5'
+)
 # Printed for the operator (count + XOR of per-row MD5) before and after, never fatal.
 INFO_SETS=(
   'order|id|id,status,paymentStatus'
-  'order|id|id,customerId'
   'giftcard|id|id,remainingBalance,status'
-  'giftcard|id|id,purchasedByCustomerId'
-  'shop|id|id,currency,timezone,domainType'
   'outletingredientstock||outletId,ingredientId,stockQuantity'
 )
+
+# DUMP_SPECS: "<file name>|<table>|<bound>|<columns>|<flags>", one per per-row dump.
+DUMP_SPECS=()
+for spec in "${STRICT_SETS[@]}"; do
+  IFS='|' read -r t_ b_ c_ f_ <<< "$spec"
+  DUMP_SPECS+=("$t_|$t_|$b_|$c_|$f_")
+done
+IFS='|' read -r t_ b_ c_ f_ <<< "$ORDER_MONEY_SET"
+DUMP_SPECS+=("ordermoney|$t_|$b_|$c_|$f_")
+capped_i=0
+for spec in "${CAPPED_SETS[@]}"; do
+  IFS='|' read -r t_ b_ c_ _ <<< "$spec"
+  DUMP_SPECS+=("capped-$capped_i|$t_|$b_|$c_|")
+  capped_i=$((capped_i + 1))
+done
 
 declare -A MAXID=()
 declare -A TOTAL_COUNT=()
@@ -174,7 +195,7 @@ row_sql() {
 
 capture_max_ids() {
   local spec table bound m
-  for spec in "${STRICT_SETS[@]}" "$ORDER_MONEY_SET" "${INFO_SETS[@]}"; do
+  for spec in "${STRICT_SETS[@]}" "$ORDER_MONEY_SET" "${CAPPED_SETS[@]}" "${INFO_SETS[@]}"; do
     IFS='|' read -r table bound _ <<< "$spec"
     [ -n "$bound" ] || continue
     [ -z "${MAXID[$table]:-}" ] || continue
@@ -203,21 +224,19 @@ run_totals() {
 # run_totals, and never zero rows for a table whose MAX(id) is above zero (a dump
 # that silently came back empty would make the comparison vacuously "equal").
 dump_rows() {
-  local phase="$1" spec table bound cols flags name rows expected
-  for spec in "${STRICT_SETS[@]}" "$ORDER_MONEY_SET"; do
-    IFS='|' read -r table bound cols flags <<< "$spec"
-    name="$table"
-    [ "$spec" != "$ORDER_MONEY_SET" ] || name="ordermoney"
+  local phase="$1" ds name table bound cols flags rows expected
+  for ds in "${DUMP_SPECS[@]}"; do
+    IFS='|' read -r name table bound cols flags <<< "$ds"
     db_query "$(row_sql "$table" "$bound" "$cols" "$flags" "${MAXID[$table]:-0}")" > "$WORK_DIR/rows-$name-$phase.tsv" \
       || fail "could not read the protected rows of $table."
     if [ "$phase" = before ]; then
       rows="$(grep -c '' "$WORK_DIR/rows-$name-$phase.tsv" || true)"
       expected="${TOTAL_COUNT[$table]:-}"
       if [ "${MAXID[$table]:-0}" -gt 0 ] && [ "$rows" -eq 0 ]; then
-        fail "the protected-row dump of $table is empty although MAX($bound) is ${MAXID[$table]} (refusing a vacuous comparison)."
+        fail "the protected-row dump of $table ($name) is empty although MAX($bound) is ${MAXID[$table]} (refusing a vacuous comparison)."
       fi
       if [ -n "$expected" ] && [ "$rows" != "$expected" ]; then
-        fail "the protected-row dump of $table has $rows row(s) but COUNT(*) says $expected (the table changed under us or the dump is truncated)."
+        fail "the protected-row dump of $table ($name) has $rows row(s) but COUNT(*) says $expected (the table changed under us or the dump is truncated)."
       fi
     fi
   done
@@ -226,14 +245,14 @@ dump_rows() {
 # Dry-run only: every protected-row query once with LIMIT 1, read-only, so a bad
 # column name fails the dry-run instead of the real run's step 7.
 validate_row_queries() {
-  local spec table bound cols flags
+  local ds name table bound cols flags
   capture_max_ids
-  for spec in "${STRICT_SETS[@]}" "$ORDER_MONEY_SET"; do
-    IFS='|' read -r table bound cols flags <<< "$spec"
+  for ds in "${DUMP_SPECS[@]}"; do
+    IFS='|' read -r name table bound cols flags <<< "$ds"
     db_query "$(row_sql "$table" "$bound" "$cols" "$flags" "${MAXID[$table]:-0}" 1)" > /dev/null \
-      || fail "the protected-row query for $table is invalid against this database (a column may be missing); fix deploy.sh or the schema before a real run."
+      || fail "the protected-row query for $table ($name) is invalid against this database (a column may be missing); fix deploy.sh or the schema before a real run."
   done
-  note "protected-row queries: valid (${#STRICT_SETS[@]} tables plus the order money columns)"
+  note "protected-row queries: valid (${#STRICT_SETS[@]} strict tables, the order money columns, ${#CAPPED_SETS[@]} capped sets)"
 }
 
 # compare_rows: fatal for changes with no sign of a normal application edit, and
@@ -265,6 +284,20 @@ compare_rows() {
     fi
     t="${out#*tolerated=}"; t="${t%% *}"
     case "$t" in ''|*[!0-9]*) ;; *) tolerated_total=$((tolerated_total + t)) ;; esac
+  done
+  local i=0 cap capmin cappct
+  for spec in "${CAPPED_SETS[@]}"; do
+    IFS='|' read -r table _ _ cap <<< "$spec"
+    capmin="${cap%%,*}"; cappct="${cap##*,}"
+    if out="$(node "$SELF_DIR/lib/row-diff.js" compare "$WORK_DIR/rows-capped-$i-before.tsv" "$WORK_DIR/rows-capped-$i-after.tsv" --capped --cap-min "$capmin" --cap-pct "$cappct")"; then
+      echo "  rows $table (capped set $i, cap max($capmin, ${cappct}%)): $out"
+    else
+      echo "ROW CHECK FAILED $table (capped set $i, cap max($capmin, ${cappct}%)): ${out//$'\n'/ }" >&2
+      bad=1
+    fi
+    t="${out#*tolerated=}"; t="${t%% *}"
+    case "$t" in ''|*[!0-9]*) ;; *) tolerated_total=$((tolerated_total + t)) ;; esac
+    i=$((i + 1))
   done
   echo "  tolerated (normal application edits during the window): $tolerated_total row(s)"
   return "$bad"

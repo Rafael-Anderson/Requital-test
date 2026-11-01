@@ -13,7 +13,7 @@
 #   - scheme://user:password@host, up to the LAST '@' in the same word, so a raw
 #     '@' or '/' inside a password does not leak its tail (a URL whose query
 #     string contains an '@' is therefore over-masked, on purpose)
-#   - curl -u user:password / --user user:password
+#   - curl -u user:password / --user user:password / --user=user:password
 #   - Authorization: <scheme> <credential> (Basic, Bearer, Token, ...) and Cookie
 #   - "Bearer <token>" and "token <long value>" anywhere
 #   - NAME=value, NAME: value and JSON "name":"value" where NAME contains PWD,
@@ -35,6 +35,7 @@ REDACT_SED="$(cat <<'REDACT_SED_EOF'
 [REDACTED PRIVATE KEY BLOCK]
 s#([A-Za-z][A-Za-z0-9+.-]*://[^:/@[:space:]]*):[^[:space:]]*@#\1:***@#g
 s#(curl[^|]*[[:space:]](-u|--user)[[:space:]=])[^[:space:]]+#\1***#I
+s#(--user=)[^[:space:]]+#\1***#I
 s#(authorization["']?[[:space:]]*[:=][[:space:]]*["']?)([A-Za-z]+[[:space:]]+)?[^[:space:]"']+#\1***#gI
 s#(cookie[[:space:]]*:[[:space:]]*).*#\1***#I
 s#(bearer)[[:space:]]+[A-Za-z0-9._~+/=-]+#\1 ***#gI

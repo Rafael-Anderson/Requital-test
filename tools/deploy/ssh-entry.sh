@@ -68,6 +68,7 @@ REDACT_SED="$(cat <<'REDACT_SED_EOF'
 [REDACTED PRIVATE KEY BLOCK]
 s#([A-Za-z][A-Za-z0-9+.-]*://[^:/@[:space:]]*):[^[:space:]]*@#\1:***@#g
 s#(curl[^|]*[[:space:]](-u|--user)[[:space:]=])[^[:space:]]+#\1***#I
+s#(--user=)[^[:space:]]+#\1***#I
 s#(authorization["']?[[:space:]]*[:=][[:space:]]*["']?)([A-Za-z]+[[:space:]]+)?[^[:space:]"']+#\1***#gI
 s#(cookie[[:space:]]*:[[:space:]]*).*#\1***#I
 s#(bearer)[[:space:]]+[A-Za-z0-9._~+/=-]+#\1 ***#gI

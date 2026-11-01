@@ -15,15 +15,18 @@ const restarts = (sb) => sb.calls().filter((c) => /^pm2 restart/.test(c));
 
 function holdLock(sb) {
   fs.mkdirSync(path.dirname(sb.env.LOCK_FILE), { recursive: true });
-  const holder = cp.spawn('flock', ['-n', sb.env.LOCK_FILE, 'sleep', '30'], { stdio: 'ignore' });
-  // wait until the lock is really held
-  const t0 = Date.now();
-  while (Date.now() - t0 < 3000) {
-    const probe = cp.spawnSync('flock', ['-n', sb.env.LOCK_FILE, 'true']);
-    if (probe.status !== 0) break;
-    cp.spawnSync('sleep', ['0.1']);
+  // Spawn a holder and PROVE the lock is held before returning (retry: under load the
+  // flock child can take a moment to start, which used to make these tests flaky).
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const holder = cp.spawn('flock', ['-n', sb.env.LOCK_FILE, 'sleep', '30'], { stdio: 'ignore' });
+    const t0 = Date.now();
+    while (Date.now() - t0 < 3000) {
+      if (cp.spawnSync('flock', ['-n', sb.env.LOCK_FILE, 'true']).status !== 0) return holder;
+      cp.spawnSync('sleep', ['0.1']);
+    }
+    holder.kill('SIGKILL');
   }
-  return holder;
+  throw new Error('could not take the lock for the test');
 }
 
 test('lock: a second deploy while one is running exits 3 and changes nothing', () => withSb((sb) => {
@@ -222,3 +225,79 @@ test('rollback leaves no temporary files, and its header no longer claims "once 
   assert.match(head, /deployed-shas/);
   assert.doesNotMatch(head, /once a legitimate main commit/);
 }));
+
+// ---- a rollback repairs a broken system: it must not insist on a healthy one --------------------------------
+test('MED-1: a deploy that leaves storefront errored can still be rolled back to PROD', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  sb.marker(pin);
+  const dep = sb.run('deploy.sh', [pin, '--ci-verified'], { FAKE_PM2_FAIL: 'requital-storefront' });
+  assert.equal(dep.status, 1, dep.out);
+  assert.match(dep.out, /did not come online/);
+  assert.ok(fs.existsSync(path.join(sb.fakeDir, 'errored-requital-storefront')), 'the fake left storefront errored');
+  const rb = sb.run('rollback.sh', [sb.base]);
+  assert.equal(rb.status, 0, rb.out);
+  assert.match(rb.out, /WARNING: pm2 process 'requital-storefront' is 'errored'/);
+  assert.equal(sb.git('rev-parse', 'HEAD'), sb.base);
+  assert.equal(fs.existsSync(path.join(sb.fakeDir, 'errored-requital-storefront')), false, 'the restart repaired it');
+}));
+
+test('MED-1: a stopped backend does not block a rollback either, but a pm2 process that does not exist does', () => withSb((sb) => {
+  const [c1] = twoDeploys(sb);
+  const stopped = sb.run('rollback.sh', [c1, '--dry-run'], { FAKE_PM2_DOWN: 'requital-backend' });
+  assert.equal(stopped.status, 0, stopped.out);
+  assert.match(stopped.out, /'requital-backend' is 'stopped'/);
+  const ghost = sb.run('rollback.sh', [c1, '--dry-run'], { PM2_ADMIN: 'requital-ghost' });
+  assert.equal(ghost.status, 1, ghost.out);
+  assert.match(ghost.out, /pm2 process 'requital-ghost' not found/);
+}));
+
+test('MED-1: deploy.sh stays strict about pm2 (an errored process is a refusal there)', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  fs.writeFileSync(path.join(sb.fakeDir, 'errored-requital-admin'), '');
+  const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified']);
+  assert.equal(r.status, 2, r.out);
+  assert.match(r.out, /is not online/);
+}));
+
+test('MED-2: rollback.sh itself carries on when its git fetch fails (origin gone)', () => withSb((sb) => {
+  const [c1, c2] = twoDeploys(sb);
+  sb.git('remote', 'set-url', 'origin', '/nonexistent-origin');
+  const r = sb.run('rollback.sh', [c1]);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /WARNING: git fetch failed; continuing with the existing origin\/main/);
+  assert.equal(sb.git('rev-parse', 'HEAD'), c1);
+  assert.ok(c2);
+}));
+
+test('MED-2: with origin gone the on-main check still applies to a sha that is not on the existing origin/main', () => withSb((sb) => {
+  twoDeploys(sb);
+  const commitLocal = (name) => {
+    fs.writeFileSync(path.join(sb.prod, name), name);
+    sb.git('add', '-A');
+    sb.git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', name);
+    return sb.git('rev-parse', 'HEAD');
+  };
+  const l1 = commitLocal('l1.txt');
+  commitLocal('l2.txt');
+  sb.recordDeployed(l1);
+  sb.git('remote', 'set-url', 'origin', '/nonexistent-origin');
+  const refused = sb.run('rollback.sh', [l1]);
+  assert.equal(refused.status, 2, refused.out);
+  assert.match(refused.out, /WARNING: git fetch failed/);
+  assert.match(refused.out, /not reachable from origin\/main/);
+}));
+
+test('MED-2: end to end, the REAL rollback.sh behind the REAL entry script with origin removed', () => {
+  const sb = makeSandbox(); // no stubs: the checked-out rollback.sh runs
+  try {
+    const [c1, c2] = twoDeploys(sb);
+    sb.git('remote', 'set-url', 'origin', '/nonexistent-origin');
+    const r = sb.entry(`rollback ${c1}`, { ENTRY_PATH: sb.env.PATH });
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, /Warning: git fetch failed; continuing with the existing origin\/main/, 'from the entry script');
+    assert.match(r.out, /WARNING: git fetch failed; continuing with the existing origin\/main/, 'from rollback.sh');
+    assert.match(r.out, /DEPLOY_RESULT=OK/);
+    assert.equal(sb.git('rev-parse', 'HEAD'), c1);
+    assert.ok(c2);
+  } finally { sb.cleanup(); }
+});

@@ -182,6 +182,21 @@ check_pm2_online() {
   done
 }
 
+# check_pm2_present: for rollback.sh. A rollback exists to repair a broken state, so a
+# process that is errored or stopped is a warning, not a reason to refuse; only a
+# process that does not exist at all (wrong PM2_* names, wrong user) stops it.
+check_pm2_present() {
+  local table n line state
+  table="$(pm2_table)" || fail "pm2 jlist failed."
+  for n in "$PM2_BACKEND" "$PM2_STOREFRONT" "$PM2_ADMIN"; do
+    line="$(awk -v n="$n" '$1==n {print "pm2: " $1 " " $2 " uptime=" $3 "s restarts=" $4}' <<< "$table")"
+    [ -n "$line" ] || fail "pm2 process '$n' not found."
+    echo "$line"
+    state="$(awk -v n="$n" '$1==n {print $2}' <<< "$table")"
+    [ "$state" = "online" ] || echo "WARNING: pm2 process '$n' is '$state'; the rollback will restart it."
+  done
+}
+
 # ---- database -------------------------------------------------------------------
 
 # Percent-decoding only. A '+' stays a '+' (this is a password, not a form

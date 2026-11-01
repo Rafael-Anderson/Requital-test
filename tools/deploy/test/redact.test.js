@@ -133,10 +133,10 @@ test('redact: a URL password containing a raw / is masked completely', () => {
 });
 
 test('redact: curl -u user:password and --user user:password', () => {
-  for (const line of ['curl -s -u admin:s3cr3tpw https://x.example/y', 'curl --user admin:s3cr3tpw https://x.example/y', 'curl -fsS -u=admin:s3cr3tpw https://x.example']) {
+  for (const line of ['curl -s -u admin:s3cr3tpw https://x.example/y', 'curl --user admin:s3cr3tpw https://x.example/y', 'curl -fsS -u=admin:s3cr3tpw https://x.example', 'curl --user=me:s3cr3tpw https://x.example/z', 'wget --user=me:s3cr3tpw https://x.example/z']) {
     const out = redact(`${line}\n`);
-    assert.doesNotMatch(out, /s3cr3tpw|admin:/, line);
-    assert.match(out, /curl/);
+    assert.doesNotMatch(out, /s3cr3tpw|admin:|me:/, line);
+    if (line.startsWith('curl')) assert.match(out, /curl/);
   }
   // an unrelated -u (sudo -u deploy) is left alone
   assert.equal(redact('sudo -u deploy git status\n'), 'sudo -u deploy git status\n');

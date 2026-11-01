@@ -77,13 +77,18 @@ check_user
 require_cmds git node npm pm2 mysql gzip flock curl md5sum
 check_disk
 load_db_config
-check_pm2_online
+check_pm2_present
 
 step 2 "working tree is clean"
 check_clean_tree
 
 step 3 "git gates"
-git -C "$APP_DIR" fetch --quiet origin main
+# A rollback is the emergency path and is often needed exactly when GitHub or the
+# network is down: a failing fetch is a warning, and the checks below then apply to
+# the origin/main already on disk.
+if ! git -C "$APP_DIR" fetch --quiet origin main; then
+  echo "WARNING: git fetch failed; continuing with the existing origin/main."
+fi
 git -C "$APP_DIR" cat-file -e "${PREV}^{commit}" 2>/dev/null || refuse "target $PREV is not a commit this repository knows."
 CURRENT="$(git -C "$APP_DIR" rev-parse HEAD)"
 note "current HEAD: $CURRENT"

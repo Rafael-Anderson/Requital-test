@@ -24,11 +24,12 @@
 //        prints the ids whose row changed or vanished (the "edited orders") on
 //        stdout and "checked=N changed=N cap=N" on stderr; exit 1 if the number
 //        of changed rows exceeds the cap
-//   node row-diff.js compare <before.tsv> <after.tsv> [--updated] [--parent] [--capped] [--touched <ids-file>]
+//   node row-diff.js compare <before.tsv> <after.tsv> [--updated] [--parent] [--capped [--cap-min N] [--cap-pct P]] [--touched <ids-file>]
 //        prints "checked=N changed=N tolerated=N fatal=N" and the first fatal
 //        ids; exit 1 if any row is fatal. --capped tolerates changes (including
 //        vanished rows) of a table where legitimate bulk-free edits exist
-//        (customer merges) as long as they stay within the same cap
+//        (customer merges, shop settings) as long as they stay within the cap
+//        max(--cap-min, --cap-pct % of the rows); defaults 10 and 1
 //   node row-diff.js --self-test
 'use strict';
 const fs = require('fs');
@@ -49,8 +50,8 @@ function parse(text, { updated = false, parent = false } = {}) {
 }
 
 // Small absolute floor, 1% above it: real edit windows touch a handful of rows.
-function capFor(checked) {
-  return Math.max(10, Math.ceil(checked * 0.01));
+function capFor(checked, min = 10, pct = 1) {
+  return Math.max(min, Math.ceil((checked * pct) / 100));
 }
 
 function touchedIds(beforeText, afterText) {
@@ -65,7 +66,7 @@ function touchedIds(beforeText, afterText) {
 }
 
 function compare(beforeText, afterText, opts = {}) {
-  const { updated = false, parent = false, capped = false, touched = new Set() } = opts;
+  const { updated = false, parent = false, capped = false, capMin = 10, capPct = 1, touched = new Set() } = opts;
   const before = parse(beforeText, { updated, parent });
   const after = parse(afterText, { updated, parent });
   let changed = 0;
@@ -77,7 +78,7 @@ function compare(beforeText, afterText, opts = {}) {
       const a = after.get(id);
       if (!a || a.hash !== b.hash) n++;
     }
-    return n <= capFor(before.size);
+    return n <= capFor(before.size, capMin, capPct);
   };
   const capOk = capped ? withinCap() : false;
   for (const [id, b] of before) {
@@ -153,6 +154,8 @@ if (require.main === module) {
       updated: flags.includes('--updated'),
       parent: flags.includes('--parent'),
       capped: flags.includes('--capped'),
+      capMin: flags.includes('--cap-min') ? Number(flags[flags.indexOf('--cap-min') + 1]) : 10,
+      capPct: flags.includes('--cap-pct') ? Number(flags[flags.indexOf('--cap-pct') + 1]) : 1,
       touched,
     });
     console.log(`checked=${r.checked} changed=${r.changed} tolerated=${r.tolerated} fatal=${r.fatal.length}`);

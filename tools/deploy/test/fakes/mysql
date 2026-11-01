@@ -31,8 +31,19 @@ case "$sql" in
     # otherwise a default two-row table (row 1 "damaged" after a mutating migration)
     tbl="$(printf '%s' "$sql" | sed -E 's/.* FROM `([a-z]+)`.*/\1/')"
     case "$sql" in *'`total`'*) tbl=ordermoney ;; esac
+    # the capped sets (columns a merchant or a customer merge may rewrite) get their own keys
+    base="$tbl"
+    case "$tbl:$sql" in
+      shop:*'`domainType`'*) tbl=shopmutable ;;
+      order:*'`customerId`'*) tbl=ordercustomer ;;
+      giftcard:*'`purchasedByCustomerId`'*) tbl=giftcardcustomer ;;
+    esac
     phase=before; [ ! -e "$FAKE_DIR/migrated" ] || phase=after
-    if [ -f "$FAKE_DIR/data/$tbl.$phase.json" ]; then
+    if [ "$tbl" != "$base" ] && [ ! -f "$FAKE_DIR/data/$tbl.$phase.json" ] && [ ! -f "$FAKE_DIR/rows/$tbl.$phase" ]; then
+      # a capped set the test did not script: same ids as the base table, constant
+      # hashes, so it never reports a change and the row counts always agree
+      if [ -f "$FAKE_DIR/rows/$base.$phase" ]; then cut -f1 "$FAKE_DIR/rows/$base.$phase" | sed 's/$/\tk/'; else printf '1\tk\n2\tk\n'; fi
+    elif [ -f "$FAKE_DIR/data/$tbl.$phase.json" ]; then
       # data-driven: hash exactly the columns the SQL asks for, so a test can prove
       # that a column (e.g. customer.phone) is or is not part of the hash
       FAKE_SQL="$sql" node -e '

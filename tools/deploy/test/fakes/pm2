@@ -24,6 +24,7 @@ case "$1" in
     ;;
   restart)
     touch "$FAKE_DIR/restarted-$2"
+    rm -f "$FAKE_DIR/errored-$2"   # a restart repairs an errored process, unless the test says otherwise
     [ "${FAKE_PM2_FAIL:-}" != "$2" ] || touch "$FAKE_DIR/errored-$2"
     ;;
   logs)
