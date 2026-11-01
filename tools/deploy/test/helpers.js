@@ -116,6 +116,7 @@ function makeSandbox(opts = {}) {
     HOME: root,
     LANG: 'C',
     TMPDIR: path.join(root, 'tmp'),
+    REQUITAL_ENTRY_TEST: '1',
     APP_DIR: prod,
     LOG_DIR: logs,
     LOCK_FILE: path.join(root, 'deploy.lock'),
@@ -163,6 +164,7 @@ function makeSandbox(opts = {}) {
     /** Run ssh-entry.sh with an SSH_ORIGINAL_COMMAND string. */
     entry(cmd, extraEnv = {}) {
       const e = { ...env, ...extraEnv };
+      for (const k of Object.keys(e)) if (e[k] === undefined) delete e[k];
       if (cmd === undefined) delete e.SSH_ORIGINAL_COMMAND; else e.SSH_ORIGINAL_COMMAND = cmd;
       const r = cp.spawnSync('bash', [path.join(DEPLOY_DIR, 'ssh-entry.sh')], { env: e, encoding: 'utf8', timeout: 60000 });
       return { status: r.status, stdout: r.stdout, stderr: r.stderr, out: `${r.stdout}${r.stderr}` };

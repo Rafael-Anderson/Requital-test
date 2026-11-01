@@ -95,7 +95,9 @@ test('redact: quoted values with spaces', () => {
 test('redact: a raw @ inside a URL password is masked up to the LAST @ before the host', () => {
   assert.equal(redact('mysql://u:p@ss@db.internal:3306/shop\n'), 'mysql://u:***@db.internal:3306/shop\n');
   assert.equal(redact('postgres://user:a@b@c@host/x?y=1\n'), 'postgres://user:***@host/x?y=1\n');
-  assert.equal(redact('see http://example.com:8080/path?email=a@b ok\n'), 'see http://example.com:8080/path?email=a@b ok\n');
+  // over-eager on purpose: a later '@' in the same word is taken for the end of the credentials
+  assert.doesNotMatch(redact('see http://example.com:8080/path?email=a@b ok\n'), /8080\/path/);
+  assert.equal(redact('see http://example.com:8080/health ok\n'), 'see http://example.com:8080/health ok\n');
 });
 
 test('redact: a PEM private key is masked from the BEGIN line to the END line, body included', () => {
@@ -122,4 +124,26 @@ test('redact: ssh-entry.sh embeds a byte-identical copy of the sed program', () 
   const fs = require('fs');
   const grab = (file) => fs.readFileSync(path.join(DEPLOY_DIR, file), 'utf8').match(/<<'REDACT_SED_EOF'\n([\s\S]*?)\nREDACT_SED_EOF\n/)[1];
   assert.equal(grab('ssh-entry.sh'), grab('lib/redact.sh'));
+});
+
+test('redact: a URL password containing a raw / is masked completely', () => {
+  const out = redact('mysql://app:pa/ss/word@dbhost:3306/shop\n');
+  assert.doesNotMatch(out, /pa\/ss|word@/);
+  assert.equal(out, 'mysql://app:***@dbhost:3306/shop\n');
+});
+
+test('redact: curl -u user:password and --user user:password', () => {
+  for (const line of ['curl -s -u admin:s3cr3tpw https://x.example/y', 'curl --user admin:s3cr3tpw https://x.example/y', 'curl -fsS -u=admin:s3cr3tpw https://x.example']) {
+    const out = redact(`${line}\n`);
+    assert.doesNotMatch(out, /s3cr3tpw|admin:/, line);
+    assert.match(out, /curl/);
+  }
+  // an unrelated -u (sudo -u deploy) is left alone
+  assert.equal(redact('sudo -u deploy git status\n'), 'sudo -u deploy git status\n');
+});
+
+test('redact: "token <value>" and "bearer <value>" free text', () => {
+  assert.doesNotMatch(redact('using token ghp_abcdef1234567890XYZ for the call\n'), /ghp_abcdef1234567890XYZ/);
+  assert.doesNotMatch(redact('sent bearer eyJhbGciOiJIUzI1NiJ9.payload.sig\n'), /eyJhbGciOi/);
+  assert.equal(redact('the token expired\n'), 'the token expired\n');
 });

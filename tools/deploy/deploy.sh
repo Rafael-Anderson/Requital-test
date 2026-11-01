@@ -35,9 +35,10 @@
 # All builds finish before ANY restart; an unexplained change to a protected row
 # stops the run before any restart (see "row hashes" below for what is tolerated).
 #
-# On DEPLOY_RESULT=OK the PIN (and, if it was not recorded yet, the commit that was
-# running before) is appended to $LOG_DIR/deployed-shas; rollback.sh only accepts
-# commits listed there.
+# $LOG_DIR/deployed-shas (append-only, idempotent) records the commit that is running
+# BEFORE the merge of step 8 ("previous") and the PIN after DEPLOY_RESULT=OK
+# ("deploy"); rollback.sh only accepts commits listed there, so the rollback hint
+# printed by a deploy that failed after step 8 is always usable.
 #
 # See docs/runbook.md ("Deploy via GitHub Actions" and "Backup").
 
@@ -87,6 +88,17 @@ trap on_exit_common EXIT
 make_workdir
 acquire_lock
 setup_logging deploy "$PIN"
+DEPLOYED_FILE="$LOG_DIR/deployed-shas"
+# record_deployed <sha> <how>: append-only and idempotent (no duplicate lines),
+# private mode. Returns non-zero when the file cannot be written.
+record_deployed() {
+  (
+    umask 077
+    mkdir -p "$LOG_DIR"
+    if [ -f "$DEPLOYED_FILE" ] && grep -q "^$1 " "$DEPLOYED_FILE"; then exit 0; fi
+    echo "$1 $(date -u +%Y-%m-%dT%H:%M:%SZ) $2" >> "$DEPLOYED_FILE"
+  )
+}
 # Files created by builds and the merge keep the normal 022 mask; only the log
 # and the marker are written under 077 (see setup_logging and the marker code).
 umask 022
@@ -96,33 +108,43 @@ echo "deploy.sh: PIN=$PIN mode=$MODE ci_verified=$CI_VERIFIED user=$(id -un) at 
 
 # ---- the protected-row sets (step 7 / 9) -----------------------------------------------
 # name|bound column|columns hashed|flags. A migration that only adds things must
-# leave these rows as they were. Flags: "u" = the table has an updatedAt, "p:<col>"
-# = the row belongs to an order through <col>. Tables WITHOUT an updatedAt hash
-# only columns that cannot change after creation (an order's money columns can
-# be edited while the shop trades, so they are not here; see ORDER_MONEY_SET).
-# Columns come from backend/src/db/types.ts; workflow.test.js keeps them honest.
+# leave these rows as they were. Flags: "u" = the table has a REAL updatedAt that
+# the application bumps on every update; "p:<col>" = the row belongs to an order
+# through <col>; "c" = a small number of legitimate changes or deletions is
+# normal (customer merges), tolerated up to the same cap as edited orders.
+# Columns are ones that cannot change after creation, or whose changes leave a
+# trace: a shop's currency/timezone/domainType are merchant-editable without any
+# trace, so they are informational below, and so are the columns a customer merge
+# rewrites (order.customerId, giftcard.purchasedByCustomerId). Columns come from
+# backend/src/db/types.ts; workflow.test.js keeps them honest.
 STRICT_SETS=(
-  'order|id|id,shopId,shopOrderNumber,outletId,customerId,orderType,currency,exchangeRate,regionId|'
+  'order|id|id,shopId,shopOrderNumber,outletId,orderType,currency,exchangeRate,regionId|'
   'orderitem|id|id,orderId,productId,productName,variantId,priceAtPurchase,autoDiscountAmount|p:orderId'
   'paymenttransaction|id|id,orderId,gateway,gatewayReference,amount,currency|'
-  'shop|id|id,subdomain,currency,timezone,countryCode,domainType|u'
-  'customer|id|id,shopId,createdAt|'
-  'giftcard|id|id,shopId,code,initialValue,purchasedByCustomerId,purchaseOrderId|u'
+  'shop|id|id,subdomain,countryCode|'
+  'customer|id|id,shopId,createdAt|c'
+  'giftcard|id|id,shopId,code,initialValue,purchaseOrderId|u'
   'stockmovement|id|id,shopId,productId,variantId,ingredientId,type,delta,outletId,toOutletId|'
-  'orderstockconsumption|id|id,shopId,orderId,productId,variantId,ingredientId|u,p:orderId'
+  'orderstockconsumption|id|id,shopId,orderId,productId,variantId,ingredientId|p:orderId'
 )
-# An order whose money columns changed in the window was edited by the shop
-# (updateItems / updateDeliveryFee). It is what makes its replaced orderitem and
-# orderstockconsumption rows legitimate. Its own change is reported, not fatal.
+# The order money columns ARE protected, through a cap: an order whose money
+# columns changed in the window was edited by the shop (updateItems /
+# updateDeliveryFee), and that is what makes its replaced orderitem and
+# orderstockconsumption rows legitimate. More than max(10, ~1% of the orders)
+# edited in one window is not a shop trading: it is fatal (see lib/row-diff.js).
 ORDER_MONEY_SET='order|id|id,total,taxAmount,deliveryFee,discountAmount,giftCardAmount,storeCreditAmount|'
-# Printed for the operator (count + XOR of per-row MD5), never fatal.
+# Printed for the operator (count + XOR of per-row MD5) before and after, never fatal.
 INFO_SETS=(
   'order|id|id,status,paymentStatus'
+  'order|id|id,customerId'
   'giftcard|id|id,remainingBalance,status'
+  'giftcard|id|id,purchasedByCustomerId'
+  'shop|id|id,currency,timezone,domainType'
   'outletingredientstock||outletId,ingredientId,stockQuantity'
 )
 
 declare -A MAXID=()
+declare -A TOTAL_COUNT=()
 
 # cols_expr <comma separated columns> -> the IFNULL(CAST(..)) list for CONCAT_WS
 cols_expr() {
@@ -143,11 +165,11 @@ checksum_sql() {
 }
 
 row_sql() {
-  # row_sql <table> <bound col> <cols> <flags> <maxId>
-  local table="$1" bound="$2" cols="$3" flags="$4" max="$5" extra=""
+  # row_sql <table> <bound col> <cols> <flags> <maxId> [limit]
+  local table="$1" bound="$2" cols="$3" flags="$4" max="$5" limit="${6:-}" extra=""
   case ",$flags," in *,u,*) extra="$extra, CAST(\`updatedAt\` AS CHAR)" ;; esac
   case ",$flags," in *,p:*) extra="$extra, \`${flags#*p:}\`" ;; esac
-  echo "SELECT \`$bound\`, MD5(CONCAT_WS('|', $(cols_expr "$cols")))$extra FROM \`$table\` WHERE \`$bound\` <= $max ORDER BY \`$bound\`"
+  echo "SELECT \`$bound\`, MD5(CONCAT_WS('|', $(cols_expr "$cols")))$extra FROM \`$table\` WHERE \`$bound\` <= $max ORDER BY \`$bound\`${limit:+ LIMIT $limit}"
 }
 
 capture_max_ids() {
@@ -172,34 +194,70 @@ run_totals() {
     out="$(db_query "$(checksum_sql "$table" "$bound" "$cols" "${MAXID[$table]:-0}")")"
     [ -n "$out" ] || fail "empty checksum result for $table."
     echo "  $label $table: ${out//$'\t'/ }"
+    if [ "$kind" = strict ] && [ "$label" = before ]; then TOTAL_COUNT[$table]="${out%%$'\t'*}"; fi
   done
 }
 
-# dump_rows <before|after>: one tsv per protected table in $WORK_DIR.
+# dump_rows <before|after>: one tsv per protected table in $WORK_DIR. At BEFORE,
+# each dump must hold exactly as many rows as the bounded COUNT(*) printed by
+# run_totals, and never zero rows for a table whose MAX(id) is above zero (a dump
+# that silently came back empty would make the comparison vacuously "equal").
 dump_rows() {
-  local phase="$1" spec table bound cols flags
+  local phase="$1" spec table bound cols flags name rows expected
   for spec in "${STRICT_SETS[@]}" "$ORDER_MONEY_SET"; do
     IFS='|' read -r table bound cols flags <<< "$spec"
-    local name="$table"
+    name="$table"
     [ "$spec" != "$ORDER_MONEY_SET" ] || name="ordermoney"
     db_query "$(row_sql "$table" "$bound" "$cols" "$flags" "${MAXID[$table]:-0}")" > "$WORK_DIR/rows-$name-$phase.tsv" \
       || fail "could not read the protected rows of $table."
+    if [ "$phase" = before ]; then
+      rows="$(grep -c '' "$WORK_DIR/rows-$name-$phase.tsv" || true)"
+      expected="${TOTAL_COUNT[$table]:-}"
+      if [ "${MAXID[$table]:-0}" -gt 0 ] && [ "$rows" -eq 0 ]; then
+        fail "the protected-row dump of $table is empty although MAX($bound) is ${MAXID[$table]} (refusing a vacuous comparison)."
+      fi
+      if [ -n "$expected" ] && [ "$rows" != "$expected" ]; then
+        fail "the protected-row dump of $table has $rows row(s) but COUNT(*) says $expected (the table changed under us or the dump is truncated)."
+      fi
+    fi
   done
 }
 
-# compare_rows: fatal only for changes with no sign of a normal application edit.
+# Dry-run only: every protected-row query once with LIMIT 1, read-only, so a bad
+# column name fails the dry-run instead of the real run's step 7.
+validate_row_queries() {
+  local spec table bound cols flags
+  capture_max_ids
+  for spec in "${STRICT_SETS[@]}" "$ORDER_MONEY_SET"; do
+    IFS='|' read -r table bound cols flags <<< "$spec"
+    db_query "$(row_sql "$table" "$bound" "$cols" "$flags" "${MAXID[$table]:-0}" 1)" > /dev/null \
+      || fail "the protected-row query for $table is invalid against this database (a column may be missing); fix deploy.sh or the schema before a real run."
+  done
+  note "protected-row queries: valid (${#STRICT_SETS[@]} tables plus the order money columns)"
+}
+
+# compare_rows: fatal for changes with no sign of a normal application edit, and
+# for more edited orders than a shop trading could produce.
 compare_rows() {
-  local spec table flags name args out bad=0 tolerated_total=0 t
-  node "$SELF_DIR/lib/row-diff.js" touched "$WORK_DIR/rows-ordermoney-before.tsv" "$WORK_DIR/rows-ordermoney-after.tsv" > "$WORK_DIR/touched-orders.txt" \
-    || fail "row-diff failed on the order money rows."
-  echo "  orders edited during the window (money columns changed): $(grep -c . "$WORK_DIR/touched-orders.txt" || true)"
+  local spec table flags args out bad=0 tolerated_total=0 t
+  local summary changed cap
+  if node "$SELF_DIR/lib/row-diff.js" touched "$WORK_DIR/rows-ordermoney-before.tsv" "$WORK_DIR/rows-ordermoney-after.tsv" > "$WORK_DIR/touched-orders.txt" 2> "$WORK_DIR/touched.err"; then
+    :
+  else
+    echo "ORDER EDIT CAP EXCEEDED: $(cat "$WORK_DIR/touched.err") (a damaging migration touches many orders, a shop a handful)" >&2
+    bad=1
+  fi
+  summary="$(cat "$WORK_DIR/touched.err")"
+  changed="${summary#*changed=}"; changed="${changed%% *}"
+  cap="${summary#*cap=}"
+  echo "  orders edited during the window (money columns changed): $changed (cap $cap)"
   for spec in "${STRICT_SETS[@]}"; do
     IFS='|' read -r table _ _ flags <<< "$spec"
-    name="$table"
     args=()
     case ",$flags," in *,u,*) args+=(--updated) ;; esac
+    case ",$flags," in *,c,*) args+=(--capped) ;; esac
     case ",$flags," in *,p:*) args+=(--parent --touched "$WORK_DIR/touched-orders.txt") ;; esac
-    if out="$(node "$SELF_DIR/lib/row-diff.js" compare "$WORK_DIR/rows-$name-before.tsv" "$WORK_DIR/rows-$name-after.tsv" "${args[@]}")"; then
+    if out="$(node "$SELF_DIR/lib/row-diff.js" compare "$WORK_DIR/rows-$table-before.tsv" "$WORK_DIR/rows-$table-after.tsv" "${args[@]}")"; then
       echo "  rows $table: $out"
     else
       echo "ROW CHECK FAILED $table: ${out//$'\n'/ }" >&2
@@ -289,7 +347,7 @@ step 5 "plan"
 # separated into a file and walk it with a plain loop: no pipelines whose early
 # exit (grep -q, head) could kill the writer under pipefail and silently report
 # "app unchanged" (that bug class produced a false OK once, see deploy tests).
-git -C "$APP_DIR" -c core.quotepath=off diff --name-only -z "$PROD" "$PIN" > "$WORK_DIR/changed.z" \
+git -C "$APP_DIR" -c core.quotepath=off diff --name-only --no-renames -z "$PROD" "$PIN" > "$WORK_DIR/changed.z" \
   || fail "git diff failed."
 BACKEND_CHANGED=0; ADMIN_CHANGED=0; STOREFRONT_CHANGED=0
 CHANGED_COUNT=0
@@ -337,6 +395,7 @@ resolve_smoke_slug
 echo "smoke shop slug: $SMOKE_SLUG"
 
 if [ "$DRY_RUN" = 1 ]; then
+  validate_row_queries
   echo
   echo "WOULD DO: step 6 backup via tools/backup-db.sh into $BACKUP_DIR, gzip -t, restore into a scratch database, require before <= restored <= after row counts"
   echo "WOULD DO: step 7 record BEFORE checksums (${#STRICT_SETS[@]} tables, COUNT + BIT_XOR of per-row MD5, bounded by captured max id)$([ "$MATRIX_AVAILABLE" = 1 ] && echo ' and the billing flag matrix')"
@@ -418,6 +477,9 @@ if [ "$MATRIX_AVAILABLE" = 1 ]; then
 fi
 
 step 8 "fast-forward merge"
+# From the merge on, a failure prints a rollback hint to $PROD, and rollback.sh only
+# accepts recorded commits: record it BEFORE anything changes (idempotent).
+record_deployed "$PROD" previous || fail "cannot record the commit that is running now in $DEPLOYED_FILE, so a rollback would be refused. Fix that and run again (nothing has been merged yet)."
 git -C "$APP_DIR" merge --ff-only "$PIN"
 [ "$(git -C "$APP_DIR" rev-parse HEAD)" = "$PIN" ] || fail "HEAD is not the PIN after merge."
 note "HEAD is now $PIN"
@@ -436,6 +498,7 @@ fi
 echo "totals AFTER (informational; rows may legitimately change while the shop trades):"
 run_totals strict after
 dump_rows after
+run_totals info after
 echo "row-level comparison:"
 if ! compare_rows; then
   echo "STOP: protected rows changed with no sign of a normal application edit. NO process was restarted: the old code is still serving." >&2
@@ -476,17 +539,8 @@ ENV_AFTER="$(env_fingerprints)"
 note "env fingerprints: unchanged"
 
 step 14 "result"
-# Record what is now (and was just) running; rollback.sh accepts only these.
-# Append-only, one "<sha> <utc> <how>" line each, written with the private mask.
-DEPLOYED_FILE="$LOG_DIR/deployed-shas"
-if ! (
-  umask 077
-  now_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  if [ ! -f "$DEPLOYED_FILE" ] || ! grep -q "^$PROD " "$DEPLOYED_FILE"; then
-    echo "$PROD $now_utc previous" >> "$DEPLOYED_FILE"
-  fi
-  echo "$PIN $now_utc deploy" >> "$DEPLOYED_FILE"
-); then
+# Record what is now running; rollback.sh accepts only recorded commits.
+if ! { record_deployed "$PROD" previous && record_deployed "$PIN" deploy; }; then
   echo "WARNING: could not append to $DEPLOYED_FILE; rollback.sh will refuse these commits until they are recorded by hand."
 fi
 echo "PREVIOUS_SHA=$PROD"

@@ -8,7 +8,7 @@ const cp = require('child_process');
 const { DEPLOY_DIR } = require('./helpers');
 const { REQUIRED_CHECKS, evaluate } = require('../lib/check-runs');
 
-const run = (name, o = {}) => ({ id: 1, name, status: 'completed', conclusion: 'success', started_at: '2026-01-01T00:00:00Z', app: { slug: 'github-actions' }, ...o });
+const run = (name, o = {}) => ({ id: 1, name, status: 'completed', conclusion: 'success', started_at: '2026-01-01T00:00:00Z', app: { slug: 'github-actions', id: 15368 }, ...o });
 const allGreen = () => REQUIRED_CHECKS.map((n, i) => run(n, { id: i + 1 }));
 
 test('the required list is exactly the five pinned names', () => {
@@ -62,7 +62,7 @@ test('only runs created by the GitHub Actions app count (a spoofed run from anot
   const runs = allGreen();
   // the real run FAILED; a LATER green with the same name comes from another app
   runs[0] = run(REQUIRED_CHECKS[0], { id: 1, conclusion: 'failure' });
-  runs.push(run(REQUIRED_CHECKS[0], { id: 99, started_at: '2026-06-01T00:00:00Z', app: { slug: 'some-other-app' } }));
+  runs.push(run(REQUIRED_CHECKS[0], { id: 99, started_at: '2026-06-01T00:00:00Z', app: { slug: 'some-other-app', id: 7 } }));
   const r = evaluate({ check_runs: runs });
   assert.equal(r.ok, false);
   assert.ok(r.problems.some((p) => p.includes('did not succeed')));
@@ -70,16 +70,26 @@ test('only runs created by the GitHub Actions app count (a spoofed run from anot
 
 test('a green run from another app cannot stand in for a missing real run', () => {
   const runs = allGreen().filter((c) => c.name !== REQUIRED_CHECKS[3]);
-  runs.push(run(REQUIRED_CHECKS[3], { app: { slug: 'evil' } }));
+  runs.push(run(REQUIRED_CHECKS[3], { app: { slug: 'evil', id: 7 } }));
   assert.equal(evaluate({ check_runs: runs }).ok, false);
 });
 
 test('a run with no app field (or app: null) fails closed', () => {
-  for (const mutate of [(c) => { delete c.app; }, (c) => { c.app = null; }, (c) => { c.app = {}; }, (c) => { c.app = { slug: 'GitHub-Actions' }; }]) {
+  for (const mutate of [(c) => { delete c.app; }, (c) => { c.app = null; }, (c) => { c.app = {}; }, (c) => { c.app = { slug: 'GitHub-Actions', id: 15368 }; }, (c) => { c.app = { slug: 'github-actions' }; }, (c) => { c.app = { id: 15368 }; }]) {
     const runs = allGreen();
     mutate(runs[4]);
     assert.equal(evaluate({ check_runs: runs }).ok, false);
   }
+});
+
+test('the slug alone is not enough: the numeric app id 15368 must match too', () => {
+  for (const app of [{ slug: 'github-actions', id: 1 }, { slug: 'github-actions', id: '15368' }, { slug: 'github-actions', id: 15369 }]) {
+    const runs = allGreen();
+    runs[1] = run(REQUIRED_CHECKS[1], { app });
+    assert.equal(evaluate({ check_runs: runs }).ok, false, JSON.stringify(app));
+  }
+  const { TRUSTED_APP_ID } = require('../lib/check-runs');
+  assert.equal(TRUSTED_APP_ID, 15368);
 });
 
 test('extra, unrelated check runs are ignored', () => {

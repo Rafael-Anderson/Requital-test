@@ -325,6 +325,9 @@ test('runbook: the bootstrap section has every copy-pasteable step', () => {
     'Environment secret of `production`', 'rotate the key', 'deleting the `authorized_keys` line',
     // MED-5: the controls and how to verify them
     'THE control', 'Prevent self-review', 'Environment secrets only', 'Delete any repository-level or organisation-level secret',
+    // round 2: PATH check that works under dash, row gate wording, rollback record timing
+    'for c in git node npm pm2 mysql mysqldump gzip flock curl md5sum; do command -v "$c" || echo "MISSING: $c"; done',
+    'more than max(10, about 1% of the orders)', 'LIMIT 1', 'just BEFORE the merge of step 8', 'The preflight refuses a raw `@`',
     'Pro, Team, Enterprise', 'is not allowed to deploy to production due to environment protection rules', 'any branch other than `main`',
   ]) assert.ok(s.includes(needle), `runbook is missing: ${needle}`);
   assert.doesNotMatch(s, /GITHUB_TOKEN_FILE|personal access token|create a token/i, 'must not recommend a token on the VPS');
@@ -361,7 +364,7 @@ test('no script pipes into an early-exiting reader (grep -q, grep -m, head, awk 
 
 test('the changed-file list is read NUL separated with quotepath off', () => {
   const sh = fs.readFileSync(path.join(DEPLOY_DIR, 'deploy.sh'), 'utf8');
-  assert.match(sh, /-c core\.quotepath=off diff --name-only -z/);
+  assert.match(sh, /-c core\.quotepath=off diff --name-only --no-renames -z/);
   assert.match(sh, /read -r -d ''/);
 });
 
@@ -383,4 +386,19 @@ test('the flag matrix runs with npx --no-install and builds/merge use the normal
   assert.match(sh, /npx --no-install ts-node/);
   assert.match(sh, /^umask 022$/m);
   assert.doesNotMatch(sh, /^umask 077$/m);
+});
+
+test('no `command -v a b c` with several names anywhere (dash only checks the first)', () => {
+  const targets = [
+    stripComments(RUNBOOK.slice(RUNBOOK.indexOf('## Deploy via GitHub Actions'), RUNBOOK.indexOf('## Migration rollback reference'))),
+    ...['deploy.sh', 'rollback.sh', 'ssh-entry.sh'].map((f) => stripComments(fs.readFileSync(path.join(DEPLOY_DIR, f), 'utf8'))),
+    ...fs.readdirSync(path.join(DEPLOY_DIR, 'lib')).filter((f) => f.endsWith('.sh')).map((f) => stripComments(fs.readFileSync(path.join(DEPLOY_DIR, 'lib', f), 'utf8'))),
+  ];
+  for (const t of targets) assert.doesNotMatch(t, /command -v [A-Za-z0-9_-]+ [A-Za-z0-9_-]+/);
+});
+
+test('the runbook PATH check names the tools the scripts require', () => {
+  const need = fs.readFileSync(path.join(DEPLOY_DIR, 'deploy.sh'), 'utf8').match(/require_cmds ([a-z0-9 ]+)\n/)[1].split(' ');
+  const check = RUNBOOK.match(/for c in ([a-z0-9 ]+); do command -v/)[1].split(' ');
+  for (const c of need) assert.ok(check.includes(c), `runbook PATH check is missing ${c}`);
 });

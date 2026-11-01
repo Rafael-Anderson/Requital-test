@@ -10,10 +10,12 @@
 # Masks (case-insensitive):
 #   - PEM private key blocks: from the BEGIN line to the END line, body included
 #     (a block whose END never arrives masks the rest of the stream: fail closed)
-#   - scheme://user:password@host, up to the LAST '@' before the host, so a raw
-#     '@' inside a password does not leak its tail
+#   - scheme://user:password@host, up to the LAST '@' in the same word, so a raw
+#     '@' or '/' inside a password does not leak its tail (a URL whose query
+#     string contains an '@' is therefore over-masked, on purpose)
+#   - curl -u user:password / --user user:password
 #   - Authorization: <scheme> <credential> (Basic, Bearer, Token, ...) and Cookie
-#   - "Bearer <token>" anywhere
+#   - "Bearer <token>" and "token <long value>" anywhere
 #   - NAME=value, NAME: value and JSON "name":"value" where NAME contains PWD,
 #     PASS, SECRET, TOKEN, KEY, CREDENTIAL or AUTH (MYSQL_PWD, DB_PASS,
 #     DB_PASSWORD, "apiKey", "secret", ...); the value may be unquoted, "double
@@ -31,10 +33,12 @@ REDACT_SED="$(cat <<'REDACT_SED_EOF'
 /-----BEGIN [A-Z ]*PRIVATE KEY-----.*-----END [A-Z ]*PRIVATE KEY-----/{s/-----BEGIN [A-Z ]*PRIVATE KEY-----.*-----END [A-Z ]*PRIVATE KEY-----/[REDACTED PRIVATE KEY]/;b}
 /-----BEGIN [A-Z ]*PRIVATE KEY-----/,/-----END [A-Z ]*PRIVATE KEY-----/c\
 [REDACTED PRIVATE KEY BLOCK]
-s#([A-Za-z][A-Za-z0-9+.-]*://[^:/@[:space:]]*):[^/[:space:]]*@#\1:***@#g
+s#([A-Za-z][A-Za-z0-9+.-]*://[^:/@[:space:]]*):[^[:space:]]*@#\1:***@#g
+s#(curl[^|]*[[:space:]](-u|--user)[[:space:]=])[^[:space:]]+#\1***#I
 s#(authorization["']?[[:space:]]*[:=][[:space:]]*["']?)([A-Za-z]+[[:space:]]+)?[^[:space:]"']+#\1***#gI
 s#(cookie[[:space:]]*:[[:space:]]*).*#\1***#I
 s#(bearer)[[:space:]]+[A-Za-z0-9._~+/=-]+#\1 ***#gI
+s#(token)[[:space:]]+[A-Za-z0-9._~+/=-]{10,}#\1 ***#gI
 s#([A-Za-z0-9_]*(pwd|pass|secret|token|key|credential|auth)[A-Za-z0-9_]*["']?[[:space:]]*[=:][[:space:]]*)("[^"]*"|'[^']*'|[^[:space:]]+)#\1***#gI
 REDACT_SED_EOF
 )"

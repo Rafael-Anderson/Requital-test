@@ -13,6 +13,10 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 echo "mysql[$db] $sql" >> "$FAKE_LOG"
+if [ -n "${FAKE_FAIL_SQL_MATCH:-}" ] && [[ "$sql" == *"$FAKE_FAIL_SQL_MATCH"* ]]; then
+  echo "ERROR 1054 (42S22): Unknown column in field list" >&2
+  exit 1
+fi
 case "$sql" in
   "SELECT 1") echo 1 ;;
   "SELECT name FROM _migrations"*)
@@ -52,7 +56,22 @@ case "$sql" in
       done
     fi ;;
   *BIT_XOR*)
-    if [ -e "$FAKE_DIR/mutated" ]; then printf '5\t999\n'; else printf '5\t123456\n'; fi ;;
+    # COUNT = the number of rows the matching per-row dump returns, so the real
+    # script's "dump rows == COUNT(*)" sanity check holds unless a test skews it
+    tbl="$(printf '%s' "$sql" | sed -E 's/.* FROM `([a-z]+)`.*/\1/')"
+    phase=before; [ ! -e "$FAKE_DIR/migrated" ] || phase=after
+    n=2
+    count_of() {
+      if [ -f "$FAKE_DIR/data/$1.$phase.json" ]; then node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).length)' "$FAKE_DIR/data/$1.$phase.json"
+      elif [ -f "$FAKE_DIR/rows/$1.$phase" ]; then grep -c '' "$FAKE_DIR/rows/$1.$phase" || true
+      else echo ""; fi
+    }
+    c="$(count_of "$tbl")"
+    if [ "$tbl" = order ]; then cm="$(count_of ordermoney)"; [ -z "$cm" ] || c="$cm"; fi
+    [ -z "$c" ] || n="$c"
+    [ -z "${FAKE_COUNT_SKEW:-}" ] || n=$((n + 1))
+    h=123456; [ ! -e "$FAKE_DIR/mutated" ] || h=999
+    printf '%s\t%s\n' "$n" "$h" ;;
   "SELECT (SELECT COUNT(*) FROM shop)"*)
     case "$db" in
       *_drill) echo "${FAKE_DRILL_COUNTS:-1	10	20	5	60}" ;;

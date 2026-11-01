@@ -323,13 +323,13 @@ test('a normal order edit during the window does NOT stop the deploy (and is cou
   rows(sb, 'ordermoney', 'after', '1\tm1-edited\n2\tm2\n');
   rows(sb, 'orderitem', 'before', '1\ti1\t1\n2\ti2\t2\n');
   rows(sb, 'orderitem', 'after', '2\ti2\t2\n101\tnew\t1\n');
-  rows(sb, 'shop', 'before', '1\tshop1\tU1\n');
-  rows(sb, 'shop', 'after', '1\tshop1-changed\tU9\n');
+  rows(sb, 'giftcard', 'before', '1\tg1\tU1\n');
+  rows(sb, 'giftcard', 'after', '1\tg1-changed\tU9\n');
   const r = real(sb, pin);
   assert.equal(r.status, 0, r.out);
-  assert.match(r.out, /orders edited during the window \(money columns changed\): 1/);
+  assert.match(r.out, /orders edited during the window \(money columns changed\): 1 \(cap 10\)/);
   assert.match(r.out, /rows orderitem: checked=2 changed=1 tolerated=1 fatal=0/);
-  assert.match(r.out, /rows shop: checked=1 changed=1 tolerated=1 fatal=0/);
+  assert.match(r.out, /rows giftcard: checked=1 changed=1 tolerated=1 fatal=0/);
   assert.match(r.out, /tolerated \(normal application edits during the window\): 2 row\(s\)/);
   assert.equal(restarts(sb).length, 3);
 }));
@@ -348,11 +348,11 @@ test('a changed orderitem row of an order that was NOT edited stops before any r
 
 test('a changed row whose updatedAt did not move (simulated migration damage) stops before any restart', () => withSb((sb) => {
   const pin = standardChange(sb);
-  rows(sb, 'shop', 'before', '1\tshop1\tU1\n');
-  rows(sb, 'shop', 'after', '1\tshop1-DAMAGED\tU1\n');
+  rows(sb, 'giftcard', 'before', '1\tg1\tU1\n');
+  rows(sb, 'giftcard', 'after', '1\tg1-DAMAGED\tU1\n');
   const r = real(sb, pin);
   assert.equal(r.status, 1, r.out);
-  assert.match(r.out, /ROW CHECK FAILED shop/);
+  assert.match(r.out, /ROW CHECK FAILED giftcard/);
   assert.equal(restarts(sb).length, 0);
 }));
 
@@ -377,8 +377,14 @@ test('the per-row SQL: bounded by the captured max id, explicit columns, never G
   }
   const customer = rowQueries.find((q) => /FROM `customer`/.test(q));
   assert.doesNotMatch(customer, /`phone`/);
+  const giftcard = rowQueries.find((q) => /FROM `giftcard`/.test(q));
+  assert.match(giftcard, /CAST\(`updatedAt` AS CHAR\)/);
   const shop = rowQueries.find((q) => /FROM `shop`/.test(q));
-  assert.match(shop, /CAST\(`updatedAt` AS CHAR\)/);
+  assert.doesNotMatch(shop, /`currency`|`timezone`|`domainType`|`updatedAt`/, 'merchant-editable shop columns are not strict');
+  const consumption = rowQueries.find((q) => /FROM `orderstockconsumption`/.test(q));
+  assert.doesNotMatch(consumption, /updatedAt/, 'ON UPDATE CURRENT_TIMESTAMP would tolerate any migration UPDATE');
+  const order = rowQueries.find((q) => /FROM `order`/.test(q) && /`regionId`/.test(q));
+  assert.doesNotMatch(order, /`customerId`/, 'customer merges rewrite order.customerId');
 }));
 
 // ---- the lock must not be inherited by children ---------------------------------------
@@ -418,23 +424,53 @@ test('no temporary files are left behind after a clean success', () => withSb((s
 }));
 
 // ---- deployed-shas -----------------------------------------------------------------------
-test('a successful deploy records the previous sha (first time) and the new sha; a failed one records nothing', () => withSb((sb) => {
+test('deployed-shas: the previous sha is recorded before the merge (even if the deploy fails later); the new sha only on success', () => withSb((sb) => {
   const failing = standardChange(sb);
   assert.equal(real(sb, failing, { FAKE_MIGRATE_FAIL: '1' }).status, 1);
-  assert.equal(fs.existsSync(path.join(sb.logs, 'deployed-shas')), false, 'a failed run must not record');
-  // roll the checkout back by hand and deploy for real
+  let lines = fs.readFileSync(path.join(sb.logs, 'deployed-shas'), 'utf8').trim().split('\n');
+  assert.deepEqual(lines.map((l) => l.split(' ')[0]), [sb.base], 'only the previous sha after a failed deploy');
+  assert.match(lines[0], /^[0-9a-f]{40} \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ previous$/);
+  // roll the checkout back by hand and deploy for real: no duplicate previous line
   sb.git('reset', '-q', '--hard', sb.base);
   assert.equal(real(sb, failing).status, 0);
-  const lines = fs.readFileSync(path.join(sb.logs, 'deployed-shas'), 'utf8').trim().split('\n');
+  lines = fs.readFileSync(path.join(sb.logs, 'deployed-shas'), 'utf8').trim().split('\n');
   assert.deepEqual(lines.map((l) => l.split(' ')[0]), [sb.base, failing]);
-  assert.match(lines[0], /^[0-9a-f]{40} \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ previous$/);
   assert.match(lines[1], / deploy$/);
   assert.equal(fs.statSync(path.join(sb.logs, 'deployed-shas')).mode & 0o777, 0o600);
-  // a second deploy appends only the new sha (the previous one is already recorded)
   const next = sb.commit({ 'backend/src/a.txt': 'next\n' });
   assert.equal(real(sb, next).status, 0);
   const again = fs.readFileSync(path.join(sb.logs, 'deployed-shas'), 'utf8').trim().split('\n').map((l) => l.split(' ')[0]);
   assert.deepEqual(again, [sb.base, failing, next]);
+}));
+
+test('deployed-shas: a gate failure before the merge records nothing', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  assert.equal(real(sb, pin, { FAKE_BACKUP_CORRUPT: '1' }).status, 1);
+  assert.equal(fs.existsSync(path.join(sb.logs, 'deployed-shas')), false);
+}));
+
+test('H2: the rollback hint of a deploy that failed at step 11 (health) is usable', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  const r = real(sb, pin, { FAKE_HEALTH: '503' });
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /DEPLOY_RESULT=FAILED step=11/);
+  assert.match(r.out, new RegExp(`mode=rollback and sha=${sb.base}`));
+  assert.equal(sb.git('rev-parse', 'HEAD'), pin, 'the new code is merged');
+  const rb = sb.run('rollback.sh', [sb.base]);
+  assert.equal(rb.status, 0, rb.out);
+  assert.equal(sb.git('rev-parse', 'HEAD'), sb.base);
+  const prev = fs.readFileSync(path.join(sb.logs, 'deployed-shas'), 'utf8').trim().split('\n').filter((l) => l.startsWith(sb.base));
+  assert.equal(prev.length, 1, 'recorded exactly once');
+}));
+
+test('deployed-shas: if the file cannot be written the deploy refuses BEFORE merging anything', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  fs.mkdirSync(path.join(sb.logs, 'deployed-shas'), { recursive: true }); // a directory where the file should be
+  const r = real(sb, pin);
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /cannot record the commit that is running now/);
+  assert.equal(sb.git('rev-parse', 'HEAD'), sb.base);
+  assert.equal(sb.calls().filter((c) => /^npm\[/.test(c)).length, 0);
 }));
 
 // ---- DATABASE_URL parsing ---------------------------------------------------------------------
@@ -451,13 +487,13 @@ test('DATABASE_URL: + stays +, percent escapes decode, backslashes survive, quer
   assert.ok(sb.calls().some((c) => c.startsWith('mysql[appdb] ')), 'database name must be appdb');
 }));
 
-test('DATABASE_URL: a raw @ inside the password stays in the password', () => withSb((sb) => {
+test('DATABASE_URL: a raw @ in the password is refused in preflight with the fix (the backup scripts split at the first @)', () => withSb((sb) => {
   fs.writeFileSync(path.join(sb.prod, 'backend/.env'), 'DATABASE_URL="mysql://u:pa@ss@dbhost:3306/shop"\n');
   const pin = standardChange(sb);
   const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified']);
-  assert.equal(r.status, 0, r.out);
-  assert.equal(fs.readFileSync(path.join(sb.fakeDir, 'pwd-seen'), 'utf8'), 'pa@ss\n');
-  assert.match(fs.readFileSync(path.join(sb.fakeDir, 'args-seen'), 'utf8'), /--host=dbhost/);
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /raw '@'.*Percent-encode special characters \(@ becomes %40/);
+  assert.equal(sb.calls().length, 0, 'nothing may run against the database');
 }));
 
 // ---- health checks and smoke slug -----------------------------------------------------------------
@@ -520,12 +556,170 @@ test('a customer anonymised during the window (phone scrubbed) does NOT stop the
   assert.match(r.out, /rows customer: checked=2 changed=0 tolerated=0 fatal=0/);
 }));
 
-test('a customer whose shopId or createdAt changed (not an anonymisation) DOES stop the deploy', () => withSb((sb) => {
+const customers = (n, mutate = () => ({})) => Array.from({ length: n }, (_, i) => ({ id: i + 1, shopId: 1, createdAt: '2026-01-01 10:00:00', phone: `+9715000${i}`, ...mutate(i) }));
+
+test('a handful of customers changed or merged away (within the cap) does not stop the deploy', () => withSb((sb) => {
   const pin = standardChange(sb);
-  data(sb, 'customer', 'before', [{ id: 1, shopId: 1, createdAt: '2026-01-01 10:00:00', phone: '+971500000001' }]);
-  data(sb, 'customer', 'after', [{ id: 1, shopId: 2, createdAt: '2026-01-01 10:00:00', phone: '+971500000001' }]);
+  data(sb, 'customer', 'before', customers(60));
+  data(sb, 'customer', 'after', customers(60).filter((c) => c.id > 3)); // 3 merged away
+  const r = real(sb, pin);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /rows customer: checked=60 changed=3 tolerated=3 fatal=0/);
+}));
+
+test('customers changed beyond the cap (a damaging migration) DO stop the deploy', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  data(sb, 'customer', 'before', customers(60));
+  data(sb, 'customer', 'after', customers(60, (i) => (i < 30 ? { shopId: 2 } : {})));
   const r = real(sb, pin);
   assert.equal(r.status, 1, r.out);
   assert.match(r.out, /ROW CHECK FAILED customer/);
   assert.equal(restarts(sb).length, 0);
+}));
+
+// ---- H1: money columns are protected through a cap on edited orders ---------------------------
+function orderRows(n, editedCount, suffix = '') {
+  return Array.from({ length: n }, (_, i) => `${i + 1}\tm${i + 1}${i < editedCount ? suffix : ''}\n`).join('');
+}
+function bulkRewrite(sb, n, edited) {
+  const items = (k) => Array.from({ length: n }, (_, i) => `${i + 1}\ti${i + 1}${i < k ? '-rewritten' : ''}\t${i + 1}\n`).join('');
+  const consumption = (k) => Array.from({ length: n }, (_, i) => `${i + 1}\tc${i + 1}${i < k ? '-rewritten' : ''}\t${i + 1}\n`).join('');
+  rows(sb, 'order', 'before', orderRows(n, 0));
+  rows(sb, 'order', 'after', orderRows(n, 0));
+  rows(sb, 'ordermoney', 'before', orderRows(n, 0));
+  rows(sb, 'ordermoney', 'after', orderRows(n, edited, '-rewritten'));
+  rows(sb, 'orderitem', 'before', items(0));
+  rows(sb, 'orderitem', 'after', items(edited));
+  rows(sb, 'orderstockconsumption', 'before', consumption(0));
+  rows(sb, 'orderstockconsumption', 'after', consumption(edited));
+}
+
+test('H1: a migration rewriting the money columns, items and consumption of 50 of 60 orders STOPS before any restart', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  bulkRewrite(sb, 60, 50);
+  const r = real(sb, pin);
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /ORDER EDIT CAP EXCEEDED: checked=60 changed=50 cap=10/);
+  assert.match(r.out, /DEPLOY_RESULT=FAILED step=9/);
+  assert.equal(restarts(sb).length, 0);
+}));
+
+test('H1: exactly 10 edited orders (the floor of the cap) are tolerated, 11 are fatal', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  bulkRewrite(sb, 60, 10);
+  const ok = real(sb, pin);
+  assert.equal(ok.status, 0, ok.out);
+  assert.match(ok.out, /orders edited during the window \(money columns changed\): 10 \(cap 10\)/);
+  sb.git('reset', '-q', '--hard', sb.base);
+  fs.rmSync(path.join(sb.fakeDir, 'migrated'), { force: true });
+  bulkRewrite(sb, 60, 11);
+  const bad = real(sb, pin);
+  assert.equal(bad.status, 1, bad.out);
+  assert.match(bad.out, /changed=11 cap=10/);
+}));
+
+test('H1: the cap grows at 1% of the orders (2000 orders: 20 edits tolerated, 21 fatal)', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  bulkRewrite(sb, 2000, 20);
+  assert.equal(real(sb, pin).status, 0);
+  sb.git('reset', '-q', '--hard', sb.base);
+  fs.rmSync(path.join(sb.fakeDir, 'migrated'), { force: true });
+  bulkRewrite(sb, 2000, 21);
+  const bad = real(sb, pin);
+  assert.equal(bad.status, 1, bad.out.slice(-400));
+  assert.match(bad.out, /changed=21 cap=20/);
+}));
+
+// ---- M1: only trace-free-stable shop columns are strict -----------------------------------------------
+test('M1: a merchant changing the shop currency/timezone/domainType in the window does not stop the deploy', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  data(sb, 'shop', 'before', [{ id: 1, subdomain: 'acme', countryCode: 'AE', currency: 'AED', timezone: 'Asia/Dubai', domainType: 'subdomain' }]);
+  data(sb, 'shop', 'after', [{ id: 1, subdomain: 'acme', countryCode: 'AE', currency: 'SAR', timezone: 'Asia/Riyadh', domainType: 'custom' }]);
+  const r = real(sb, pin);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /rows shop: checked=1 changed=0/);
+}));
+
+test('M1: a shop whose subdomain or countryCode changed DOES stop the deploy', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  data(sb, 'shop', 'before', [{ id: 1, subdomain: 'acme', countryCode: 'AE' }]);
+  data(sb, 'shop', 'after', [{ id: 1, subdomain: 'acme', countryCode: 'XX' }]);
+  const r = real(sb, pin);
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /ROW CHECK FAILED shop/);
+}));
+
+test('M1: a customer merge (order.customerId rewritten) is informational, not fatal', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  data(sb, 'order', 'before', [{ id: 1, shopId: 1, shopOrderNumber: 1, outletId: 1, orderType: 'delivery', currency: 'AED', exchangeRate: null, regionId: null, customerId: 5 }]);
+  data(sb, 'order', 'after', [{ id: 1, shopId: 1, shopOrderNumber: 1, outletId: 1, orderType: 'delivery', currency: 'AED', exchangeRate: null, regionId: null, customerId: 9 }]);
+  rows(sb, 'ordermoney', 'before', '1\tm1\n');
+  rows(sb, 'ordermoney', 'after', '1\tm1\n');
+  const r = real(sb, pin);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /rows order: checked=1 changed=0/);
+}));
+
+// ---- M2: no updatedAt tolerance for orderstockconsumption ------------------------------------------------
+test('M2: a changed orderstockconsumption row of an unedited order is fatal (its updatedAt proves nothing)', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  rows(sb, 'orderstockconsumption', 'before', '1\tc1\t1\n2\tc2\t2\n');
+  rows(sb, 'orderstockconsumption', 'after', '1\tc1-DAMAGED\t1\n2\tc2\t2\n');
+  const r = real(sb, pin);
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /ROW CHECK FAILED orderstockconsumption/);
+}));
+
+// ---- M3: sanity floor + dry-run query validation ------------------------------------------------------------
+test('M3: a protected-row dump that disagrees with COUNT(*) stops the run before the merge', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  const r = real(sb, pin, { FAKE_COUNT_SKEW: '1' });
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /COUNT\(\*\) says/);
+  assert.match(r.out, /DEPLOY_RESULT=FAILED step=7/);
+  assert.equal(sb.git('rev-parse', 'HEAD'), sb.base);
+}));
+
+test('M3: an empty dump for a table whose MAX(id) is above zero is refused', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  rows(sb, 'stockmovement', 'before', '');
+  const r = real(sb, pin);
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /empty although MAX\(id\) is 100/);
+  assert.equal(sb.git('rev-parse', 'HEAD'), sb.base);
+}));
+
+test('M3: the dry-run validates every protected-row query with LIMIT 1 (read-only)', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified']);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /protected-row queries: valid \(8 tables plus the order money columns\)/);
+  const limited = sb.calls().filter((c) => /MD5\(CONCAT_WS/.test(c) && / LIMIT 1$/.test(c));
+  assert.equal(limited.length, 9);
+  assert.equal(sb.calls().filter((c) => /MD5\(CONCAT_WS/.test(c) && !/ LIMIT 1$/.test(c)).length, 0, 'no unbounded dump in a dry-run');
+}));
+
+test('M3: a protected-row query naming a column that does not exist fails the DRY-RUN', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified'], { FAKE_FAIL_SQL_MATCH: '`regionId`' });
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /protected-row query for order is invalid/);
+  assert.equal(sb.hasMarker(pin), false, 'a failed dry-run must not authorise a real run');
+}));
+
+// ---- LOW: renames, scratch disk --------------------------------------------------------------------------------
+test('a rename from backend/ to admin/ marks BOTH apps as changed (--no-renames)', () => withSb((sb) => {
+  sb.seedGit('mv', 'backend/src/a.txt', 'admin/a.txt');
+  sb.seedGit('commit', '-qm', 'rename across apps');
+  sb.seedGit('push', '-q', 'origin', 'main');
+  const pin = sb.seedGit('rev-parse', 'HEAD');
+  const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified']);
+  assert.match(r.out, /apps to rebuild: backend=1 storefront=0 admin=1/);
+}));
+
+test('too little space for the scratch directory is refused', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified'], { MIN_FREE_WORK_KB: '999999999999' });
+  assert.equal(r.status, 2, r.out);
+  assert.match(r.out, /scratch directory/);
 }));

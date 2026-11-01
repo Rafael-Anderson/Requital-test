@@ -433,3 +433,75 @@ for (const signal of ['SIGHUP', 'SIGTERM', 'SIGINT']) {
     } finally { sb.cleanup(); }
   });
 }
+
+// ---- paths and PATH are fixed unless a test flag is set -------------------------------------------------
+test('without REQUITAL_ENTRY_TEST the entry script ignores APP_DIR, LOG_DIR and ENTRY_PATH', () => {
+  const sb = makeSandbox({ stubDeploy: true });
+  try {
+    fs.mkdirSync(sb.logs, { recursive: true });
+    fs.writeFileSync(path.join(sb.logs, 'deploy-20260101T000000Z-aaaaaaa.log'), 'sandbox log line\nDEPLOY_RESULT=OK\n');
+    const st = sb.entry('status', { REQUITAL_ENTRY_TEST: undefined, ENTRY_PATH: '/nonexistent' });
+    assert.equal(st.status, 0, st.out);
+    assert.doesNotMatch(st.out, /sandbox log line/, 'the sandbox LOG_DIR must be ignored');
+    assert.match(st.out, /\/home\/deploy\/deploy-logs/);
+    const pin = sb.commit({ 'backend/src/a.txt': 'changed\n' });
+    const dep = sb.entry(`deploy ${pin}`, { REQUITAL_ENTRY_TEST: undefined });
+    assert.equal(dep.status, 2, dep.out);
+    assert.equal(captured(sb), null, 'the sandbox checkout must not be used');
+  } finally { sb.cleanup(); }
+});
+
+test('with the test flag the overrides work (what every other test here relies on)', () => {
+  const sb = makeSandbox({ stubDeploy: true });
+  try {
+    const pin = sb.commit({ 'backend/src/a.txt': 'changed\n' });
+    assert.equal(sb.entry(`deploy ${pin}`).status, 0);
+  } finally { sb.cleanup(); }
+});
+
+test('the source fixes the paths and PATH in production', () => {
+  const src = fs.readFileSync(path.join(DEPLOY_DIR, 'ssh-entry.sh'), 'utf8');
+  assert.match(src, /else\n  APP_DIR="\/home\/deploy\/requital"\n  LOG_DIR="\/home\/deploy\/deploy-logs"\n  export PATH="\/usr\/local\/bin:\/usr\/bin:\/bin"\nfi/);
+});
+
+// ---- a rollback survives a failing fetch -----------------------------------------------------------------------------
+test('rollback: a failing git fetch warns (redacted) and continues with the existing origin/main', () => {
+  const sb = makeSandbox({ stubRollback: true });
+  try {
+    sb.git('remote', 'set-url', 'origin', 'file:///nonexistent-dir/mysql://root:topsecretpw@dbhost/x');
+    const r = sb.entry(`rollback ${sb.base}`);
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, /Warning: git fetch failed; continuing with the existing origin\/main/);
+    assert.doesNotMatch(r.out, /topsecretpw/);
+    assert.deepEqual(captured(sb), [sb.base]);
+  } finally { sb.cleanup(); }
+});
+
+test('rollback: with a failing fetch a sha that is NOT on the existing origin/main is still refused', () => {
+  const sb = makeSandbox({ stubRollback: true });
+  try {
+    const bad = localOnlyCommit(sb);
+    sb.git('remote', 'set-url', 'origin', '/nonexistent-dir/x');
+    const r = sb.entry(`rollback ${bad}`);
+    assert.equal(r.status, 2, r.out);
+    assert.equal(captured(sb), null);
+  } finally { sb.cleanup(); }
+});
+
+// ---- run directory ownership -------------------------------------------------------------------------------------------
+test('a run that dies without reporting a status leaves no run directory behind', () => {
+  const sb = makeSandbox();
+  try {
+    // the stub kills its own parent (the status-writing wrapper), so no status is ever written
+    const pin = sb.commit({ 'tools/deploy/deploy.sh': '#!/usr/bin/env bash\nkill -9 $PPID\nsleep 1\n' });
+    const r = sb.entry(`deploy ${pin}`);
+    assert.equal(r.status, 1, r.out);
+    assert.match(r.out, /ended without reporting a status/);
+    assert.deepEqual(leftovers(sb), []);
+  } finally { sb.cleanup(); }
+});
+
+test('RUN_DIR_OWNED is cleared before the background launch (source order)', () => {
+  const src = fs.readFileSync(path.join(DEPLOY_DIR, 'ssh-entry.sh'), 'utf8');
+  assert.ok(src.indexOf('RUN_DIR_OWNED=0   # from the launch on') < src.indexOf('env -u SHELLOPTS'));
+});

@@ -23,6 +23,7 @@ PORT_ADMIN="${PORT_ADMIN:-3001}"
 PORT_STOREFRONT="${PORT_STOREFRONT:-3002}"
 DEPLOY_USER_EXPECTED="${DEPLOY_USER_EXPECTED:-deploy}"
 MIN_FREE_KB="${MIN_FREE_KB:-2097152}"
+MIN_FREE_WORK_KB="${MIN_FREE_WORK_KB:-102400}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-60}"
 POLL_INTERVAL="${POLL_INTERVAL:-2}"
 STABLE_WAIT="${STABLE_WAIT:-15}"
@@ -137,11 +138,17 @@ check_user() {
 }
 
 check_disk() {
-  local free
+  local free work_free
   free="$(df -Pk "$APP_DIR" | awk 'NR==2 {print $4}')"
   case "$free" in ''|*[!0-9]*) fail "cannot read free disk space for $APP_DIR." ;; esac
   [ "$free" -ge "$MIN_FREE_KB" ] || refuse "free disk ${free} KB is below the ${MIN_FREE_KB} KB minimum."
   note "disk: ${free} KB free"
+  # The scratch directory (changed-file list, per-row hashes) lives under TMPDIR,
+  # which may be a different, smaller file system than the app directory.
+  work_free="$(df -Pk "$WORK_DIR" | awk 'NR==2 {print $4}')"
+  case "$work_free" in ''|*[!0-9]*) fail "cannot read free disk space for $WORK_DIR." ;; esac
+  [ "$work_free" -ge "$MIN_FREE_WORK_KB" ] || refuse "free space for the scratch directory $WORK_DIR is ${work_free} KB, below the ${MIN_FREE_WORK_KB} KB minimum (set TMPDIR to a larger file system)."
+  note "scratch disk: ${work_free} KB free"
 }
 
 # pm2_table: "name status uptimeSeconds restarts" per process, reduced from
@@ -188,9 +195,9 @@ urldecode() {
 # Reads ONLY the DATABASE_URL line of backend/.env straight into variables; the
 # file is never echoed and the value never printed. Parsing is deliberately
 # robust: the query string is dropped first (it may contain '/'), the userinfo
-# is everything up to the LAST '@' (a raw '@' in a password stays in it), the
-# database name is the first path segment. Passwords should still be
-# percent-encoded per CLAUDE.md.
+# is everything up to the LAST '@', the database name is the first path segment.
+# A raw '@' in the user or password is refused (percent-encode it, per CLAUDE.md),
+# because the backup scripts split at the first one.
 load_db_config() {
   local envfile="$APP_DIR/backend/.env" line url userinfo rest hostport
   [ -f "$envfile" ] || fail "$envfile not found."
@@ -203,6 +210,10 @@ load_db_config() {
   case "$url" in *@*) ;; *) fail "DATABASE_URL has no credentials (user:password@host)." ;; esac
   userinfo="${url%@*}"
   rest="${url##*@}"
+  # tools/backup-db.sh and restore-db.sh split at the FIRST '@'. A raw '@' in the
+  # password would pass this preflight and then fail the backup at step 6, so
+  # refuse it here with the fix.
+  case "$userinfo" in *@*) fail "DATABASE_URL contains a raw '@' inside the user or password. Percent-encode special characters (@ becomes %40, as CLAUDE.md requires) in backend/.env." ;; esac
   case "$rest" in */*) ;; *) fail "DATABASE_URL has no database name." ;; esac
   hostport="${rest%%/*}"
   DB_NAME="${rest#*/}"
