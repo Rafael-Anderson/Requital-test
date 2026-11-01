@@ -63,14 +63,22 @@ run_detached() {
   local out status
   out="$(mktemp "$LOG_DIR/.entry-$label-XXXXXX.out")"
   status="$out.status"
-  # A new session (setsid) plus an ignored SIGHUP: closing the SSH connection
-  # must not stop the run. stdin is /dev/null.
+  # A new session (setsid -w: stays the parent of the run) plus an ignored
+  # SIGHUP: closing the SSH connection must not stop the run. stdin is /dev/null.
   # shellcheck disable=SC2016  # the single-quoted program is meant to expand in the child shell
-  STATUS_FILE="$status" setsid bash -c 'trap "" HUP; rc=0; "$@" || rc=$?; echo "$rc" > "$STATUS_FILE.tmp"; mv "$STATUS_FILE.tmp" "$STATUS_FILE"' _ "$@" > "$out" 2>&1 < /dev/null &
+  STATUS_FILE="$status" setsid -w bash -c 'trap "" HUP; rc=0; "$@" || rc=$?; echo "$rc" > "$STATUS_FILE.tmp"; mv "$STATUS_FILE.tmp" "$STATUS_FILE"' _ "$@" > "$out" 2>&1 < /dev/null &
+  local runpid=$!
   tail -n +1 -F "$out" 2>/dev/null &
   local tailpid=$!
   trap 'kill "$tailpid" 2>/dev/null || true' EXIT
-  while [ ! -e "$status" ]; do sleep 0.2; done
+  while [ ! -e "$status" ]; do
+    if ! kill -0 "$runpid" 2>/dev/null; then
+      sleep 0.5
+      [ -e "$status" ] || { kill "$tailpid" 2>/dev/null || true; echo "Error: the run ended without reporting a status." >&2; exit 1; }
+      break
+    fi
+    sleep 0.2
+  done
   sleep 0.5
   kill "$tailpid" 2>/dev/null || true
   wait "$tailpid" 2>/dev/null || true

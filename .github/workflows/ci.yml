@@ -254,7 +254,7 @@ jobs:
       - name: Deploy tooling - shellcheck
         run: |
           shellcheck --version
-          shellcheck -x tools/deploy/*.sh tools/deploy/lib/*.sh
+          shellcheck -x -P SCRIPTDIR tools/deploy/*.sh tools/deploy/lib/*.sh
 
       - name: Deploy tooling - actionlint (pinned release, sha256 verified)
         env:
