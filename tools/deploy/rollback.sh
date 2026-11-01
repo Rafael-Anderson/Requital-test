@@ -11,12 +11,16 @@
 # Usage:
 #   rollback.sh <40-hex PREVIOUS_SHA> [--dry-run]
 #
-# Guards: the checkout must be clean; PREVIOUS_SHA must be an ancestor of the
-# current HEAD AND reachable from origin/main (so a rollback can only land on a
-# commit that was once a legitimate main commit); PREVIOUS_SHA == HEAD is a no-op.
-# `git reset --hard` is safe here only because the clean-tree gate ran first.
-# No dry-run marker and no --ci-verified are required: a rollback is the
-# emergency path and the target is a commit that was already deployed.
+# Guards: the checkout must be clean; PREVIOUS_SHA must be listed in
+# $LOG_DIR/deployed-shas, the append-only record deploy.sh writes of every commit
+# it deployed OK (plus the commit that was running before the first recorded
+# deploy), so a rollback can only land on a commit this pipeline put into
+# production; it must also be an ancestor of the current HEAD AND reachable from
+# origin/main; PREVIOUS_SHA == HEAD is a no-op. A commit that was deployed by
+# hand (outside this script) is not in the record: roll that back by hand, or add
+# the line to deployed-shas yourself. `git reset --hard` is safe here only because
+# the clean-tree gate ran first. No dry-run marker and no --ci-verified are
+# required: a rollback is the emergency path.
 #
 # Config (env): same knobs as deploy.sh (APP_DIR, LOG_DIR, LOCK_FILE, PM2_*, ...).
 # Exit codes: 0 ok, 1 failure, 2 refused by a gate, 3 lock held.
@@ -44,7 +48,7 @@ if [ -z "${DEPLOY_REEXEC:-}" ]; then
   DEPLOY_TMP_DIR="$(mktemp -d)"
   mkdir -p "$DEPLOY_TMP_DIR/lib"
   cp "$SELF_DIR/rollback.sh" "$DEPLOY_TMP_DIR/rollback.sh"
-  cp "$SELF_DIR"/lib/*.sh "$DEPLOY_TMP_DIR/lib/"
+  cp "$SELF_DIR"/lib/* "$DEPLOY_TMP_DIR/lib/"
   chmod 700 "$DEPLOY_TMP_DIR/rollback.sh"
   export DEPLOY_TMP_DIR DEPLOY_REEXEC=1
   reexec_args=("$PREV")
@@ -60,9 +64,10 @@ fi
 trap '' HUP
 trap on_exit_common EXIT
 
+make_workdir
 acquire_lock
 setup_logging rollback "$PREV"
-umask 077
+umask 022
 
 if [ "$DRY_RUN" = 1 ]; then MODE="DRY-RUN"; else MODE="REAL"; fi
 echo "rollback.sh: target=$PREV mode=$MODE user=$(id -un) at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -87,6 +92,16 @@ if [ "$CURRENT" = "$PREV" ]; then
   RESULT_LINE=no
   echo "ALREADY AT TARGET"
   exit 0
+fi
+DEPLOYED_FILE="$LOG_DIR/deployed-shas"
+recorded=0
+if [ -f "$DEPLOYED_FILE" ]; then
+  while IFS=' ' read -r rec_sha _; do
+    if [ "$rec_sha" = "$PREV" ]; then recorded=1; fi
+  done < "$DEPLOYED_FILE"
+fi
+if [ "$recorded" != 1 ]; then
+  refuse "target $PREV is not in $DEPLOYED_FILE (the record of commits deploy.sh put into production). Rollback only goes to a commit this pipeline deployed."
 fi
 git -C "$APP_DIR" merge-base --is-ancestor "$PREV" "$CURRENT" || refuse "target $PREV is not an ancestor of the current HEAD; a rollback only moves backwards along the deployed history."
 git -C "$APP_DIR" merge-base --is-ancestor "$PREV" origin/main || refuse "target $PREV is not reachable from origin/main."
@@ -129,7 +144,7 @@ build_admin
 step 6 "restart and health"
 declare -A LOGBASE=()
 for app in "$PM2_BACKEND" "$PM2_STOREFRONT" "$PM2_ADMIN"; do
-  LOGBASE[$app]="$(mktemp)"
+  LOGBASE[$app]="$WORK_DIR/logbase-$app"
   snapshot_logs "$app" "${LOGBASE[$app]}"
 done
 restart_one "$PM2_BACKEND"
@@ -139,7 +154,6 @@ restart_one "$PM2_ADMIN"
 step 7 "smoke"
 smoke_redirect_map
 for app in "$PM2_BACKEND" "$PM2_STOREFRONT" "$PM2_ADMIN"; do scan_logs "$app" "${LOGBASE[$app]}"; done
-rm -f "${LOGBASE[@]}"
 
 step 8 "result"
 echo "ROLLED_BACK_FROM=$CURRENT"

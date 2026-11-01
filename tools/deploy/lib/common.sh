@@ -25,7 +25,7 @@ DEPLOY_USER_EXPECTED="${DEPLOY_USER_EXPECTED:-deploy}"
 MIN_FREE_KB="${MIN_FREE_KB:-2097152}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-60}"
 POLL_INTERVAL="${POLL_INTERVAL:-2}"
-STABLE_WAIT="${STABLE_WAIT:-5}"
+STABLE_WAIT="${STABLE_WAIT:-15}"
 
 CURRENT_STEP="0"
 
@@ -51,9 +51,25 @@ fail() {
   exit 1
 }
 
-# Wrapper so every pm2 call is greppable by the test fakes and does not leak the
-# lock descriptor (fd 9) into a daemon it might start.
+# Every external program that could leave a long-lived child (a pm2 daemon, a
+# build tool's background worker, ...) runs with the lock descriptor (fd 9)
+# closed, so a lingering child can never keep the deploy lock held after this
+# script has exited. Plain shell functions shadowing the commands keeps every
+# call site unchanged (and greppable by the test fakes, which sit on PATH).
 pm2() { command pm2 "$@" 9>&-; }
+git() { command git "$@" 9>&-; }
+node() { command node "$@" 9>&-; }
+npm() { command npm "$@" 9>&-; }
+npx() { command npx "$@" 9>&-; }
+mysql() { command mysql "$@" 9>&-; }
+curl() { command curl "$@" 9>&-; }
+
+# One private scratch directory per run (TMPDIR-relative), removed on EVERY exit
+# path by on_exit_common. All temporary files live in it.
+WORK_DIR=""
+make_workdir() {
+  WORK_DIR="$(mktemp -d)"
+}
 
 # ---- lock + log -------------------------------------------------------------
 
@@ -73,7 +89,9 @@ setup_logging() {
   chmod 700 "$LOG_DIR" 2>/dev/null || true
   LOG_FILE="$LOG_DIR/$1-$(date -u +%Y%m%dT%H%M%SZ)-${2:0:7}.log"
   ( umask 077; : > "$LOG_FILE" )
-  exec > >(redact | tee -a "$LOG_FILE") 2>&1
+  # The logging subshell closes fd 9 first: it outlives this script by a moment
+  # and must never hold the deploy lock.
+  exec > >(exec 9>&-; redact | tee -a "$LOG_FILE") 2>&1
   echo "log: $LOG_FILE"
 }
 
@@ -85,9 +103,14 @@ on_exit_common() {
   if [ -n "${DEPLOY_TMP_DIR:-}" ] && [ -d "$DEPLOY_TMP_DIR" ]; then
     rm -rf "$DEPLOY_TMP_DIR"
   fi
+  if [ -n "$WORK_DIR" ] && [ -d "$WORK_DIR" ]; then
+    rm -rf "$WORK_DIR"
+  fi
   if [ "$rc" -ne 0 ] && [ "${RESULT_LINE:-yes}" = "yes" ]; then
     if [ "$rc" -eq 2 ]; then
       echo "DEPLOY_RESULT=REFUSED"
+    elif [ "$rc" -eq 3 ]; then
+      echo "DEPLOY_RESULT=BUSY"
     else
       echo "DEPLOY_RESULT=FAILED step=$CURRENT_STEP"
     fi
@@ -141,46 +164,60 @@ pm2_status_of() { pm2_table | awk -v n="$1" '$1==n {print $2}'; }
 pm2_restarts_of() { pm2_table | awk -v n="$1" '$1==n {print $4}'; }
 
 check_pm2_online() {
-  local table n
+  local table n line state
   table="$(pm2_table)" || fail "pm2 jlist failed."
   for n in "$PM2_BACKEND" "$PM2_STOREFRONT" "$PM2_ADMIN"; do
-    echo "$table" | awk -v n="$n" '$1==n {found=1; print "pm2: " $1 " " $2 " uptime=" $3 "s restarts=" $4} END {exit !found}' \
-      || fail "pm2 process '$n' not found."
-    [ "$(echo "$table" | awk -v n="$n" '$1==n {print $2}')" = "online" ] \
-      || refuse "pm2 process '$n' is not online; fix that before deploying."
+    line="$(awk -v n="$n" '$1==n {print "pm2: " $1 " " $2 " uptime=" $3 "s restarts=" $4}' <<< "$table")"
+    [ -n "$line" ] || fail "pm2 process '$n' not found."
+    echo "$line"
+    state="$(awk -v n="$n" '$1==n {print $2}' <<< "$table")"
+    [ "$state" = "online" ] || refuse "pm2 process '$n' is not online; fix that before deploying."
   done
 }
 
 # ---- database -------------------------------------------------------------------
 
+# Percent-decoding only. A '+' stays a '+' (this is a password, not a form
+# field), and existing backslashes are escaped first so printf %b cannot
+# interpret them.
 urldecode() {
-  local encoded="${1//+/ }"
+  local encoded="${1//\\/\\\\}"
   printf '%b' "${encoded//%/\\x}"
 }
 
 # Reads ONLY the DATABASE_URL line of backend/.env straight into variables; the
-# file is never echoed and the value never printed.
+# file is never echoed and the value never printed. Parsing is deliberately
+# robust: the query string is dropped first (it may contain '/'), the userinfo
+# is everything up to the LAST '@' (a raw '@' in a password stays in it), the
+# database name is the first path segment. Passwords should still be
+# percent-encoded per CLAUDE.md.
 load_db_config() {
-  local envfile="$APP_DIR/backend/.env" line url credentials rest hostport
+  local envfile="$APP_DIR/backend/.env" line url userinfo rest hostport
   [ -f "$envfile" ] || fail "$envfile not found."
   line="$(grep -m1 '^DATABASE_URL=' "$envfile" || true)"
   [ -n "$line" ] || fail "DATABASE_URL not set in $envfile."
   url="${line#DATABASE_URL=}"
   url="${url%\"}"; url="${url#\"}"; url="${url%\'}"; url="${url#\'}"
-  # shellcheck disable=SC2034  # read by deploy.sh (passed to backup-db.sh via env)
-  DATABASE_URL_VALUE="$url"
   url="${url#mysql://}"
   url="${url%%\?*}"
-  credentials="${url%%@*}"
-  rest="${url#*@}"
-  DB_USER="$(urldecode "${credentials%%:*}")"
-  DB_PASSWORD="$(urldecode "${credentials#*:}")"
+  case "$url" in *@*) ;; *) fail "DATABASE_URL has no credentials (user:password@host)." ;; esac
+  userinfo="${url%@*}"
+  rest="${url##*@}"
+  case "$rest" in */*) ;; *) fail "DATABASE_URL has no database name." ;; esac
   hostport="${rest%%/*}"
   DB_NAME="${rest#*/}"
+  DB_NAME="${DB_NAME%%/*}"
+  DB_USER="$(urldecode "${userinfo%%:*}")"
+  DB_PASSWORD="$(urldecode "${userinfo#*:}")"
   DB_HOST="${hostport%%:*}"
   DB_PORT="${hostport#*:}"
   [ "$DB_PORT" != "$DB_HOST" ] || DB_PORT=3306
   if [ -z "$DB_USER" ] || [ -z "$DB_HOST" ] || [ -z "$DB_NAME" ]; then fail "DATABASE_URL could not be parsed."; fi
+  # Normalised (query-free) URL for the child scripts that parse a URL themselves.
+  # shellcheck disable=SC2034  # read by deploy.sh
+  DB_URL_BASE="mysql://${userinfo}@${hostport}"
+  # shellcheck disable=SC2034  # read by deploy.sh
+  DATABASE_URL_VALUE="${DB_URL_BASE}/${DB_NAME}"
 }
 
 # db_query_in <database> <sql>: read-only helper (callers only pass SELECT or the
@@ -197,7 +234,7 @@ check_clean_tree() {
   local dirty
   dirty="$(git -C "$APP_DIR" status --porcelain)"
   if [ -n "$dirty" ]; then
-    echo "$dirty" | head -20 >&2
+    printf '%s\n' "$dirty" | sed -n '1,20p' >&2
     refuse "working tree at $APP_DIR is not clean (uncommitted or untracked files, see above). Hotfixes and merchant uploads have been found here before: resolve them by hand."
   fi
   note "working tree: clean"
@@ -267,14 +304,14 @@ wait_online() {
 }
 
 wait_http() {
-  # wait_http <label> <url> <ok-predicate: ready200|lt500> [curl args...]
+  # wait_http <label> <url> <ok-predicate: ready200|ok200to399> [curl args...]
   local label="$1" url="$2" mode="$3"; shift 3
   local waited=0 code
   while :; do
     code="$(http_code "$url" "$@")"
     case "$mode" in
       ready200) [ "$code" = "200" ] && break ;;
-      lt500) case "$code" in [1-4][0-9][0-9]) break ;; esac ;;
+      ok200to399) case "$code" in 2[0-9][0-9]|3[0-9][0-9]) break ;; esac ;;
     esac
     waited=$((waited + POLL_INTERVAL))
     [ "$waited" -le "$HEALTH_TIMEOUT" ] || fail "$label health check failed (last HTTP $code) after ${HEALTH_TIMEOUT}s."
@@ -290,26 +327,30 @@ restart_one() {
   wait_online "$name"
   case "$name" in
     "$PM2_BACKEND") wait_http backend "http://127.0.0.1:$PORT_BACKEND/health/ready" ready200 ;;
-    "$PM2_STOREFRONT") wait_http storefront "http://127.0.0.1:$PORT_STOREFRONT/" lt500 -H "Host: ${SMOKE_SLUG}.requital.io" ;;
-    "$PM2_ADMIN") wait_http admin "http://127.0.0.1:$PORT_ADMIN/" lt500 ;;
+    "$PM2_STOREFRONT") wait_http storefront "http://127.0.0.1:$PORT_STOREFRONT/" ok200to399 -H "Host: ${SMOKE_SLUG}.requital.io" ;;
+    "$PM2_ADMIN") wait_http admin "http://127.0.0.1:$PORT_ADMIN/" ok200to399 ;;
   esac
 }
 
 resolve_smoke_slug() {
   SMOKE_SLUG="${SMOKE_SHOP_SLUG:-}"
   if [ -z "$SMOKE_SLUG" ]; then
-    SMOKE_SLUG="$(db_query 'SELECT subdomain FROM shop WHERE id=1' | head -1)"
+    SMOKE_SLUG="$(db_query 'SELECT subdomain FROM shop WHERE id=1' | sed -n '1p')"
   fi
   case "$SMOKE_SLUG" in
-    ''|*[!a-z0-9-]*) fail "smoke shop slug '$SMOKE_SLUG' is empty or not a plain subdomain." ;;
+    ''|*[!a-z0-9-]*)
+      fail "cannot pick a shop for the smoke test (got '${SMOKE_SLUG}'). By default shop id 1 is used; if it was deleted, renamed to something unusual or is suspended, set SMOKE_SHOP_SLUG=<subdomain of a live, published shop> in the environment of this run (for the workflow path: export it in /home/deploy/.profile or the deploy user's environment) and run again." ;;
   esac
 }
 
 smoke_redirect_map() {
   local headers
   headers="$(curl -s -D - -o /dev/null --max-time 10 "http://127.0.0.1:$PORT_BACKEND/public/$SMOKE_SLUG/redirects/map" || true)"
-  echo "$headers" | head -1 | grep -q ' 200' || fail "redirect-map smoke: expected HTTP 200 for /public/$SMOKE_SLUG/redirects/map."
-  echo "$headers" | grep -qi '^etag:' || fail "redirect-map smoke: no ETag header."
+  # No pipelines here: an early-exiting reader under pipefail would turn a
+  # large header block into a spurious failure (SIGPIPE, status 141).
+  local first="${headers%%$'\n'*}"
+  case "$first" in *" 200"*) ;; *) fail "redirect-map smoke: expected HTTP 200 for /public/$SMOKE_SLUG/redirects/map." ;; esac
+  grep -qi '^etag:' <<< "$headers" || fail "redirect-map smoke: no ETag header."
   note "redirect map: 200 with ETag"
 }
 
@@ -317,25 +358,26 @@ smoke_redirect_map() {
 snapshot_logs() { pm2 logs "$1" --nostream --lines 50 > "$2" 2>&1 || true; }
 scan_logs() {
   local name="$1" baseline="$2" now fresh errs
-  now="$(mktemp)"
+  now="$WORK_DIR/logs-now-$name"
   pm2 logs "$name" --nostream --lines 50 > "$now" 2>&1 || true
   # Only lines that were not already in the pre-restart snapshot count: the log
   # holds a benign stale "Cannot find module" entry from before dist/ existed.
   fresh="$(grep -vxFf "$baseline" "$now" || true)"
   rm -f "$now"
-  if echo "$fresh" | grep -q 'Cannot find module'; then
+  if grep -q 'Cannot find module' <<< "$fresh"; then
     fail "$name log shows 'Cannot find module' after restart."
   fi
-  errs="$(echo "$fresh" | grep -ci 'error' || true)"
+  errs="$(grep -ci 'error' <<< "$fresh" || true)"
   note "$name: $errs new log line(s) mentioning 'error' (content not printed)"
 }
 
 check_backup_log() {
-  if [ -f "$BACKUP_DIR/backup.log" ] && tail -n 20 "$BACKUP_DIR/backup.log" | grep -q 'FAILED:'; then
-    echo "WARNING: backup.log tail contains FAILED: (not caused by this deploy; investigate separately)."
-  else
-    note "backup.log: no recent FAILED:"
-  fi
+  local tailtext=""
+  [ ! -f "$BACKUP_DIR/backup.log" ] || tailtext="$(tail -n 20 "$BACKUP_DIR/backup.log")"
+  case "$tailtext" in
+    *FAILED:*) echo "WARNING: backup.log tail contains FAILED: (not caused by this deploy; investigate separately)." ;;
+    *) note "backup.log: no recent FAILED:" ;;
+  esac
 }
 
 # ---- env fingerprints ----------------------------------------------------------------------------------

@@ -8,7 +8,7 @@ const cp = require('child_process');
 const { DEPLOY_DIR } = require('./helpers');
 const { REQUIRED_CHECKS, evaluate } = require('../lib/check-runs');
 
-const run = (name, o = {}) => ({ id: 1, name, status: 'completed', conclusion: 'success', started_at: '2026-01-01T00:00:00Z', ...o });
+const run = (name, o = {}) => ({ id: 1, name, status: 'completed', conclusion: 'success', started_at: '2026-01-01T00:00:00Z', app: { slug: 'github-actions' }, ...o });
 const allGreen = () => REQUIRED_CHECKS.map((n, i) => run(n, { id: i + 1 }));
 
 test('the required list is exactly the five pinned names', () => {
@@ -56,6 +56,30 @@ test('a later green re-run replaces an earlier failure; a later failure replaces
   assert.equal(evaluate({ check_runs: runs }).ok, true);
   runs.push(run(REQUIRED_CHECKS[0], { id: 52, conclusion: 'failure', started_at: '2026-01-03T00:00:00Z' }));
   assert.equal(evaluate({ check_runs: runs }).ok, false);
+});
+
+test('only runs created by the GitHub Actions app count (a spoofed run from another app is ignored)', () => {
+  const runs = allGreen();
+  // the real run FAILED; a LATER green with the same name comes from another app
+  runs[0] = run(REQUIRED_CHECKS[0], { id: 1, conclusion: 'failure' });
+  runs.push(run(REQUIRED_CHECKS[0], { id: 99, started_at: '2026-06-01T00:00:00Z', app: { slug: 'some-other-app' } }));
+  const r = evaluate({ check_runs: runs });
+  assert.equal(r.ok, false);
+  assert.ok(r.problems.some((p) => p.includes('did not succeed')));
+});
+
+test('a green run from another app cannot stand in for a missing real run', () => {
+  const runs = allGreen().filter((c) => c.name !== REQUIRED_CHECKS[3]);
+  runs.push(run(REQUIRED_CHECKS[3], { app: { slug: 'evil' } }));
+  assert.equal(evaluate({ check_runs: runs }).ok, false);
+});
+
+test('a run with no app field (or app: null) fails closed', () => {
+  for (const mutate of [(c) => { delete c.app; }, (c) => { c.app = null; }, (c) => { c.app = {}; }, (c) => { c.app = { slug: 'GitHub-Actions' }; }]) {
+    const runs = allGreen();
+    mutate(runs[4]);
+    assert.equal(evaluate({ check_runs: runs }).ok, false);
+  }
 });
 
 test('extra, unrelated check runs are ignored', () => {

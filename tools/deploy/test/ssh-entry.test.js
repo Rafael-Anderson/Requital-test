@@ -57,9 +57,9 @@ test('argv is rebuilt from captures: an upper-case sha reaches deploy.sh lower-c
 test('allowed: rollback <sha> runs the checked-out rollback.sh with exactly that argv', () => {
   const sb = makeSandbox({ stubRollback: true });
   try {
-    const r = sb.entry(`rollback ${SHA}`);
+    const r = sb.entry(`rollback ${sb.base}`);
     assert.equal(r.status, 0, r.out);
-    assert.deepEqual(captured(sb), [SHA]);
+    assert.deepEqual(captured(sb), [sb.base]);
   } finally { sb.cleanup(); }
 });
 
@@ -68,7 +68,7 @@ test('the exit code of the script is the exit code of the entry script', () => {
   try {
     fs.writeFileSync(path.join(sb.prod, 'tools/deploy/rollback.sh'), '#!/usr/bin/env bash\necho failing\nexit 7\n', { mode: 0o755 });
     sb.git('update-index', '--assume-unchanged', 'tools/deploy/rollback.sh');
-    const r = sb.entry(`rollback ${SHA}`);
+    const r = sb.entry(`rollback ${sb.base}`);
     assert.equal(r.status, 7, r.out);
     assert.match(r.out, /failing/);
   } finally { sb.cleanup(); }
@@ -221,4 +221,166 @@ test('a dropped SSH connection (entry killed with SIGHUP) does not kill the run'
     await new Promise((r) => setTimeout(r, 3500));
     assert.equal(fs.existsSync(path.join(sb.fakeDir, 'finished')), true, 'run was killed with the connection');
   } finally { sb.cleanup(); }
+});
+
+// ---- MED-2: the entry script itself requires the sha to be on origin/main ----------------
+function localOnlyCommit(sb) {
+  fs.writeFileSync(path.join(sb.prod, 'local-only.txt'), 'x');
+  sb.git('add', '-A');
+  sb.git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'local only');
+  return sb.git('rev-parse', 'HEAD');
+}
+function orphanCommit(sb) {
+  // an unrelated root commit: a perfectly valid object that is on no branch of origin
+  const tree = sb.git('hash-object', '-t', 'tree', '-w', '/dev/null');
+  return sb.git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit-tree', tree, '-m', 'orphan');
+}
+
+test('deploy: a local-only commit (not on origin/main) is refused by the entry script before anything runs', () => {
+  const sb = makeSandbox({ stubDeploy: true });
+  try {
+    const bad = localOnlyCommit(sb);
+    const r = sb.entry(`deploy ${bad}`);
+    assert.equal(r.status, 2, r.out);
+    assert.match(r.out, /not an ancestor of origin\/main/);
+    assert.equal(captured(sb), null);
+    assert.equal(fs.existsSync(sb.logs) ? fs.readdirSync(sb.logs).length : 0, 0, 'nothing may be extracted or created');
+  } finally { sb.cleanup(); }
+});
+
+test('deploy: an old unrelated object is refused', () => {
+  const sb = makeSandbox({ stubDeploy: true });
+  try {
+    const bad = orphanCommit(sb);
+    const r = sb.entry(`deploy ${bad} --dry-run`);
+    assert.equal(r.status, 2, r.out);
+    assert.equal(captured(sb), null);
+  } finally { sb.cleanup(); }
+});
+
+test('deploy: a commit that exists only on a side branch is refused', () => {
+  const sb = makeSandbox({ stubDeploy: true });
+  try {
+    const side = sb.sideCommit({ 'backend/src/a.txt': 'side\n' });
+    sb.git('fetch', '-q', 'origin', '+refs/heads/*:refs/remotes/origin/*');
+    const r = sb.entry(`deploy ${side} --ci-verified`);
+    assert.equal(r.status, 2, r.out);
+    assert.equal(captured(sb), null);
+  } finally { sb.cleanup(); }
+});
+
+test('rollback: a sha that is not on origin/main is refused by the entry script too', () => {
+  const sb = makeSandbox({ stubRollback: true });
+  try {
+    for (const bad of [localOnlyCommit(sb), orphanCommit(sb)]) {
+      const r = sb.entry(`rollback ${bad}`);
+      assert.equal(r.status, 2, r.out);
+      assert.equal(captured(sb), null);
+    }
+  } finally { sb.cleanup(); }
+});
+
+test('an ancestor of origin/main is still accepted for both verbs', () => {
+  const sb = makeSandbox({ stubDeploy: true, stubRollback: true });
+  try {
+    const pin = sb.commit({ 'backend/src/a.txt': 'changed\n' });
+    assert.equal(sb.entry(`rollback ${sb.base}`).status, 0);
+    assert.deepEqual(captured(sb), [sb.base]);
+    assert.equal(sb.entry(`deploy ${pin}`).status, 0);
+  } finally { sb.cleanup(); }
+});
+
+// ---- environment scrubbing -----------------------------------------------------------------
+test('the run does not inherit SHELLOPTS, BASH_ENV, PS4, LD_PRELOAD ...', () => {
+  const sb = makeSandbox({ stubDeploy: true });
+  try {
+    const dump = '#!/usr/bin/env bash\nprintf "%s|%s|%s|%s|%s\\n" "${SHELLOPTS-unset}" "${BASH_ENV-unset}" "${PS4-unset}" "${LD_PRELOAD-unset}" "${BASH_XTRACEFD-unset}" > "$FAKE_DIR/envdump"\n';
+    const pin = sb.commit({ 'tools/deploy/deploy.sh': dump });
+    const r = sb.entry(`deploy ${pin}`, { BASH_ENV: '/dev/null', PS4: 'TRACE ', LD_PRELOAD: '', BASH_XTRACEFD: '2' });
+    assert.equal(r.status, 0, r.out);
+    const seen = fs.readFileSync(path.join(sb.fakeDir, 'envdump'), 'utf8').trim();
+    // SHELLOPTS is maintained by bash itself (it reflects the child's own options) and
+    // PS4 is bash's default "+ " once unset; everything the caller injected must be gone.
+    const [, bashEnv, ps4, ldPreload, xtracefd] = seen.split('|');
+    assert.equal(bashEnv, 'unset');
+    assert.notEqual(ps4, 'TRACE ');
+    assert.equal(ldPreload, 'unset');
+    assert.equal(xtracefd, 'unset');
+  } finally { sb.cleanup(); }
+});
+
+// ---- cleanup on every exit path --------------------------------------------------------------
+const leftovers = (sb) => (fs.existsSync(sb.logs) ? fs.readdirSync(sb.logs).filter((f) => f.startsWith('.')) : []);
+
+test('no .entry-* or .run-* litter after a normal run (stubbed deploy leaves its own run dir)', () => {
+  const sb = makeSandbox();
+  try {
+    const pin = sb.commit({ 'backend/src/a.txt': 'changed\n' });
+    const r = sb.entry(`deploy ${pin} --dry-run --ci-verified`, { ENTRY_PATH: sb.env.PATH }); // the PIN's own, real deploy.sh
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.out, /DRYRUN OK/);
+    assert.deepEqual(leftovers(sb), [], 'the capture file, status file and run directory must all be gone');
+  } finally { sb.cleanup(); }
+});
+
+test('failed extraction (the commit has no tools/deploy) leaves nothing behind', () => {
+  const sb = makeSandbox();
+  try {
+    sb.seedGit('rm', '-rq', 'tools/deploy');
+    sb.seedGit('commit', '-qm', 'remove deploy tooling');
+    sb.seedGit('push', '-q', 'origin', 'main');
+    const pin = sb.seedGit('rev-parse', 'HEAD');
+    const r = sb.entry(`deploy ${pin}`);
+    assert.equal(r.status, 2, r.out);
+    assert.deepEqual(leftovers(sb), []);
+  } finally { sb.cleanup(); }
+});
+
+test('an entry killed with SIGTERM removes its capture and status files and the run still finishes', async () => {
+  const sb = makeSandbox({ stubDeploy: true });
+  try {
+    const slow = '#!/usr/bin/env bash\nsleep 2\necho finished > "$FAKE_DIR/finished"\n';
+    const pin = sb.commit({ 'tools/deploy/deploy.sh': slow });
+    const child = cp.spawn('bash', [path.join(DEPLOY_DIR, 'ssh-entry.sh')], {
+      env: { ...sb.env, SSH_ORIGINAL_COMMAND: `deploy ${pin}` }, stdio: 'ignore',
+    });
+    await new Promise((r) => setTimeout(r, 1000));
+    child.kill('SIGTERM');
+    await new Promise((r) => setTimeout(r, 3500));
+    assert.equal(fs.existsSync(path.join(sb.fakeDir, 'finished')), true, 'the run was killed with the entry');
+    const litter = leftovers(sb).filter((f) => f.startsWith('.entry-'));
+    assert.deepEqual(litter, [], 'capture/status files must not be left behind');
+  } finally { sb.cleanup(); }
+});
+
+// ---- proper flush ------------------------------------------------------------------------------
+test('all output is delivered before the entry exits (no fixed-sleep flush)', () => {
+  const sb = makeSandbox();
+  try {
+    const noisy = '#!/usr/bin/env bash\nfor i in $(seq 1 20000); do echo "line $i"; done\necho LAST-LINE-MARKER\n';
+    const pin = sb.commit({ 'tools/deploy/deploy.sh': noisy });
+    const r = sb.entry(`deploy ${pin}`);
+    assert.equal(r.status, 0, r.out.slice(-300));
+    assert.match(r.stdout, /line 1\n/);
+    assert.match(r.stdout, /line 20000\nLAST-LINE-MARKER\n$/);
+  } finally { sb.cleanup(); }
+});
+
+// ---- the entry's own stderr is redacted ----------------------------------------------------------
+test('a failing git fetch prints its error through the redaction filter', () => {
+  const sb = makeSandbox({ stubDeploy: true });
+  try {
+    sb.git('remote', 'set-url', 'origin', 'file:///nonexistent-dir/mysql://root:topsecretpw@dbhost/x');
+    const r = sb.entry(`deploy ${sb.base}`);
+    assert.equal(r.status, 2, r.out);
+    assert.doesNotMatch(r.out, /topsecretpw/);
+    assert.match(r.out, /mysql:\/\/root:\*\*\*@dbhost/);
+    assert.equal(captured(sb), null);
+  } finally { sb.cleanup(); }
+});
+
+test('ssh-entry.sh scrubs the environment at the top and does not trace', () => {
+  const src = fs.readFileSync(path.join(DEPLOY_DIR, 'ssh-entry.sh'), 'utf8');
+  assert.match(src, /^set \+x$/m);
+  assert.match(src, /unset SHELLOPTS BASHOPTS BASH_ENV ENV BASH_XTRACEFD PS4 LD_PRELOAD LD_LIBRARY_PATH/);
 });

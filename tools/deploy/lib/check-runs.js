@@ -25,6 +25,13 @@ const REQUIRED_CHECKS = [
   'e2e (playwright)',
 ];
 
+// Only check runs created by the GitHub Actions app count. Any GitHub App (or
+// anyone with a token that can create check runs) may publish a run NAMED like a
+// required check; a spoofed green must never mask a real failure or stand in for
+// a missing run. A run with no app field at all fails closed (it is ignored, so
+// the required check reads as missing).
+const TRUSTED_APP_SLUG = 'github-actions';
+
 // Newest run wins: a re-run of a failed job replaces the failure, and a later
 // failure replaces an earlier success. Newest = latest started_at, then id.
 function latest(runs) {
@@ -44,9 +51,9 @@ function evaluate(response, required = REQUIRED_CHECKS) {
     problems.push(`response is truncated (${runs.length} of ${response.total_count} check runs)`);
   }
   for (const name of required) {
-    const matching = runs.filter((r) => r && r.name === name);
+    const matching = runs.filter((r) => r && r.name === name && r.app && r.app.slug === TRUSTED_APP_SLUG);
     if (matching.length === 0) {
-      problems.push(`required check missing: ${name}`);
+      problems.push(`required check missing (or not produced by GitHub Actions): ${name}`);
       continue;
     }
     const run = latest(matching);
@@ -61,7 +68,7 @@ function evaluate(response, required = REQUIRED_CHECKS) {
 
 function selfTest() {
   const ok = (name, id = 1, t = '2026-01-01T00:00:00Z') => ({
-    id, name, status: 'completed', conclusion: 'success', started_at: t,
+    id, name, status: 'completed', conclusion: 'success', started_at: t, app: { slug: 'github-actions' },
   });
   const all = REQUIRED_CHECKS.map((n, i) => ok(n, i + 1));
   const cases = [
@@ -72,6 +79,8 @@ function selfTest() {
     ['rerun fixes', { check_runs: [{ ...all[0], conclusion: 'failure' }, ok(REQUIRED_CHECKS[0], 99, '2026-02-01T00:00:00Z'), ...all.slice(1)] }, true],
     ['later failure wins', { check_runs: [{ ...all[0], conclusion: 'failure', started_at: '2026-03-01T00:00:00Z' }, ...all.slice(1)] }, false],
     ['no array', {}, false],
+    ['spoofed later success from another app does not mask a failure', { check_runs: [{ ...all[0], conclusion: 'failure' }, { ...ok(REQUIRED_CHECKS[0], 99, '2026-05-01T00:00:00Z'), app: { slug: 'evil-app' } }, ...all.slice(1)] }, false],
+    ['missing app field fails closed', { check_runs: all.map((r) => { const { app, ...rest } = r; return rest; }) }, false],
   ];
   let bad = 0;
   for (const [label, input, want] of cases) {
@@ -104,4 +113,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { REQUIRED_CHECKS, evaluate, latest };
+module.exports = { REQUIRED_CHECKS, TRUSTED_APP_SLUG, evaluate, latest };

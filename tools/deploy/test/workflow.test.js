@@ -282,8 +282,12 @@ test('no secrets or token paths were left in the scripts', () => {
 test('deploy.sh checksum columns exist in backend/src/db/types.ts', () => {
   const types = fs.readFileSync(path.join(REPO, 'backend/src/db/types.ts'), 'utf8');
   const sh = fs.readFileSync(path.join(DEPLOY_DIR, 'deploy.sh'), 'utf8');
-  const specs = [...sh.matchAll(/^\s+'(\w+)\|(\w*)\|([\w,]+)'$/gm)];
-  assert.ok(specs.length >= 10, `found only ${specs.length} checksum specs`);
+  const specs = [
+    ...sh.matchAll(/^\s+'(\w+)\|(\w*)\|([\w,]+)\|[^']*'$/gm),
+    ...sh.matchAll(/^ORDER_MONEY_SET='(\w+)\|(\w*)\|([\w,]+)\|[^']*'$/gm),
+    ...sh.matchAll(/^\s+'(\w+)\|(\w*)\|([\w,]+)'$/gm),
+  ];
+  assert.ok(specs.length >= 12, `found only ${specs.length} checksum specs`);
   for (const [, table, bound, cols] of specs) {
     const re = new RegExp(`export interface ${table}Row \\{([\\s\\S]*?)\\n\\}`, 'i');
     const m = types.match(re);
@@ -304,21 +308,73 @@ test('runbook: the bootstrap section has every copy-pasteable step', () => {
   const s = section();
   for (const needle of [
     'ssh-keygen -t ed25519', 'requital-gha-deploy', 'no passphrase',
-    'restrict,command="/home/deploy/bin/requital-ssh-entry.sh",no-port-forwarding,no-agent-forwarding,no-pty,no-X11-forwarding',
-    'git -C /home/deploy/requital show origin/main:tools/deploy/ssh-entry.sh > /home/deploy/bin/requital-ssh-entry.sh',
-    'chmod 755 /home/deploy/bin/requital-ssh-entry.sh', 'sha256sum /home/deploy/bin/requital-ssh-entry.sh',
+    'restrict,command="/usr/local/sbin/requital-ssh-entry.sh",no-port-forwarding,no-agent-forwarding,no-pty,no-X11-forwarding',
+    'git -C /home/deploy/requital show origin/main:tools/deploy/ssh-entry.sh > /usr/local/sbin/requital-ssh-entry.sh',
+    'chown root:root /usr/local/sbin/requital-ssh-entry.sh',
+    'chmod 755 /usr/local/sbin/requital-ssh-entry.sh', 'sha256sum /usr/local/sbin/requital-ssh-entry.sh',
     'ssh-keyscan -t ed25519', 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub',
     'DEPLOY_SSH_KEY', 'DEPLOY_HOST', 'DEPLOY_USER', 'DEPLOY_KNOWN_HOSTS',
     'Settings > Environments > New environment', 'Required reviewers', 'Selected branches and tags',
     'Remove-Item', 'Revoking access', 'authorized_keys', 'fail closed', 'tools/deploy/lib/check-runs.js',
     'CODE-ONLY', 'dry-run', 'Not verified', 'DRYRUN OK',
+    // MED-1: honest scope of the root-owned install
+    'does not defend against a compromised `deploy` user'.replace('does not defend against', 'not a defence against'),
+    'must be re-copied', 'the hash re-checked',
+    // MED-3: key-holder powers and the rollback record
+    'ANY sha that is an ancestor of `origin/main`', 'bypasses the workflow', 'advisory on the VPS side', 'deployed-shas',
+    'Environment secret of `production`', 'rotate the key', 'deleting the `authorized_keys` line',
+    // MED-5: the controls and how to verify them
+    'THE control', 'Prevent self-review', 'Environment secrets only', 'Delete any repository-level or organisation-level secret',
+    'Pro, Team, Enterprise', 'is not allowed to deploy to production due to environment protection rules', 'any branch other than `main`',
   ]) assert.ok(s.includes(needle), `runbook is missing: ${needle}`);
   assert.doesNotMatch(s, /GITHUB_TOKEN_FILE|personal access token|create a token/i, 'must not recommend a token on the VPS');
 });
 
 test('runbook: the ssh-entry.sh sha256 printed in the runbook matches the file', () => {
   const actual = crypto.createHash('sha256').update(fs.readFileSync(path.join(DEPLOY_DIR, 'ssh-entry.sh'))).digest('hex');
-  const m = section().match(/^([0-9a-f]{64}) {2}\/home\/deploy\/bin\/requital-ssh-entry\.sh$/m);
+  const m = section().match(/^([0-9a-f]{64}) {2}\/usr\/local\/sbin\/requital-ssh-entry\.sh$/m);
   assert.ok(m, 'runbook has no sha256 line for ssh-entry.sh');
   assert.equal(m[1], actual, 'ssh-entry.sh changed: update the hash in docs/runbook.md (and the PR description)');
+});
+
+// ---- pipefail / SIGPIPE audit -------------------------------------------------------------------
+// `producer | grep -q` / `| head` / `| grep -m` under pipefail returns 141 once the producer
+// has more output than the pipe buffer, and an app is silently treated as "unchanged".
+test('no script pipes into an early-exiting reader (grep -q, grep -m, head, awk exit, read)', () => {
+  const files = [
+    ...['deploy.sh', 'rollback.sh', 'ssh-entry.sh'].map((f) => path.join(DEPLOY_DIR, f)),
+    ...fs.readdirSync(path.join(DEPLOY_DIR, 'lib')).filter((f) => f.endsWith('.sh')).map((f) => path.join(DEPLOY_DIR, 'lib', f)),
+  ];
+  const bad = /\|\s*(grep\s+(-[a-zA-Z]*[qm][a-zA-Z]*\b|--quiet|--max-count)|head\b|read\b|sed\s+-n\s+'?\d+q|awk\b[^|]*\bexit\b)/;
+  for (const f of files) {
+    stripComments(fs.readFileSync(f, 'utf8')).split('\n').forEach((line, i) => {
+      assert.doesNotMatch(line, bad, `${path.basename(f)}: early-exit reader in a pipeline: ${line.trim()} (line ~${i + 1})`);
+    });
+  }
+});
+
+test('the changed-file list is read NUL separated with quotepath off', () => {
+  const sh = fs.readFileSync(path.join(DEPLOY_DIR, 'deploy.sh'), 'utf8');
+  assert.match(sh, /-c core\.quotepath=off diff --name-only -z/);
+  assert.match(sh, /read -r -d ''/);
+});
+
+// ---- workflow details added in the review round ---------------------------------------------------
+test('deploy.yml: the ancestry check compares against the dispatched commit, not the name "main"', () => {
+  const gate = runBlocks(block(CODE, 2, 'gate')).map((b) => b.script).join('\n');
+  assert.match(gate, /compare\/\$SHA\.\.\.\$GITHUB_SHA/);
+  assert.doesNotMatch(gate, /\.\.\.main/);
+});
+
+test('deploy.yml: carriage returns are stripped from the key and the known_hosts value', () => {
+  const ssh = runBlocks(CODE).map((b) => b.script).join('\n');
+  assert.match(ssh, /\| tr -d '\\r' > "\$keydir\/id"/);
+  assert.match(ssh, /\| tr -d '\\r' > "\$keydir\/known_hosts"/);
+});
+
+test('the flag matrix runs with npx --no-install and builds/merge use the normal umask', () => {
+  const sh = fs.readFileSync(path.join(DEPLOY_DIR, 'deploy.sh'), 'utf8');
+  assert.match(sh, /npx --no-install ts-node/);
+  assert.match(sh, /^umask 022$/m);
+  assert.doesNotMatch(sh, /^umask 077$/m);
 });

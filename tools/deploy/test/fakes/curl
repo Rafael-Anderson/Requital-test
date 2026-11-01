@@ -20,6 +20,8 @@ fi
 code=200
 case "$url" in
   */health/ready) code="${FAKE_HEALTH:-200}" ;;
+  http://127.0.0.1:3002/*) code="${FAKE_STOREFRONT_CODE:-200}" ;;
+  http://127.0.0.1:3001/*) code="${FAKE_ADMIN_CODE:-200}" ;;
 esac
 [ "$wcode" = 0 ] || printf '%s' "$code"
 exit 0

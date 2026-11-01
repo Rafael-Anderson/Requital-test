@@ -56,3 +56,70 @@ test('redact: is line-streaming (works on long multi-line input)', () => {
   assert.doesNotMatch(out, /pw\d+@/);
   assert.equal(out.split('\n').length, 501);
 });
+
+test('redact: MYSQL_PWD / PWD-style and *_PASS names', () => {
+  for (const line of ['MYSQL_PWD=s3cretpw', 'DB_PASS=hunter22', 'DB_PASSWORD: hunter33', 'APP_PWD = hunter44', 'REDIS_PASS=hunter55']) {
+    const out = redact(`${line}\n`);
+    assert.match(out, /\*\*\*/, line);
+    assert.doesNotMatch(out, /s3cretpw|hunter\d+/, line);
+  }
+});
+
+test('redact: JSON-style values', () => {
+  const out = redact('{"user":"bob","password":"p w 1","apiKey":"AKIA123","secret":"s3","token":"t0k","note":"fine"}\n');
+  assert.doesNotMatch(out, /p w 1|AKIA123|"s3"|t0k/);
+  assert.match(out, /"user":"bob"/);
+});
+
+test('redact: Authorization headers mask the whole credential, whatever the scheme', () => {
+  for (const line of [
+    'Authorization: Basic dXNlcjpwYXNzd29yZA==', 'Authorization: Bearer abc.def.ghi', 'authorization: Token tok_12345',
+    'Proxy-Authorization: Basic Zm9vOmJhcg==', '"Authorization": "Bearer abc.def"', 'Authorization=Bearer xyz789',
+  ]) {
+    const out = redact(`${line}\n`);
+    assert.doesNotMatch(out, /dXNlcjpwYXNzd29yZA|abc\.def|tok_12345|Zm9vOmJhcg|xyz789|Basic dX|Bearer abc/, line);
+  }
+});
+
+test('redact: cookies', () => {
+  assert.doesNotMatch(redact('Cookie: session=abc123; other=zzz\n'), /abc123|zzz/);
+  assert.doesNotMatch(redact('Set-Cookie: sid=qq991; Path=/\n'), /qq991/);
+});
+
+test('redact: quoted values with spaces', () => {
+  const out = redact('PASSWORD="two words here" and SECRET=\'single quoted pw\' tail\n');
+  assert.doesNotMatch(out, /two words here|single quoted pw|words|quoted pw/);
+  assert.match(out, / tail\n$/);
+});
+
+test('redact: a raw @ inside a URL password is masked up to the LAST @ before the host', () => {
+  assert.equal(redact('mysql://u:p@ss@db.internal:3306/shop\n'), 'mysql://u:***@db.internal:3306/shop\n');
+  assert.equal(redact('postgres://user:a@b@c@host/x?y=1\n'), 'postgres://user:***@host/x?y=1\n');
+  assert.equal(redact('see http://example.com:8080/path?email=a@b ok\n'), 'see http://example.com:8080/path?email=a@b ok\n');
+});
+
+test('redact: a PEM private key is masked from the BEGIN line to the END line, body included', () => {
+  const pem = ['before', '-----BEGIN OPENSSH PRIVATE KEY-----', 'b3BlbnNzaC1rZXktdjEAAAAABG5vbmU', 'AAAAB3NzaC1lZDI1NTE5AAAAIFAKEKEY', '-----END OPENSSH PRIVATE KEY-----', 'after'].join('\n') + '\n';
+  const out = redact(pem);
+  assert.doesNotMatch(out, /b3BlbnNzaC1|AAAAB3NzaC1lZDI1|FAKEKEY/);
+  assert.match(out, /^before\n/);
+  assert.match(out, /\nafter\n$/);
+  assert.match(out, /REDACTED PRIVATE KEY/);
+});
+
+test('redact: a one-line PEM does not swallow the lines after it', () => {
+  const out = redact('-----BEGIN RSA PRIVATE KEY-----MIIEAAAA-----END RSA PRIVATE KEY-----\nstill visible\n');
+  assert.doesNotMatch(out, /MIIEAAAA/);
+  assert.match(out, /still visible/);
+});
+
+test('redact: an unterminated PEM block masks the rest of the stream (fail closed)', () => {
+  const out = redact('-----BEGIN PRIVATE KEY-----\nAAAA\nBBBB\n');
+  assert.doesNotMatch(out, /AAAA|BBBB/);
+});
+
+test('redact: ssh-entry.sh embeds a byte-identical copy of the sed program', () => {
+  const fs = require('fs');
+  const grab = (file) => fs.readFileSync(path.join(DEPLOY_DIR, file), 'utf8').match(/<<'REDACT_SED_EOF'\n([\s\S]*?)\nREDACT_SED_EOF\n/)[1];
+  assert.equal(grab('ssh-entry.sh'), grab('lib/redact.sh'));
+});

@@ -6,8 +6,10 @@ for a in "$@"; do
 done
 [ -n "${MYSQL_PWD:-}" ] || { echo "FAKE mysql: MYSQL_PWD not set" >&2; exit 9; }
 db=""; sql=""
+echo "$MYSQL_PWD" > "$FAKE_DIR/pwd-seen"
+: > "$FAKE_DIR/args-seen"
 while [ "$#" -gt 0 ]; do
-  case "$1" in -e) sql="$2"; shift 2; continue ;; --*) ;; *) db="$1" ;; esac
+  case "$1" in -e) sql="$2"; shift 2; continue ;; --*) echo "$1" >> "$FAKE_DIR/args-seen" ;; *) db="$1" ;; esac
   shift
 done
 echo "mysql[$db] $sql" >> "$FAKE_LOG"
@@ -20,6 +22,24 @@ case "$sql" in
     esac ;;
   "SELECT subdomain FROM shop"*) echo "${FAKE_SLUG-testshop}" ;;
   "SELECT IFNULL(MAX("*) echo 100 ;;
+  "SELECT \`"*"\`, MD5(CONCAT_WS"*)
+    # per-row hashes: rows/<table>.before|after if the test provided them,
+    # otherwise a default two-row table (row 1 "damaged" after a mutating migration)
+    tbl="$(printf '%s' "$sql" | sed -E 's/.* FROM `([a-z]+)`.*/\1/')"
+    case "$sql" in *'`total`'*) tbl=ordermoney ;; esac
+    phase=before; [ ! -e "$FAKE_DIR/migrated" ] || phase=after
+    if [ -f "$FAKE_DIR/rows/$tbl.$phase" ]; then
+      cat "$FAKE_DIR/rows/$tbl.$phase"
+    else
+      for id in 1 2; do
+        h="h$id"
+        [ "$phase$id" != "after1" ] || [ ! -e "$FAKE_DIR/mutated" ] || h="h1-damaged"
+        line="$id	$h"
+        case "$sql" in *'CAST(`updatedAt` AS CHAR)'*) line="$line	U$id" ;; esac
+        case "$sql" in *', `orderId` FROM'*) line="$line	$id" ;; esac
+        printf '%s\n' "$line"
+      done
+    fi ;;
   *BIT_XOR*)
     if [ -e "$FAKE_DIR/mutated" ]; then printf '5\t999\n'; else printf '5\t123456\n'; fi ;;
   "SELECT (SELECT COUNT(*) FROM shop)"*)

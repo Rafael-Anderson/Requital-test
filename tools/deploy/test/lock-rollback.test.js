@@ -67,6 +67,7 @@ function twoDeploys(sb) {
   const c1 = sb.commit({ 'backend/src/a.txt': 'one\n' }, 'one');
   const c2 = sb.commit({ 'backend/src/a.txt': 'two\n', 'storefront/x.txt': 'x\n' }, 'two');
   sb.git('pull', '-q', '--ff-only');
+  sb.recordDeployed(c1, c2);
   return [c1, c2];
 }
 
@@ -106,6 +107,7 @@ test('rollback: target not an ancestor of HEAD is refused (side branch)', () => 
   twoDeploys(sb);
   const side = sb.sideCommit({ 'backend/src/a.txt': 'side\n' });
   sb.git('fetch', '-q', 'origin', '+refs/heads/*:refs/remotes/origin/*');
+  sb.recordDeployed(side);
   const r = sb.run('rollback.sh', [side]);
   assert.equal(r.status, 2, r.out);
   assert.match(r.out, /not an ancestor of the current HEAD/);
@@ -114,6 +116,7 @@ test('rollback: target not an ancestor of HEAD is refused (side branch)', () => 
 test('rollback: a roll-FORWARD target is refused (rollback only goes backwards)', () => withSb((sb) => {
   const c1 = sb.commit({ 'backend/src/a.txt': 'one\n' });
   const c2 = sb.commit({ 'backend/src/a.txt': 'two\n' });
+  sb.recordDeployed(c1, c2);
   const r = sb.run('rollback.sh', [c2]);
   assert.equal(r.status, 2, r.out);
   assert.equal(sb.git('rev-parse', 'HEAD'), sb.base);
@@ -125,6 +128,7 @@ test('rollback: a target only reachable from local-only commits is refused (not 
   sb.git('add', '-A');
   sb.git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'l1');
   const l1 = sb.git('rev-parse', 'HEAD');
+  sb.recordDeployed(l1);
   fs.writeFileSync(path.join(sb.prod, 'l2.txt'), '2');
   sb.git('add', '-A');
   sb.git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'l2');
@@ -149,6 +153,7 @@ test('rollback: notes migrations that stay applied', () => withSb((sb) => {
   const c1 = sb.commit({ 'backend/src/a.txt': 'one\n' });
   sb.commit({ 'backend/prisma/migrations/20990202000000_m/migration.sql': '-- m\n' });
   sb.git('pull', '-q', '--ff-only');
+  sb.recordDeployed(c1);
   const r = sb.run('rollback.sh', [c1, '--dry-run']);
   assert.match(r.out, /20990202000000_m/);
 }));
@@ -161,9 +166,59 @@ test('rollback: runs from a temp copy so reset --hard may replace rollback.sh', 
   const c1 = sb.commit({ 'tools/deploy/rollback.sh': variant, 'backend/src/a.txt': 'one\n' });
   sb.commit({ 'tools/deploy/rollback.sh': real, 'backend/src/a.txt': 'two\n' });
   sb.git('pull', '-q', '--ff-only');
+  sb.recordDeployed(c1);
   const r = cp.spawnSync('bash', [path.join(sb.prod, 'tools/deploy/rollback.sh'), c1], { env: sb.env, encoding: 'utf8', timeout: 60000 });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /DEPLOY_RESULT=OK/);
   assert.equal(sb.git('rev-parse', 'HEAD'), c1);
   assert.match(fs.readFileSync(path.join(sb.prod, 'tools/deploy/rollback.sh'), 'utf8'), /padding to shift/);
+}));
+
+// ---- MED-3: only commits this pipeline deployed -------------------------------------------
+test('rollback: a sha that is on main and an ancestor but NOT in deployed-shas is refused', () => withSb((sb) => {
+  const c1 = sb.commit({ 'backend/src/a.txt': 'one\n' });
+  const c2 = sb.commit({ 'backend/src/a.txt': 'two\n' });
+  sb.git('pull', '-q', '--ff-only');
+  sb.recordDeployed(c2); // c1 was never deployed by the pipeline
+  const r = sb.run('rollback.sh', [c1]);
+  assert.equal(r.status, 2, r.out);
+  assert.match(r.out, /not in .*deployed-shas/);
+  assert.equal(sb.git('rev-parse', 'HEAD'), c2);
+  assert.equal(sb.calls().filter((c) => /^(npm|pm2 restart)/.test(c)).length, 0);
+}));
+
+test('rollback: with no deployed-shas file at all every target is refused', () => withSb((sb) => {
+  const c1 = sb.commit({ 'backend/src/a.txt': 'one\n' });
+  sb.commit({ 'backend/src/a.txt': 'two\n' });
+  sb.git('pull', '-q', '--ff-only');
+  const r = sb.run('rollback.sh', [c1]);
+  assert.equal(r.status, 2, r.out);
+  assert.match(r.out, /deployed-shas/);
+}));
+
+test('rollback: matching is exact (a prefix or a different sha on a recorded line does not match)', () => withSb((sb) => {
+  const c1 = sb.commit({ 'backend/src/a.txt': 'one\n' });
+  sb.commit({ 'backend/src/a.txt': 'two\n' });
+  sb.git('pull', '-q', '--ff-only');
+  fs.mkdirSync(sb.logs, { recursive: true });
+  fs.writeFileSync(path.join(sb.logs, 'deployed-shas'), `${c1.slice(0, 39)} 2026-01-01T00:00:00Z x\n${c1}extra 2026-01-01T00:00:00Z x\n`);
+  assert.equal(sb.run('rollback.sh', [c1]).status, 2);
+}));
+
+test('rollback: a deploy followed by a rollback uses the file deploy.sh wrote', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  sb.marker(pin);
+  assert.equal(sb.run('deploy.sh', [pin, '--ci-verified']).status, 0);
+  const r = sb.run('rollback.sh', [sb.base]); // the "previous" sha recorded by the deploy
+  assert.equal(r.status, 0, r.out);
+  assert.equal(sb.git('rev-parse', 'HEAD'), sb.base);
+}));
+
+test('rollback leaves no temporary files, and its header no longer claims "once a legitimate main commit" suffices', () => withSb((sb) => {
+  const [c1] = twoDeploys(sb);
+  assert.equal(sb.run('rollback.sh', [c1]).status, 0);
+  assert.deepEqual(sb.tmpLeftovers(), []);
+  const head = fs.readFileSync(path.join(__dirname, '..', 'rollback.sh'), 'utf8').slice(0, 1800);
+  assert.match(head, /deployed-shas/);
+  assert.doesNotMatch(head, /once a legitimate main commit/);
 }));

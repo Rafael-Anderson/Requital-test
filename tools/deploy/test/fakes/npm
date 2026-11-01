@@ -6,6 +6,10 @@ app="$(basename "$PWD")"
 echo "npm[$app] $*" >> "$FAKE_LOG"
 case "$*" in
   "ci")
+    if [ "${FAKE_LINGER:-}" = 1 ]; then
+      # a detached child that outlives the build; it must not hold the deploy lock
+      ( sleep 20 > /dev/null 2>&1 & echo $! > "$FAKE_DIR/linger-pid" )
+    fi
     if [ "${FAKE_LEAK:-}" = 1 ]; then
       echo "debug DATABASE_URL=mysql://root:topsecretpw@db.internal/prod"
       echo "request header Authorization: Bearer abcdef0123456789abcdef"
@@ -14,6 +18,7 @@ case "$*" in
     ;;
   "run db:migrate")
     echo "Applying 20990101000000_new_thing..."
+    touch "$FAKE_DIR/migrated"
     if [ "${FAKE_MIGRATE_FAIL:-}" = 1 ]; then
       echo "Migration 20990101000000_new_thing failed: boom" >&2
       exit 1

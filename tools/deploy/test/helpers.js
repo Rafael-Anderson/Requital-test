@@ -81,6 +81,7 @@ function makeSandbox(opts = {}) {
   const fakeDir = path.join(root, 'fakestate');
   fs.mkdirSync(bin);
   fs.mkdirSync(fakeDir);
+  fs.mkdirSync(path.join(root, 'tmp'));
   for (const f of fs.readdirSync(FAKES)) {
     fs.copyFileSync(path.join(FAKES, f), path.join(bin, f));
     fs.chmodSync(path.join(bin, f), 0o755);
@@ -114,6 +115,7 @@ function makeSandbox(opts = {}) {
     PATH: `${bin}:${NODE_DIR}:/usr/bin:/bin`,
     HOME: root,
     LANG: 'C',
+    TMPDIR: path.join(root, 'tmp'),
     APP_DIR: prod,
     LOG_DIR: logs,
     LOCK_FILE: path.join(root, 'deploy.lock'),
@@ -174,11 +176,27 @@ function makeSandbox(opts = {}) {
       const t = new Date(Date.now() - ageSeconds * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
       write(path.join(logs, `dryrun-ok-${pin}`), `${t}\n`);
     },
+    /** Record shas as deployed (what a successful deploy.sh writes), so rollback.sh may target them. */
+    recordDeployed(...shas) {
+      fs.mkdirSync(logs, { recursive: true });
+      fs.appendFileSync(path.join(logs, 'deployed-shas'), shas.map((x) => `${x} 2026-01-01T00:00:00Z test\n`).join(''));
+    },
+    /** Names left behind in the private TMPDIR (must be empty after every run). */
+    tmpLeftovers: () => fs.readdirSync(path.join(root, 'tmp')),
     hasMarker: (pin) => fs.existsSync(path.join(logs, `dryrun-ok-${pin}`)),
     logFiles: () => (fs.existsSync(logs) ? fs.readdirSync(logs).filter((f) => f.endsWith('.log')) : []),
     cleanup() { fs.rmSync(root, { recursive: true, force: true }); },
   };
   return sb;
+}
+
+/** A commit that adds `n` backend files with long names: a changed-file list far above the 64 KiB pipe buffer. */
+function hugeChange(sb, n = 3000, extra = {}) {
+  const files = { ...extra };
+  for (let i = 0; i < n; i++) {
+    files[`backend/src/generated/${'x'.repeat(48)}-file-number-${String(i).padStart(5, '0')}.txt`] = `${i}\n`;
+  }
+  return sb.commit(files, 'huge change');
 }
 
 /** The standard "something to deploy" commit: backend + storefront + admin change and one new migration. */
@@ -201,4 +219,4 @@ const MUTATING = [
   /DROP DATABASE/,
 ];
 
-module.exports = { REPO, DEPLOY_DIR, makeSandbox, standardChange, git, write, MUTATING, GITENV };
+module.exports = { REPO, DEPLOY_DIR, makeSandbox, standardChange, hugeChange, git, write, MUTATING, GITENV };

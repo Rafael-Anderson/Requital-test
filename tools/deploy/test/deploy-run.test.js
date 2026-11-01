@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
-const { makeSandbox, standardChange, git } = require('./helpers');
+const { makeSandbox, standardChange, hugeChange, git } = require('./helpers');
 
 function real(sb, pin, env = {}, extra = []) {
   sb.marker(pin);
@@ -87,7 +87,7 @@ test('a checksum mismatch after the migrations STOPS before any restart', () => 
   const pin = standardChange(sb);
   const r = real(sb, pin, { FAKE_MIGRATE_MUTATES: '1' });
   assert.equal(r.status, 1, r.out);
-  assert.match(r.out, /CHECKSUM MISMATCH/);
+  assert.match(r.out, /ROW CHECK FAILED order/);
   assert.match(r.out, /NO process was restarted/);
   assert.match(r.out, /DEPLOY_RESULT=FAILED step=9/);
   assert.match(r.out, /mode=rollback/);
@@ -280,4 +280,221 @@ test('the order checksum inside the flag matrix is informational (orders keep ar
   // the fake prints a random order count each call; the run must still pass
   const pin = standardChange(sb, BILLING);
   assert.equal(real(sb, pin).status, 0);
+}, { matrix: true }));
+
+// ---- HIGH-1: a huge changed-file list must not make an app look "unchanged" ----------
+test('a changed-file list far above the pipe buffer still rebuilds and restarts every changed app', () => withSb((sb) => {
+  const pin = hugeChange(sb, 3000, { 'admin/y.txt': 'y\n', 'storefront/x.txt': 'x\n' });
+  const listSize = sb.seedGit('diff', '--name-only', sb.base, pin).length;
+  assert.ok(listSize > 150000, `list is only ${listSize} bytes`);
+  const r = real(sb, pin);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /files changed PROD\.\.PIN: 3002/);
+  assert.match(r.out, /apps to rebuild: backend=1 storefront=1 admin=1/);
+  const c = sb.calls();
+  for (const app of ['backend', 'storefront', 'admin']) assert.ok(c.includes(`npm[${app}] run build`), `${app} was not rebuilt`);
+  assert.deepEqual(restarts(sb), ['pm2 restart requital-backend', 'pm2 restart requital-storefront', 'pm2 restart requital-admin']);
+}));
+
+test('the same holds in a dry-run plan (admin is the FIRST path in the list)', () => withSb((sb) => {
+  const pin = hugeChange(sb, 3000, { 'admin/y.txt': 'y\n' });
+  const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified']);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /apps to rebuild: backend=1 storefront=0 admin=1/);
+}));
+
+test('paths with non-ASCII characters are still attributed to their app (core.quotepath off)', () => withSb((sb) => {
+  const pin = sb.commit({ 'admin/caf\u00e9-\u30c6\u30b9\u30c8.txt': 'x\n' });
+  const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified']);
+  assert.match(r.out, /apps to rebuild: backend=0 storefront=0 admin=1/);
+}));
+
+// ---- the tolerant row-level gate ---------------------------------------------------------
+function rows(sb, table, phase, text) {
+  fs.mkdirSync(path.join(sb.fakeDir, 'rows'), { recursive: true });
+  fs.writeFileSync(path.join(sb.fakeDir, 'rows', `${table}.${phase}`), text);
+}
+
+test('a normal order edit during the window does NOT stop the deploy (and is counted)', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  // order 1 was edited by the shop: money columns changed, its items were replaced
+  // (row 1 gone, replaced by an id above the captured max), a shop row's updatedAt moved.
+  rows(sb, 'ordermoney', 'before', '1\tm1\n2\tm2\n');
+  rows(sb, 'ordermoney', 'after', '1\tm1-edited\n2\tm2\n');
+  rows(sb, 'orderitem', 'before', '1\ti1\t1\n2\ti2\t2\n');
+  rows(sb, 'orderitem', 'after', '2\ti2\t2\n101\tnew\t1\n');
+  rows(sb, 'shop', 'before', '1\tshop1\tU1\n');
+  rows(sb, 'shop', 'after', '1\tshop1-changed\tU9\n');
+  const r = real(sb, pin);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /orders edited during the window \(money columns changed\): 1/);
+  assert.match(r.out, /rows orderitem: checked=2 changed=1 tolerated=1 fatal=0/);
+  assert.match(r.out, /rows shop: checked=1 changed=1 tolerated=1 fatal=0/);
+  assert.match(r.out, /tolerated \(normal application edits during the window\): 2 row\(s\)/);
+  assert.equal(restarts(sb).length, 3);
+}));
+
+test('a changed orderitem row of an order that was NOT edited stops before any restart', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  rows(sb, 'orderitem', 'before', '1\ti1\t1\n2\ti2\t2\n');
+  rows(sb, 'orderitem', 'after', '1\ti1-DAMAGED\t1\n2\ti2\t2\n');
+  const r = real(sb, pin);
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /ROW CHECK FAILED orderitem/);
+  assert.match(r.out, /fatal ids \(first 5\): 1/);
+  assert.match(r.out, /DEPLOY_RESULT=FAILED step=9/);
+  assert.equal(restarts(sb).length, 0);
+}));
+
+test('a changed row whose updatedAt did not move (simulated migration damage) stops before any restart', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  rows(sb, 'shop', 'before', '1\tshop1\tU1\n');
+  rows(sb, 'shop', 'after', '1\tshop1-DAMAGED\tU1\n');
+  const r = real(sb, pin);
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /ROW CHECK FAILED shop/);
+  assert.equal(restarts(sb).length, 0);
+}));
+
+test('a table without updatedAt is judged on immutable columns only: a vanished stockmovement row is fatal', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  rows(sb, 'stockmovement', 'before', '1\ts1\n2\ts2\n');
+  rows(sb, 'stockmovement', 'after', '2\ts2\n');
+  const r = real(sb, pin);
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /ROW CHECK FAILED stockmovement/);
+  assert.equal(restarts(sb).length, 0);
+}));
+
+test('the per-row SQL: bounded by the captured max id, explicit columns, never GROUP_CONCAT, no PDPL-scrubbable phone', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  assert.equal(real(sb, pin).status, 0);
+  const rowQueries = sb.calls().filter((c) => /MD5\(CONCAT_WS/.test(c) && !/BIT_XOR/.test(c));
+  assert.ok(rowQueries.length >= 18, `only ${rowQueries.length} per-row queries (9 tables x before/after)`);
+  for (const q of rowQueries) {
+    assert.match(q, /WHERE `id` <= 100 ORDER BY `id`/);
+    assert.doesNotMatch(q, /GROUP_CONCAT/);
+  }
+  const customer = rowQueries.find((q) => /FROM `customer`/.test(q));
+  assert.doesNotMatch(customer, /`phone`/);
+  const shop = rowQueries.find((q) => /FROM `shop`/.test(q));
+  assert.match(shop, /CAST\(`updatedAt` AS CHAR\)/);
+}));
+
+// ---- the lock must not be inherited by children ---------------------------------------
+test('a lingering child of the build does not keep the deploy lock held after the deploy exits', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  const r = real(sb, pin, { FAKE_LINGER: '1' });
+  try {
+    assert.equal(r.status, 0, r.out);
+    const pidFile = path.join(sb.fakeDir, 'linger-pid');
+    assert.ok(fs.existsSync(pidFile), 'the fake did not start a lingering child');
+    const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+    process.kill(pid, 0); // still alive
+    const probe = cp.spawnSync('flock', ['-n', sb.env.LOCK_FILE, 'true']);
+    assert.equal(probe.status, 0, 'the lock is still held by a lingering child');
+  } finally {
+    try { process.kill(Number(fs.readFileSync(path.join(sb.fakeDir, 'linger-pid'), 'utf8'))); } catch { /* already gone */ }
+  }
+}));
+
+// ---- temp files are removed on every exit path --------------------------------------------
+test('no temporary files are left behind: success, failure, refusal, dry-run, lock-out', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  assert.equal(sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified']).status, 0);
+  assert.deepEqual(sb.tmpLeftovers(), [], 'dry-run');
+  const pin2 = sb.commit({ 'backend/src/a.txt': 'again\n' });
+  assert.equal(sb.run('deploy.sh', [pin2, '--ci-verified']).status, 2);
+  assert.deepEqual(sb.tmpLeftovers(), [], 'refusal');
+  sb.marker(pin2);
+  assert.equal(sb.run('deploy.sh', [pin2, '--ci-verified'], { FAKE_MIGRATE_FAIL: '1' }).status, 1);
+  assert.deepEqual(sb.tmpLeftovers(), [], 'failure');
+}));
+
+test('no temporary files are left behind after a clean success', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  assert.equal(real(sb, pin).status, 0);
+  assert.deepEqual(sb.tmpLeftovers(), []);
+}));
+
+// ---- deployed-shas -----------------------------------------------------------------------
+test('a successful deploy records the previous sha (first time) and the new sha; a failed one records nothing', () => withSb((sb) => {
+  const failing = standardChange(sb);
+  assert.equal(real(sb, failing, { FAKE_MIGRATE_FAIL: '1' }).status, 1);
+  assert.equal(fs.existsSync(path.join(sb.logs, 'deployed-shas')), false, 'a failed run must not record');
+  // roll the checkout back by hand and deploy for real
+  sb.git('reset', '-q', '--hard', sb.base);
+  assert.equal(real(sb, failing).status, 0);
+  const lines = fs.readFileSync(path.join(sb.logs, 'deployed-shas'), 'utf8').trim().split('\n');
+  assert.deepEqual(lines.map((l) => l.split(' ')[0]), [sb.base, failing]);
+  assert.match(lines[0], /^[0-9a-f]{40} \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ previous$/);
+  assert.match(lines[1], / deploy$/);
+  assert.equal(fs.statSync(path.join(sb.logs, 'deployed-shas')).mode & 0o777, 0o600);
+  // a second deploy appends only the new sha (the previous one is already recorded)
+  const next = sb.commit({ 'backend/src/a.txt': 'next\n' });
+  assert.equal(real(sb, next).status, 0);
+  const again = fs.readFileSync(path.join(sb.logs, 'deployed-shas'), 'utf8').trim().split('\n').map((l) => l.split(' ')[0]);
+  assert.deepEqual(again, [sb.base, failing, next]);
+}));
+
+// ---- DATABASE_URL parsing ---------------------------------------------------------------------
+test('DATABASE_URL: + stays +, percent escapes decode, backslashes survive, query string with / is ignored', () => withSb((sb) => {
+  fs.writeFileSync(path.join(sb.prod, 'backend/.env'), 'DATABASE_URL=mysql://app%40user:p+a%40b%5Cn%25@127.0.0.1:3307/appdb?ssl=true&path=a/b/c\n');
+  const pin = standardChange(sb);
+  const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified']);
+  assert.equal(r.status, 0, r.out);
+  assert.equal(fs.readFileSync(path.join(sb.fakeDir, 'pwd-seen'), 'utf8'), 'p+a@b\\n%\n');
+  const args = fs.readFileSync(path.join(sb.fakeDir, 'args-seen'), 'utf8');
+  assert.match(args, /--user=app@user/);
+  assert.match(args, /--port=3307/);
+  assert.match(args, /--host=127\.0\.0\.1/);
+  assert.ok(sb.calls().some((c) => c.startsWith('mysql[appdb] ')), 'database name must be appdb');
+}));
+
+test('DATABASE_URL: a raw @ inside the password stays in the password', () => withSb((sb) => {
+  fs.writeFileSync(path.join(sb.prod, 'backend/.env'), 'DATABASE_URL="mysql://u:pa@ss@dbhost:3306/shop"\n');
+  const pin = standardChange(sb);
+  const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified']);
+  assert.equal(r.status, 0, r.out);
+  assert.equal(fs.readFileSync(path.join(sb.fakeDir, 'pwd-seen'), 'utf8'), 'pa@ss\n');
+  assert.match(fs.readFileSync(path.join(sb.fakeDir, 'args-seen'), 'utf8'), /--host=dbhost/);
+}));
+
+// ---- health checks and smoke slug -----------------------------------------------------------------
+test('storefront and admin must answer 200-399: a 404 or 500 fails, a 307 passes', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  for (const [env, code, ok] of [['FAKE_STOREFRONT_CODE', '404', false], ['FAKE_STOREFRONT_CODE', '500', false], ['FAKE_ADMIN_CODE', '404', false], ['FAKE_STOREFRONT_CODE', '307', true]]) {
+    sb.git('reset', '-q', '--hard', sb.base);
+    const r = real(sb, pin, { [env]: code });
+    assert.equal(r.status, ok ? 0 : 1, `${env}=${code}: ${r.out}`);
+    if (!ok) assert.match(r.out, /health check failed/);
+  }
+}));
+
+test('the post-restart stability wait defaults to at least 15 seconds', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib/common.sh'), 'utf8');
+  const m = src.match(/STABLE_WAIT="\$\{STABLE_WAIT:-(\d+)\}"/);
+  assert.ok(m && Number(m[1]) >= 15);
+});
+
+test('no smoke shop: the failure says how to override SMOKE_SHOP_SLUG', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  const r = sb.run('deploy.sh', [pin, '--dry-run', '--ci-verified'], { FAKE_SLUG: '' });
+  assert.notEqual(r.status, 0);
+  assert.match(r.out, /SMOKE_SHOP_SLUG=<subdomain of a live, published shop>/);
+  assert.match(r.out, /deleted|suspended/);
+}));
+
+// ---- permissions ------------------------------------------------------------------------------------
+test('merged files keep the normal 022 mask; the log, marker and deployed-shas are private (077)', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  assert.equal(real(sb, pin).status, 0);
+  assert.equal(fs.statSync(path.join(sb.prod, 'admin/y.txt')).mode & 0o777, 0o644);
+  assert.equal(fs.statSync(path.join(sb.logs, sb.logFiles()[0])).mode & 0o777, 0o600);
+}));
+
+test('ts-node for the flag matrix is run with npx --no-install (never fetches from the network)', () => withSb((sb) => {
+  const pin = standardChange(sb, BILLING);
+  assert.equal(real(sb, pin).status, 0);
+  assert.ok(sb.calls().some((c) => /^npx --no-install ts-node/.test(c)));
 }, { matrix: true }));

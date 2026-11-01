@@ -80,6 +80,9 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "mode=$MODE sha=$sha"
 
+      # GITHUB_SHA is the commit this run was dispatched on (the tip of main when
+      # the branch rule did its job). Comparing against it, not the name "main",
+      # also removes any branch/tag name ambiguity.
       - name: The sha is on main
         if: inputs.mode != 'status'
         env:
@@ -92,12 +95,12 @@ jobs:
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/$REPO/compare/$SHA...main" -o "$RUNNER_TEMP/compare.json"
+            "https://api.github.com/repos/$REPO/compare/$SHA...$GITHUB_SHA" -o "$RUNNER_TEMP/compare.json"
           state="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).status)' "$RUNNER_TEMP/compare.json")"
-          echo "compare $SHA...main: $state"
+          echo "compare $SHA...$GITHUB_SHA (the commit this run was dispatched on): $state"
           case "$state" in
             ahead|identical) ;;
-            *) echo "Error: $SHA is not an ancestor of (or equal to) main." >&2; exit 1 ;;
+            *) echo "Error: $SHA is not an ancestor of (or equal to) the dispatched main commit." >&2; exit 1 ;;
           esac
 
       - name: The five required CI checks succeeded on the sha
@@ -155,8 +158,10 @@ jobs:
             rm -rf "$keydir"
           }
           trap cleanup EXIT
-          printf '%s\n' "$DEPLOY_SSH_KEY" > "$keydir/id"
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$keydir/known_hosts"
+          # tr -d '\r': a key pasted from Windows may carry CRLF line endings, which
+          # ssh rejects as an invalid format.
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$keydir/id"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" | tr -d '\r' > "$keydir/known_hosts"
 
           ssh -T \
             -i "$keydir/id" \

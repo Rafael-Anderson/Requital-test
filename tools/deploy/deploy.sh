@@ -29,10 +29,15 @@
 # DEPLOY_RESULT=OK | FAILED step=<n> | REFUSED (dry-run: DRYRUN OK).
 #
 # Steps: 1 preflight, 2 clean tree, 3 git gates, 4 CI + dry-run marker gates,
-# 5 plan, [dry-run stops] 6 backup + restore drill, 7 BEFORE checksums, 8 ff-only
-# merge, 9 backend build/migrate/AFTER checksums, 10 storefront + admin builds,
+# 5 plan, [dry-run stops] 6 backup + restore drill, 7 BEFORE row hashes, 8 ff-only
+# merge, 9 backend build/migrate/AFTER row hashes, 10 storefront + admin builds,
 # 11 restarts + health, 12 smoke + log scan, 13 env fingerprints, 14 report.
-# All builds finish before ANY restart; a checksum mismatch stops before restart.
+# All builds finish before ANY restart; an unexplained change to a protected row
+# stops the run before any restart (see "row hashes" below for what is tolerated).
+#
+# On DEPLOY_RESULT=OK the PIN (and, if it was not recorded yet, the commit that was
+# running before) is appended to $LOG_DIR/deployed-shas; rollback.sh only accepts
+# commits listed there.
 #
 # See docs/runbook.md ("Deploy via GitHub Actions" and "Backup").
 
@@ -62,7 +67,7 @@ if [ -z "${DEPLOY_REEXEC:-}" ]; then
   DEPLOY_TMP_DIR="$(mktemp -d)"
   mkdir -p "$DEPLOY_TMP_DIR/lib"
   cp "$SELF_DIR/deploy.sh" "$DEPLOY_TMP_DIR/deploy.sh"
-  cp "$SELF_DIR"/lib/*.sh "$DEPLOY_TMP_DIR/lib/"
+  cp "$SELF_DIR"/lib/* "$DEPLOY_TMP_DIR/lib/"
   chmod 700 "$DEPLOY_TMP_DIR/deploy.sh"
   export DEPLOY_TMP_DIR DEPLOY_REEXEC=1
   reexec_args=("$PIN")
@@ -79,30 +84,38 @@ fi
 trap '' HUP
 trap on_exit_common EXIT
 
+make_workdir
 acquire_lock
 setup_logging deploy "$PIN"
-umask 077
+# Files created by builds and the merge keep the normal 022 mask; only the log
+# and the marker are written under 077 (see setup_logging and the marker code).
+umask 022
 
 if [ "$DRY_RUN" = 1 ]; then MODE="DRY-RUN"; else MODE="REAL"; fi
 echo "deploy.sh: PIN=$PIN mode=$MODE ci_verified=$CI_VERIFIED user=$(id -un) at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-# ---- the immutable-column checksum sets (step 7 / 9) ----------------------------------
-# name|bound column (empty = unbounded)|columns hashed. Strict: any difference
-# BEFORE vs AFTER the migrations stops the deploy before a restart. Columns are
-# the ones that must never change when a migration only adds things; they were
-# taken from backend/src/db/types.ts and deploy-columns.test.js keeps them honest.
+# ---- the protected-row sets (step 7 / 9) -----------------------------------------------
+# name|bound column|columns hashed|flags. A migration that only adds things must
+# leave these rows as they were. Flags: "u" = the table has an updatedAt, "p:<col>"
+# = the row belongs to an order through <col>. Tables WITHOUT an updatedAt hash
+# only columns that cannot change after creation (an order's money columns can
+# be edited while the shop trades, so they are not here; see ORDER_MONEY_SET).
+# Columns come from backend/src/db/types.ts; workflow.test.js keeps them honest.
 STRICT_SETS=(
-  'order|id|id,shopId,shopOrderNumber,outletId,customerId,orderType,deliveryFee,taxAmount,discountAmount,giftCardAmount,storeCreditAmount,total,currency,exchangeRate,regionId'
-  'orderitem|id|id,orderId,productId,productName,variantId,priceAtPurchase,autoDiscountAmount'
-  'paymenttransaction|id|id,orderId,gateway,gatewayReference,amount,currency'
-  'shop|id|id,subdomain,currency,timezone,countryCode,domainType'
-  'customer|id|id,shopId,phone'
-  'giftcard|id|id,shopId,code,initialValue,purchasedByCustomerId,purchaseOrderId'
-  'stockmovement|id|id,shopId,productId,variantId,ingredientId,type,delta,outletId,toOutletId'
-  'orderstockconsumption|id|id,shopId,orderId,productId,variantId,ingredientId'
+  'order|id|id,shopId,shopOrderNumber,outletId,customerId,orderType,currency,exchangeRate,regionId|'
+  'orderitem|id|id,orderId,productId,productName,variantId,priceAtPurchase,autoDiscountAmount|p:orderId'
+  'paymenttransaction|id|id,orderId,gateway,gatewayReference,amount,currency|'
+  'shop|id|id,subdomain,currency,timezone,countryCode,domainType|u'
+  'customer|id|id,shopId,createdAt|'
+  'giftcard|id|id,shopId,code,initialValue,purchasedByCustomerId,purchaseOrderId|u'
+  'stockmovement|id|id,shopId,productId,variantId,ingredientId,type,delta,outletId,toOutletId|'
+  'orderstockconsumption|id|id,shopId,orderId,productId,variantId,ingredientId|u,p:orderId'
 )
-# Printed for the operator, never fatal: these legitimately change while traffic
-# keeps flowing (status columns, live stock).
+# An order whose money columns changed in the window was edited by the shop
+# (updateItems / updateDeliveryFee). It is what makes its replaced orderitem and
+# orderstockconsumption rows legitimate. Its own change is reported, not fatal.
+ORDER_MONEY_SET='order|id|id,total,taxAmount,deliveryFee,discountAmount,giftCardAmount,storeCreditAmount|'
+# Printed for the operator (count + XOR of per-row MD5), never fatal.
 INFO_SETS=(
   'order|id|id,status,paymentStatus'
   'giftcard|id|id,remainingBalance,status'
@@ -110,24 +123,36 @@ INFO_SETS=(
 )
 
 declare -A MAXID=()
-declare -A CK_BEFORE=()
-declare -A CK_AFTER=()
 
-checksum_sql() {
-  # checksum_sql <table> <bound col> <cols> <maxId>
-  local table="$1" bound="$2" cols="$3" max="$4" expr="" c
+# cols_expr <comma separated columns> -> the IFNULL(CAST(..)) list for CONCAT_WS
+cols_expr() {
+  local cols="$1" expr="" c
+  local -a arr
   IFS=',' read -r -a arr <<< "$cols"
   for c in "${arr[@]}"; do
     expr="${expr:+$expr, }IFNULL(CAST(\`$c\` AS CHAR), '~NULL~')"
   done
-  local where=""
+  printf '%s' "$expr"
+}
+
+checksum_sql() {
+  # checksum_sql <table> <bound col> <cols> <maxId>
+  local table="$1" bound="$2" cols="$3" max="$4" where=""
   if [ -n "$bound" ]; then where=" WHERE \`$bound\` <= $max"; fi
-  echo "SELECT COUNT(*), IFNULL(BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|', $expr)), 1, 16), 16, 10) AS UNSIGNED)), 0) FROM \`$table\`$where"
+  echo "SELECT COUNT(*), IFNULL(BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS('|', $(cols_expr "$cols"))), 1, 16), 16, 10) AS UNSIGNED)), 0) FROM \`$table\`$where"
+}
+
+row_sql() {
+  # row_sql <table> <bound col> <cols> <flags> <maxId>
+  local table="$1" bound="$2" cols="$3" flags="$4" max="$5" extra=""
+  case ",$flags," in *,u,*) extra="$extra, CAST(\`updatedAt\` AS CHAR)" ;; esac
+  case ",$flags," in *,p:*) extra="$extra, \`${flags#*p:}\`" ;; esac
+  echo "SELECT \`$bound\`, MD5(CONCAT_WS('|', $(cols_expr "$cols")))$extra FROM \`$table\` WHERE \`$bound\` <= $max ORDER BY \`$bound\`"
 }
 
 capture_max_ids() {
   local spec table bound m
-  for spec in "${STRICT_SETS[@]}" "${INFO_SETS[@]}"; do
+  for spec in "${STRICT_SETS[@]}" "$ORDER_MONEY_SET" "${INFO_SETS[@]}"; do
     IFS='|' read -r table bound _ <<< "$spec"
     [ -n "$bound" ] || continue
     [ -z "${MAXID[$table]:-}" ] || continue
@@ -137,43 +162,53 @@ capture_max_ids() {
   done
 }
 
-# run_checksums <strict|info> <assoc name to fill, or "print">
-run_checksums() {
-  local kind="$1" sink="$2" spec table bound cols out
+# run_totals <strict|info> <label>: COUNT + BIT_XOR lines, informational.
+run_totals() {
+  local kind="$1" label="$2" spec table bound cols out
   local -a specs
   if [ "$kind" = strict ]; then specs=("${STRICT_SETS[@]}"); else specs=("${INFO_SETS[@]}"); fi
   for spec in "${specs[@]}"; do
-    IFS='|' read -r table bound cols <<< "$spec"
+    IFS='|' read -r table bound cols _ <<< "$spec"
     out="$(db_query "$(checksum_sql "$table" "$bound" "$cols" "${MAXID[$table]:-0}")")"
     [ -n "$out" ] || fail "empty checksum result for $table."
-    out="${out//$'\t'/ }"
-    if [ "$sink" = print ]; then
-      echo "  $kind $table: $out"
-    else
-      CK_BEFORE_OR_AFTER_SET "$sink" "$table" "$out"
-    fi
+    echo "  $label $table: ${out//$'\t'/ }"
   done
 }
 
-# Two tiny setters instead of namerefs to associative arrays (portable across bash 4+).
-CK_BEFORE_OR_AFTER_SET() {
-  case "$1" in
-    before) CK_BEFORE[$2]="$3" ;;
-    after) CK_AFTER[$2]="$3" ;;
-  esac
+# dump_rows <before|after>: one tsv per protected table in $WORK_DIR.
+dump_rows() {
+  local phase="$1" spec table bound cols flags
+  for spec in "${STRICT_SETS[@]}" "$ORDER_MONEY_SET"; do
+    IFS='|' read -r table bound cols flags <<< "$spec"
+    local name="$table"
+    [ "$spec" != "$ORDER_MONEY_SET" ] || name="ordermoney"
+    db_query "$(row_sql "$table" "$bound" "$cols" "$flags" "${MAXID[$table]:-0}")" > "$WORK_DIR/rows-$name-$phase.tsv" \
+      || fail "could not read the protected rows of $table."
+  done
 }
 
-compare_checksums() {
-  local spec table bad=0
+# compare_rows: fatal only for changes with no sign of a normal application edit.
+compare_rows() {
+  local spec table flags name args out bad=0 tolerated_total=0 t
+  node "$SELF_DIR/lib/row-diff.js" touched "$WORK_DIR/rows-ordermoney-before.tsv" "$WORK_DIR/rows-ordermoney-after.tsv" > "$WORK_DIR/touched-orders.txt" \
+    || fail "row-diff failed on the order money rows."
+  echo "  orders edited during the window (money columns changed): $(grep -c . "$WORK_DIR/touched-orders.txt" || true)"
   for spec in "${STRICT_SETS[@]}"; do
-    IFS='|' read -r table _ <<< "$spec"
-    if [ "${CK_BEFORE[$table]:-}" != "${CK_AFTER[$table]:-}" ]; then
-      echo "CHECKSUM MISMATCH $table: before='${CK_BEFORE[$table]:-}' after='${CK_AFTER[$table]:-}'" >&2
-      bad=1
+    IFS='|' read -r table _ _ flags <<< "$spec"
+    name="$table"
+    args=()
+    case ",$flags," in *,u,*) args+=(--updated) ;; esac
+    case ",$flags," in *,p:*) args+=(--parent --touched "$WORK_DIR/touched-orders.txt") ;; esac
+    if out="$(node "$SELF_DIR/lib/row-diff.js" compare "$WORK_DIR/rows-$name-before.tsv" "$WORK_DIR/rows-$name-after.tsv" "${args[@]}")"; then
+      echo "  rows $table: $out"
     else
-      echo "  checksum $table: unchanged (${CK_AFTER[$table]})"
+      echo "ROW CHECK FAILED $table: ${out//$'\n'/ }" >&2
+      bad=1
     fi
+    t="${out#*tolerated=}"; t="${t%% *}"
+    case "$t" in ''|*[!0-9]*) ;; *) tolerated_total=$((tolerated_total + t)) ;; esac
   done
+  echo "  tolerated (normal application edits during the window): $tolerated_total row(s)"
   return "$bad"
 }
 
@@ -183,7 +218,7 @@ MATRIX_BEFORE=""
 cleanup_matrix() { [ -z "$MATRIX_TMP" ] || rm -f "$MATRIX_TMP"; }
 
 run_matrix() {
-  ( cd "$APP_DIR/backend" && npx ts-node -r tsconfig-paths/register "scripts/$(basename "$MATRIX_TMP")" )
+  ( cd "$APP_DIR/backend" && npx --no-install ts-node -r tsconfig-paths/register "scripts/$(basename "$MATRIX_TMP")" )
 }
 
 # print the strict subset of the matrix JSON (.matrix .shop .shopfeatureoverride)
@@ -250,13 +285,23 @@ else
 fi
 
 step 5 "plan"
-CHANGED="$(git -C "$APP_DIR" diff --name-only "$PROD" "$PIN")"
-changed_in() { echo "$CHANGED" | grep -q "^$1/"; }
+# The changed-file list can be huge (a vendor drop, a mass rename). Read it NUL
+# separated into a file and walk it with a plain loop: no pipelines whose early
+# exit (grep -q, head) could kill the writer under pipefail and silently report
+# "app unchanged" (that bug class produced a false OK once, see deploy tests).
+git -C "$APP_DIR" -c core.quotepath=off diff --name-only -z "$PROD" "$PIN" > "$WORK_DIR/changed.z" \
+  || fail "git diff failed."
 BACKEND_CHANGED=0; ADMIN_CHANGED=0; STOREFRONT_CHANGED=0
-changed_in backend && BACKEND_CHANGED=1
-changed_in admin && ADMIN_CHANGED=1
-changed_in storefront && STOREFRONT_CHANGED=1
-echo "files changed PROD..PIN: $(echo "$CHANGED" | grep -c . || true)"
+CHANGED_COUNT=0
+while IFS= read -r -d '' changed_path; do
+  CHANGED_COUNT=$((CHANGED_COUNT + 1))
+  case "$changed_path" in
+    backend/*) BACKEND_CHANGED=1 ;;
+    admin/*) ADMIN_CHANGED=1 ;;
+    storefront/*) STOREFRONT_CHANGED=1 ;;
+  esac
+done < "$WORK_DIR/changed.z"
+echo "files changed PROD..PIN: $CHANGED_COUNT"
 
 APPLIED="$(db_query 'SELECT name FROM _migrations ORDER BY name' | sort)"
 ON_DISK="$(git -C "$APP_DIR" ls-tree -d --name-only "$PIN" backend/prisma/migrations/ | sed 's#.*/##' | sort)"
@@ -276,7 +321,7 @@ else
   echo "pending migrations: none"
 fi
 MATRIX_REQUIRED=0
-echo "$PENDING" | grep -qx '20261124100000_billing_plt1_tables' && MATRIX_REQUIRED=1
+case $'\n'"$PENDING"$'\n' in *$'\n20261124100000_billing_plt1_tables\n'*) MATRIX_REQUIRED=1 ;; esac
 MATRIX_AVAILABLE=0
 git -C "$APP_DIR" cat-file -e "$PIN:backend/scripts/billing-flag-matrix.ts" 2>/dev/null && MATRIX_AVAILABLE=1
 if [ "$MATRIX_REQUIRED" = 1 ] && [ "$MATRIX_AVAILABLE" = 0 ]; then
@@ -325,13 +370,13 @@ count_row() {
 mkdir -p "$BACKUP_DIR"
 BEFORE_COUNTS="$(count_row "$DB_NAME")"
 echo "live counts before dump (shop order product customer tables): $BEFORE_COUNTS"
-backup_out="$(DATABASE_URL="$DATABASE_URL_VALUE" "$APP_DIR/tools/backup-db.sh" "$BACKUP_DIR")"
+backup_out="$(umask 077; DATABASE_URL="$DATABASE_URL_VALUE" "$APP_DIR/tools/backup-db.sh" "$BACKUP_DIR")"
 BACKUP_FILE="$(echo "$backup_out" | sed -n 's/^Backup written to //p' | tail -1)"
 if [ -z "$BACKUP_FILE" ] || [ ! -s "$BACKUP_FILE" ]; then fail "backup produced no file."; fi
 gzip -t "$BACKUP_FILE" || fail "backup file failed gzip -t."
 echo "backup: $BACKUP_FILE ($(wc -c < "$BACKUP_FILE") bytes), gzip -t OK"
 db_query_in "$DB_NAME" "DROP DATABASE IF EXISTS \`$DRILL_DB\`"
-RESTORE_DATABASE_URL="${DATABASE_URL_VALUE%/*}/$DRILL_DB" "$APP_DIR/tools/restore-db.sh" "$BACKUP_FILE" > /dev/null
+RESTORE_DATABASE_URL="${DB_URL_BASE}/$DRILL_DB" "$APP_DIR/tools/restore-db.sh" "$BACKUP_FILE" > /dev/null
 RESTORED_COUNTS="$(count_row "$DRILL_DB")"
 AFTER_COUNTS="$(count_row "$DB_NAME")"
 mig_live="$(db_query_in "$DB_NAME" 'SELECT name FROM _migrations ORDER BY name' | md5sum | cut -c1-8)"
@@ -351,13 +396,14 @@ done
 [ "$mig_live" = "$mig_drill" ] || fail "restore drill failed: _migrations differ (live $mig_live, restored $mig_drill)."
 echo "restore drill: OK"
 
-step 7 "BEFORE checksums"
+step 7 "BEFORE row hashes"
 capture_max_ids
-run_checksums strict before
-echo "strict sets recorded:"
-for spec in "${STRICT_SETS[@]}"; do IFS='|' read -r t _ <<< "$spec"; echo "  $t: ${CK_BEFORE[$t]}"; done
+echo "totals (count + XOR of per-row MD5, informational):"
+run_totals strict before
 echo "informational (mutable) sets:"
-run_checksums info print
+run_totals info before
+dump_rows before
+echo "per-row hashes recorded for ${#STRICT_SETS[@]} tables plus the order money columns"
 if [ "$MATRIX_AVAILABLE" = 1 ]; then
   MATRIX_TMP="$APP_DIR/backend/scripts/zz-deploy-matrix-$$.ts"
   git -C "$APP_DIR" show "$PIN:backend/scripts/billing-flag-matrix.ts" > "$MATRIX_TMP"
@@ -379,18 +425,20 @@ note "HEAD is now $PIN"
 step 9 "backend: install, migrate, build, verify"
 if [ "$BACKEND_CHANGED" = 1 ]; then
   build_backend
-  mig_log="$(mktemp)"
+  mig_log="$WORK_DIR/migrate.log"
   ( cd "$APP_DIR/backend" && npm run db:migrate ) 2>&1 | tee "$mig_log"
-  if grep -Eq 'Migration .* failed' "$mig_log"; then rm -f "$mig_log"; fail "a migration reported failure."; fi
-  rm -f "$mig_log"
+  if grep -Eq 'Migration .* failed' "$mig_log"; then fail "a migration reported failure."; fi
   ( cd "$APP_DIR/backend" && npm run build )
   assert_backend_dist
 else
   note "backend unchanged and no pending migrations: skipped"
 fi
-run_checksums strict after
-if ! compare_checksums; then
-  echo "STOP: immutable-column checksums changed across the migrations. NO process was restarted: the old code is still serving." >&2
+echo "totals AFTER (informational; rows may legitimately change while the shop trades):"
+run_totals strict after
+dump_rows after
+echo "row-level comparison:"
+if ! compare_rows; then
+  echo "STOP: protected rows changed with no sign of a normal application edit. NO process was restarted: the old code is still serving." >&2
   echo "The new code is merged on disk and the schema is migrated (additive); do not restart. Investigate, then use the rollback hint below if needed." >&2
   exit 1
 fi
@@ -409,7 +457,7 @@ step 10 "storefront and admin builds (all builds finish before any restart)"
 step 11 "restart and health"
 declare -A LOGBASE=()
 for app in "$PM2_BACKEND" "$PM2_STOREFRONT" "$PM2_ADMIN"; do
-  LOGBASE[$app]="$(mktemp)"
+  LOGBASE[$app]="$WORK_DIR/logbase-$app"
   snapshot_logs "$app" "${LOGBASE[$app]}"
 done
 RESTARTED=()
@@ -420,7 +468,6 @@ if [ "$ADMIN_CHANGED" = 1 ]; then restart_one "$PM2_ADMIN"; RESTARTED+=("$PM2_AD
 step 12 "smoke"
 smoke_redirect_map
 for app in "${RESTARTED[@]}"; do scan_logs "$app" "${LOGBASE[$app]}"; done
-rm -f "${LOGBASE[@]}"
 check_backup_log
 
 step 13 ".env fingerprints"
@@ -429,6 +476,19 @@ ENV_AFTER="$(env_fingerprints)"
 note "env fingerprints: unchanged"
 
 step 14 "result"
+# Record what is now (and was just) running; rollback.sh accepts only these.
+# Append-only, one "<sha> <utc> <how>" line each, written with the private mask.
+DEPLOYED_FILE="$LOG_DIR/deployed-shas"
+if ! (
+  umask 077
+  now_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [ ! -f "$DEPLOYED_FILE" ] || ! grep -q "^$PROD " "$DEPLOYED_FILE"; then
+    echo "$PROD $now_utc previous" >> "$DEPLOYED_FILE"
+  fi
+  echo "$PIN $now_utc deploy" >> "$DEPLOYED_FILE"
+); then
+  echo "WARNING: could not append to $DEPLOYED_FILE; rollback.sh will refuse these commits until they are recorded by hand."
+fi
 echo "PREVIOUS_SHA=$PROD"
 echo "NEW_SHA=$PIN"
 echo "BACKUP_FILE=$BACKUP_FILE"
