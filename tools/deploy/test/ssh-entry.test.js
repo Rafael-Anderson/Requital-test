@@ -384,3 +384,52 @@ test('ssh-entry.sh scrubs the environment at the top and does not trace', () => 
   assert.match(src, /^set \+x$/m);
   assert.match(src, /unset SHELLOPTS BASHOPTS BASH_ENV ENV BASH_XTRACEFD PS4 LD_PRELOAD LD_LIBRARY_PATH/);
 });
+
+// ---- the capture and status files are removed on EVERY exit path ---------------------------------
+const entryFiles = (sb) => (fs.existsSync(sb.logs) ? fs.readdirSync(sb.logs).filter((f) => f.startsWith('.entry-')) : []);
+
+test('capture and status files are removed after a successful run', () => {
+  const sb = makeSandbox({ stubDeploy: true });
+  try {
+    const pin = sb.commit({ 'backend/src/a.txt': 'changed\n' });
+    assert.equal(sb.entry(`deploy ${pin}`).status, 0);
+    assert.deepEqual(entryFiles(sb), []);
+  } finally { sb.cleanup(); }
+});
+
+test('capture and status files are removed after a failing run (non-zero exit)', () => {
+  const sb = makeSandbox();
+  try {
+    const pin = sb.commit({ 'tools/deploy/deploy.sh': '#!/usr/bin/env bash\necho failing\nexit 7\n' });
+    const r = sb.entry(`deploy ${pin}`);
+    assert.equal(r.status, 7, r.out);
+    assert.deepEqual(entryFiles(sb), []);
+  } finally { sb.cleanup(); }
+});
+
+test('capture and status files are removed after a rollback run too', () => {
+  const sb = makeSandbox({ stubRollback: true });
+  try {
+    assert.equal(sb.entry(`rollback ${sb.base}`).status, 0);
+    assert.deepEqual(entryFiles(sb), []);
+  } finally { sb.cleanup(); }
+});
+
+for (const signal of ['SIGHUP', 'SIGTERM', 'SIGINT']) {
+  test(`capture and status files are removed when the entry is killed with ${signal}, and the run still finishes`, async () => {
+    const sb = makeSandbox({ stubDeploy: true });
+    try {
+      const slow = '#!/usr/bin/env bash\nsleep 2\necho finished > "$FAKE_DIR/finished"\n';
+      const pin = sb.commit({ 'tools/deploy/deploy.sh': slow });
+      const child = cp.spawn('bash', [path.join(DEPLOY_DIR, 'ssh-entry.sh')], {
+        env: { ...sb.env, SSH_ORIGINAL_COMMAND: `deploy ${pin}` }, stdio: 'ignore',
+      });
+      await new Promise((r) => setTimeout(r, 1000));
+      assert.ok(entryFiles(sb).length > 0, 'the capture file should exist while the run is going');
+      child.kill(signal);
+      await new Promise((r) => setTimeout(r, 3500));
+      assert.equal(fs.existsSync(path.join(sb.fakeDir, 'finished')), true, 'the run was killed with the entry');
+      assert.deepEqual(entryFiles(sb), []);
+    } finally { sb.cleanup(); }
+  });
+}

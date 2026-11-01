@@ -28,7 +28,18 @@ case "$sql" in
     tbl="$(printf '%s' "$sql" | sed -E 's/.* FROM `([a-z]+)`.*/\1/')"
     case "$sql" in *'`total`'*) tbl=ordermoney ;; esac
     phase=before; [ ! -e "$FAKE_DIR/migrated" ] || phase=after
-    if [ -f "$FAKE_DIR/rows/$tbl.$phase" ]; then
+    if [ -f "$FAKE_DIR/data/$tbl.$phase.json" ]; then
+      # data-driven: hash exactly the columns the SQL asks for, so a test can prove
+      # that a column (e.g. customer.phone) is or is not part of the hash
+      FAKE_SQL="$sql" node -e '
+        const rows = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+        const m = process.env.FAKE_SQL.match(/CONCAT_WS\(.\|., (.*?)\)\) FROM/);
+        const cols = [...m[1].matchAll(/CAST\(`(\w+)` AS CHAR\)/g)].map((x) => x[1]);
+        for (const r of rows) {
+          const v = cols.map((c) => (r[c] === null || r[c] === undefined ? "~NULL~" : String(r[c])));
+          console.log(r.id + "\t" + require("crypto").createHash("md5").update(v.join("|")).digest("hex"));
+        }' "$FAKE_DIR/data/$tbl.$phase.json"
+    elif [ -f "$FAKE_DIR/rows/$tbl.$phase" ]; then
       cat "$FAKE_DIR/rows/$tbl.$phase"
     else
       for id in 1 2; do

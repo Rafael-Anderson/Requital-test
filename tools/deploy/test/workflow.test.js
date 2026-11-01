@@ -341,10 +341,16 @@ test('runbook: the ssh-entry.sh sha256 printed in the runbook matches the file',
 // `producer | grep -q` / `| head` / `| grep -m` under pipefail returns 141 once the producer
 // has more output than the pipe buffer, and an app is silently treated as "unchanged".
 test('no script pipes into an early-exiting reader (grep -q, grep -m, head, awk exit, read)', () => {
-  const files = [
-    ...['deploy.sh', 'rollback.sh', 'ssh-entry.sh'].map((f) => path.join(DEPLOY_DIR, f)),
-    ...fs.readdirSync(path.join(DEPLOY_DIR, 'lib')).filter((f) => f.endsWith('.sh')).map((f) => path.join(DEPLOY_DIR, 'lib', f)),
-  ];
+  // every shell script under tools/deploy except the tests: nothing can be added without being audited
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => {
+    const full = path.join(d, e.name);
+    if (e.isDirectory()) return e.name === 'test' ? [] : walk(full);
+    return e.name.endsWith('.sh') ? [full] : [];
+  });
+  const files = walk(DEPLOY_DIR);
+  for (const must of ['deploy.sh', 'rollback.sh', 'ssh-entry.sh', path.join('lib', 'common.sh')]) {
+    assert.ok(files.some((f) => f.endsWith(must)), `${must} is not covered by the audit`);
+  }
   const bad = /\|\s*(grep\s+(-[a-zA-Z]*[qm][a-zA-Z]*\b|--quiet|--max-count)|head\b|read\b|sed\s+-n\s+'?\d+q|awk\b[^|]*\bexit\b)/;
   for (const f of files) {
     stripComments(fs.readFileSync(f, 'utf8')).split('\n').forEach((line, i) => {

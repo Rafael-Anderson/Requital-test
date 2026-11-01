@@ -498,3 +498,34 @@ test('ts-node for the flag matrix is run with npx --no-install (never fetches fr
   assert.equal(real(sb, pin).status, 0);
   assert.ok(sb.calls().some((c) => /^npx --no-install ts-node/.test(c)));
 }, { matrix: true }));
+
+// ---- PDPL anonymisation must not stop a deploy --------------------------------------------------
+function data(sb, table, phase, rowsArray) {
+  fs.mkdirSync(path.join(sb.fakeDir, 'data'), { recursive: true });
+  fs.writeFileSync(path.join(sb.fakeDir, 'data', `${table}.${phase}.json`), JSON.stringify(rowsArray));
+}
+
+test('a customer anonymised during the window (phone scrubbed) does NOT stop the deploy', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  data(sb, 'customer', 'before', [
+    { id: 1, shopId: 1, createdAt: '2026-01-01 10:00:00', phone: '+971500000001' },
+    { id: 2, shopId: 1, createdAt: '2026-01-02 10:00:00', phone: '+971500000002' },
+  ]);
+  data(sb, 'customer', 'after', [
+    { id: 1, shopId: 1, createdAt: '2026-01-01 10:00:00', phone: 'deleted-1' }, // PDPL anonymisation
+    { id: 2, shopId: 1, createdAt: '2026-01-02 10:00:00', phone: '+971500000002' },
+  ]);
+  const r = real(sb, pin);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /rows customer: checked=2 changed=0 tolerated=0 fatal=0/);
+}));
+
+test('a customer whose shopId or createdAt changed (not an anonymisation) DOES stop the deploy', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  data(sb, 'customer', 'before', [{ id: 1, shopId: 1, createdAt: '2026-01-01 10:00:00', phone: '+971500000001' }]);
+  data(sb, 'customer', 'after', [{ id: 1, shopId: 2, createdAt: '2026-01-01 10:00:00', phone: '+971500000001' }]);
+  const r = real(sb, pin);
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /ROW CHECK FAILED customer/);
+  assert.equal(restarts(sb).length, 0);
+}));
