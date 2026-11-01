@@ -13,7 +13,11 @@ done
 echo "mysql[$db] $sql" >> "$FAKE_LOG"
 case "$sql" in
   "SELECT 1") echo 1 ;;
-  "SELECT name FROM _migrations"*) cat "$FAKE_DIR/applied-migrations" ;;
+  "SELECT name FROM _migrations"*)
+    case "$db" in
+      *_drill) if [ -n "${FAKE_DRILL_MIGRATIONS:-}" ]; then echo "$FAKE_DRILL_MIGRATIONS"; else cat "$FAKE_DIR/applied-migrations"; fi ;;
+      *) cat "$FAKE_DIR/applied-migrations" ;;
+    esac ;;
   "SELECT subdomain FROM shop"*) echo "${FAKE_SLUG-testshop}" ;;
   "SELECT IFNULL(MAX("*) echo 100 ;;
   *BIT_XOR*)

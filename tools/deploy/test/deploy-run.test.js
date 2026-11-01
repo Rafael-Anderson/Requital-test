@@ -149,6 +149,14 @@ test('a restore drill with a different table count fails', () => withSb((sb) => 
   assert.match(r.out, /table count differs/);
 }));
 
+test('a restore drill whose _migrations table differs from the live one fails', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  const r = real(sb, pin, { FAKE_DRILL_MIGRATIONS: '20260101000000_init\n20200101000000_extra' });
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /_migrations differ/);
+  assert.equal(sb.git('rev-parse', 'HEAD'), sb.base);
+}));
+
 test('the scratch database is dropped before and after the drill', () => withSb((sb) => {
   const pin = standardChange(sb);
   assert.equal(real(sb, pin).status, 0);
