@@ -328,6 +328,9 @@ test('runbook: the bootstrap section has every copy-pasteable step', () => {
     // round 2: PATH check that works under dash, row gate wording, rollback record timing
     'for c in git node npm pm2 mysql mysqldump gzip flock curl md5sum; do command -v "$c" || echo "MISSING: $c"; done',
     'more than max(10, about 1% of the orders)', 'LIMIT 1', 'just BEFORE the merge of step 8', 'The preflight refuses a raw `@`',
+    // round 3: the residuals are stated plainly, rollback tolerates a broken system
+    'What the row check does not catch', 'a table of 10 rows or fewer can be rewritten completely', 'accepts check runs only from the GitHub Actions app',
+    'can weaken its own gates', 'a pm2 process that is errored or stopped is a warning, not a refusal', 'at most 2 shops',
     'Pro, Team, Enterprise', 'is not allowed to deploy to production due to environment protection rules', 'any branch other than `main`',
   ]) assert.ok(s.includes(needle), `runbook is missing: ${needle}`);
   assert.doesNotMatch(s, /GITHUB_TOKEN_FILE|personal access token|create a token/i, 'must not recommend a token on the VPS');
