@@ -503,5 +503,8 @@ test('a run that dies without reporting a status leaves no run directory behind'
 
 test('RUN_DIR_OWNED is cleared before the background launch (source order)', () => {
   const src = fs.readFileSync(path.join(DEPLOY_DIR, 'ssh-entry.sh'), 'utf8');
-  assert.ok(src.indexOf('RUN_DIR_OWNED=0   # from the launch on') < src.indexOf('env -u SHELLOPTS'));
+  const cleared = src.indexOf('RUN_DIR_OWNED=0   # from the launch on');
+  const launch = src.indexOf('env -u SHELLOPTS');
+  assert.ok(cleared >= 0, 'the RUN_DIR_OWNED=0 line must exist (a missing line made indexOf return -1 and the old check pass vacuously)');
+  assert.ok(launch >= 0 && cleared < launch);
 });
