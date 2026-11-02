@@ -3,5 +3,9 @@
 # script prints; a flag file makes the "after" run differ.
 echo "npx $*" >> "$FAKE_LOG"
 shift_count=0
+# A test can supply the exact documents: matrix-before.json until the migration ran,
+# matrix-after.json after it (the fake `npm run db:migrate` touches "migrated").
+if [ -e "$FAKE_DIR/migrated" ] && [ -e "$FAKE_DIR/matrix-after.json" ]; then cat "$FAKE_DIR/matrix-after.json"; exit 0; fi
+if [ ! -e "$FAKE_DIR/migrated" ] && [ -e "$FAKE_DIR/matrix-before.json" ]; then cat "$FAKE_DIR/matrix-before.json"; exit 0; fi
 n=1; [ ! -e "$FAKE_DIR/mutated-matrix" ] || n=2
 printf '{"shop":{"count":1,"bitXor":"1"},"order":{"count":%s,"bitXor":"9"},"shopfeatureoverride":{"count":0,"bitXor":"0"},"matrix":{"1":{"a":true,"b":%s}}}\n' "$RANDOM" "$([ "$n" = 1 ] && echo true || echo false)"
