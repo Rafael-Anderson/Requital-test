@@ -32,6 +32,8 @@ const stateLines = (sb) => {
   const f = path.join(sb.logs, 'run-state');
   return fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean) : [];
 };
+// every real run leaves a STARTED line first (a hard kill skips every trap); these are the outcome lines
+const outcomes = (sb) => stateLines(sb).filter((l) => !/ REAL STARTED /.test(l));
 const ELEVEN = Object.fromEntries(Array.from({ length: 11 }, (_, i) => [`k${String(i).padStart(2, '0')}`, i % 2 === 0]));
 const FOURTEEN = { ...ELEVEN, k11: false, k12: false, k13: false };
 
@@ -149,7 +151,8 @@ test('deploy: a new key that is true for a shop stops before any restart', () =>
 test('state: every real run is recorded (OK) and a later run of the same PIN is "already deployed"', () => withSb((sb) => {
   const pin = standardChange(sb);
   assert.equal(real(sb, pin).status, 0);
-  const lines = stateLines(sb);
+  assert.match(stateLines(sb)[0], new RegExp(`^\\S+ ${pin} REAL STARTED step=5 prev=${sb.base}$`));
+  const lines = outcomes(sb);
   assert.equal(lines.length, 1);
   assert.match(lines[0], new RegExp(`^\\S+ ${pin} REAL OK step=14 prev=${sb.base}$`));
   sb.calls(); fs.writeFileSync(sb.env.FAKE_LOG, '');
@@ -157,7 +160,7 @@ test('state: every real run is recorded (OK) and a later run of the same PIN is 
   assert.equal(again.status, 0, again.out);
   assert.match(again.out, /ALREADY DEPLOYED/);
   assert.equal(sb.calls().filter((c) => /^(npm|pm2 restart|backup)/.test(c)).length, 0);
-  assert.equal(stateLines(sb).length, 1, 'a no-op run records nothing');
+  assert.equal(stateLines(sb).length, 2, 'a no-op run records nothing (STARTED + OK from the first run only)');
 }));
 
 test('state: HEAD == PIN with nothing recorded (a manual deploy) is "already deployed"', () => withSb((sb) => {
@@ -172,7 +175,7 @@ test('state: a failed real run is recorded with its step and the commit that was
   const pin = standardChange(sb);
   const r = real(sb, pin, { FAKE_CRASHLOOP: 'requital-backend' });
   assert.equal(r.status, 1, r.out);
-  const lines = stateLines(sb);
+  const lines = outcomes(sb);
   assert.equal(lines.length, 1);
   assert.match(lines[0], new RegExp(`^\\S+ ${pin} REAL FAILED step=11 prev=${sb.base}$`));
 }));
@@ -210,7 +213,7 @@ test('resume: HEAD == PIN after a run that failed at step 11 rebuilds, restarts 
   assert.equal(c.filter((x) => /DROP DATABASE|BIT_XOR/.test(x)).length, 0, 'no data gates');
   assert.deepEqual(restarts(sb), ['pm2 restart requital-backend', 'pm2 restart requital-storefront', 'pm2 restart requital-admin']);
   assert.match(r.out, new RegExp(`PREVIOUS_SHA=${sb.base}`));
-  const lines = stateLines(sb);
+  const lines = outcomes(sb);
   assert.match(lines[lines.length - 1], new RegExp(`${pin} REAL OK step=14 prev=${sb.base}$`));
   // and afterwards the PIN is simply "already deployed"
   assert.match(sb.run('deploy.sh', [pin, '--ci-verified']).out, /ALREADY DEPLOYED/);
@@ -262,13 +265,14 @@ test('resume: a run that failed at step 9 (migration) is NEVER resumed, with a c
   assert.match(r.out, new RegExp(`rollback.sh to the previous commit \\(${sb.base}\\)`));
   assert.equal(sb.calls().filter((c) => /^(npm|pm2 restart|backup-db|restore-db|npx)/.test(c)).length, 0);
   assert.equal(stateLines(sb).filter((l) => /REAL FAILED step=9/.test(l)).length, 1, 'the refusal adds no new state line');
+  assert.equal(stateLines(sb).filter((l) => / REAL STARTED /.test(l)).length, 1, 'nor a STARTED line');
 }));
 
 test('resume: a matrix STOP at step 9 is not resumable either (the very gate that failed)', () => withSb((sb) => {
   const pin = standardChange(sb, BILLING);
   setMatrix(sb, doc({ 1: ELEVEN }), doc({ 1: { ...FOURTEEN, k00: false } }));
   assert.equal(real(sb, pin).status, 1);
-  assert.match(stateLines(sb)[0], /REAL FAILED step=9 /);
+  assert.match(outcomes(sb)[0], /REAL FAILED step=9 /);
   const r = real(sb, pin);
   assert.equal(r.status, 2, r.out);
   assert.match(r.out, /failed at step 9/);
@@ -318,6 +322,9 @@ test('runbook documents the intersection rule, the diff output and the resume ru
     '`$LOG_DIR/run-state`',
     '**RESUME mode**',
     'FAILED at step 9 or earlier** it is never resumed',
+    'a last line of `STARTED`',
+    'a `ROLLED_BACK` line',
+    'A run that failed at **step 13**',
   ]) assert.ok(rb.includes(needle), `runbook is missing: ${needle}`);
 });
 
@@ -330,3 +337,99 @@ test('resume: a recorded previous commit that is not an ancestor of the PIN is r
   assert.match(r.out, /not an ancestor of PIN/);
   assert.equal(restarts(sb).length, 0);
 }));
+
+// ---- review round 1: unknown states are never "already deployed" or resumed ------------------
+const writeState = (sb, text) => { fs.mkdirSync(sb.logs, { recursive: true }); fs.writeFileSync(path.join(sb.logs, 'run-state'), text); };
+
+test('state: every real run leaves a STARTED line before it changes anything', () => withSb((sb) => {
+  const pin = standardChange(sb);
+  assert.equal(real(sb, pin, { FAKE_CRASHLOOP: 'requital-backend' }).status, 1);
+  const lines = stateLines(sb);
+  assert.match(lines[0], / REAL STARTED /);
+  assert.match(lines[1], / REAL FAILED step=11 /);
+}));
+
+test('state: a run killed hard (last line STARTED, HEAD == PIN) is neither "already deployed" nor resumed', () => withSb((sb) => {
+  const pin = failedAtStep11(sb);
+  writeState(sb, `2026-01-01T00:00:00Z ${pin} REAL STARTED step=5 prev=${sb.base}\n`);
+  const r = real(sb, pin);
+  assert.equal(r.status, 2, r.out);
+  assert.doesNotMatch(r.out, /ALREADY DEPLOYED/);
+  assert.match(r.out, /did not end cleanly/);
+  assert.equal(restarts(sb).length, 0);
+}));
+
+test('state: a truncated or garbled REAL line is refused, never "already deployed"', () => withSb((sb) => {
+  const pin = failedAtStep11(sb);
+  for (const bad of [`2026-01-01T00:00:00Z ${pin} REAL FAIL`, `2026-01-01T00:00:00Z ${pin} REAL`, `2026-01-01T00:00:00Z ${pin} REAL ???? step=x prev=y`]) {
+    writeState(sb, `${bad}\n`);
+    const r = real(sb, pin);
+    assert.equal(r.status, 2, `${bad}\n${r.out}`);
+    assert.doesNotMatch(r.out, /ALREADY DEPLOYED/);
+  }
+}));
+
+test('resume: a forged huge or malformed step is refused instead of tripping the integer test', () => withSb((sb) => {
+  const pin = failedAtStep11(sb);
+  for (const step of ['99999999999999999999', '1x', '', '-1']) {
+    writeState(sb, `2026-01-01T00:00:00Z ${pin} REAL FAILED step=${step} prev=${sb.base}\n`);
+    const r = real(sb, pin);
+    assert.equal(r.status, 2, `step=${step}\n${r.out}`);
+    assert.equal(restarts(sb).length, 0);
+  }
+}));
+
+test('resume: a run that failed at step 13 (.env changed) is not resumed (the new .env would become the baseline)', () => withSb((sb) => {
+  const pin = failedAtStep11(sb);
+  writeState(sb, `2026-01-01T00:00:00Z ${pin} REAL FAILED step=13 prev=${sb.base}\n`);
+  const r = real(sb, pin);
+  assert.equal(r.status, 2, r.out);
+  assert.match(r.out, /step 13/);
+  assert.equal(restarts(sb).length, 0);
+}));
+
+test('resume: a state line for another PIN is never used', () => withSb((sb) => {
+  const pin = failedAtStep11(sb);
+  const other = 'a'.repeat(40);
+  writeState(sb, `2026-01-01T00:00:00Z ${other} REAL FAILED step=11 prev=${sb.base}\n`);
+  const r = sb.run('deploy.sh', [pin, '--ci-verified']);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /ALREADY DEPLOYED/);
+}));
+
+test('rollback.sh records ROLLED_BACK for the commit it rolled back, which invalidates its earlier FAILED line', () => withSb((sb) => {
+  const pin = failedAtStep11(sb);
+  sb.recordDeployed(sb.base);
+  const rb = sb.run('rollback.sh', [sb.base]);
+  assert.equal(rb.status, 0, rb.out);
+  assert.match(outcomes(sb).slice(-1)[0], new RegExp(`${pin} REAL ROLLED_BACK step=0 prev=${sb.base}$`));
+  // someone moves HEAD back to the PIN by hand: it must not resume from the stale FAILED line
+  sb.git('merge', '--ff-only', pin);
+  const r = real(sb, pin);
+  assert.equal(r.status, 2, r.out);
+  assert.doesNotMatch(r.out, /RESUME mode|ALREADY DEPLOYED/);
+}));
+
+test('deploy: both matrices written on a mismatch are private (mode 600)', () => withSb((sb) => {
+  const pin = standardChange(sb, BILLING);
+  setMatrix(sb, doc({ 1: ELEVEN }), doc({ 1: { ...FOURTEEN, k00: false } }));
+  assert.equal(real(sb, pin).status, 1);
+  const files = fs.readdirSync(sb.logs).filter((f) => /^matrix-.*\.json$/.test(f));
+  assert.equal(files.length, 2);
+  for (const f of files) assert.equal(fs.statSync(path.join(sb.logs, f)).mode & 0o077, 0, f);
+}, { matrix: true }));
+
+test('matrix-diff: cannot pass vacuously (empty matrices, shops without flags, missing or non-scalar checksums)', () => {
+  assert.equal(compare(doc({}, { shop: { count: 3, bitXor: '1' } }), doc({}, { shop: { count: 3, bitXor: '1' } })).ok, false, 'empty matrix with shops');
+  assert.equal(compare(doc({}, { shop: { count: 0, bitXor: '0' } }), doc({}, { shop: { count: 0, bitXor: '0' } })).ok, true, 'no shops at all is believable');
+  assert.equal(compare(doc({ 1: {} }), doc({ 1: {} })).ok, false, 'a shop with no flags compares nothing');
+  assert.equal(compare(doc({ 1: ELEVEN }, { shop: {} }), doc({ 1: ELEVEN }, { shop: {} })).ok, false, 'undefined checksum equals undefined');
+  assert.equal(compare(doc({ 1: ELEVEN }, { shop: { count: [1], bitXor: '1' } }), doc({ 1: ELEVEN }, { shop: { count: 1, bitXor: '1' } })).ok, false, 'array count');
+});
+
+test('matrix-diff: inherited object properties are not shops or features', () => {
+  const evil = JSON.parse('{"__proto__": {"a": false}, "1": {"k": true}}');
+  const r = compare(doc({ 1: { k: true } }), doc(evil));
+  assert.equal(r.ok, false);
+  assert.match(r.problems.join('\n'), /exists only AFTER/);
+});

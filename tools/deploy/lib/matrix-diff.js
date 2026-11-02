@@ -36,8 +36,10 @@ function load(file) {
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
+const scalar = (v) => typeof v === 'string' || typeof v === 'number';
 function sameChecksum(a, b) {
-  return isObj(a) && isObj(b) && String(a.count) === String(b.count) && String(a.bitXor) === String(b.bitXor);
+  return isObj(a) && isObj(b) && scalar(a.count) && scalar(a.bitXor) && scalar(b.count) && scalar(b.bitXor)
+    && String(a.count) === String(b.count) && String(a.bitXor) === String(b.bitXor);
 }
 
 /** @returns {{ ok: boolean, problems: string[], newKeys: string[], sharedValues: number }} */
@@ -53,8 +55,8 @@ function compareMatrix(before, after) {
 
   const shopIds = [...new Set([...Object.keys(bm), ...Object.keys(am)])].sort((x, y) => Number(x) - Number(y) || x.localeCompare(y));
   for (const id of shopIds) {
-    if (!(id in bm)) { problems.push(`MISMATCH shop=${id} exists only AFTER`); continue; }
-    if (!(id in am)) { problems.push(`MISMATCH shop=${id} exists only BEFORE`); continue; }
+    if (!Object.hasOwn(bm, id)) { problems.push(`MISMATCH shop=${id} exists only AFTER`); continue; }
+    if (!Object.hasOwn(am, id)) { problems.push(`MISMATCH shop=${id} exists only BEFORE`); continue; }
     const b = bm[id];
     const a = am[id];
     if (!isObj(b) || !isObj(a)) { problems.push(`MISMATCH shop=${id} has a malformed flag map`); continue; }
@@ -72,6 +74,13 @@ function compareMatrix(before, after) {
         problems.push(`MISMATCH shop=${id} feature=${k} existed BEFORE (${JSON.stringify(b[k])}) and is gone AFTER`);
       }
     }
+  }
+  // Not vacuous: with shops there must be flags to compare, and an empty matrix is only
+  // believable for a database whose shop table is empty on both sides.
+  if (shopIds.length > 0 && sharedValues === 0) problems.push('MISMATCH no shop/feature value is present on both sides, so nothing was compared');
+  if (shopIds.length === 0) {
+    const empty = (d) => isObj(d && d.shop) && String(d.shop.count) === '0';
+    if (!(empty(before) && empty(after))) problems.push('MISMATCH the matrix is empty but the shop checksum says there are shops');
   }
   return { ok: problems.length === 0, problems, newKeys: [...newKeys].sort(), sharedValues };
 }

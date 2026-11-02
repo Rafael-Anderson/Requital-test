@@ -138,6 +138,9 @@ ROLLBACK_HINT="Rollback failed part-way. The checkout may already be at $PREV. R
 step 4 "reset to the target"
 git -C "$APP_DIR" reset --hard "$PREV"
 [ "$(git -C "$APP_DIR" rev-parse HEAD)" = "$PREV" ] || fail "HEAD is not the target after reset."
+# Invalidate any earlier "FAILED, resumable" state of the commit that was rolled back
+# (deploy.sh treats ROLLED_BACK as "unknown": never resumed, never "already deployed").
+( umask 077; echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $CURRENT REAL ROLLED_BACK step=0 prev=$PREV" >> "$LOG_DIR/run-state" ) || echo "WARNING: could not append to $LOG_DIR/run-state." >&2
 
 step 5 "build everything before any restart"
 build_backend

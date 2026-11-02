@@ -106,7 +106,7 @@ record_run_state() {
     umask 077
     mkdir -p "$LOG_DIR"
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $PIN REAL $1 step=$CURRENT_STEP prev=${STATE_PREV:-$PROD}" >> "$STATE_FILE"
-  ) || echo "WARNING: could not append to $STATE_FILE." >&2
+  ) || { echo "WARNING: could not append to $STATE_FILE." >&2; return 1; }
 }
 # last_real_state: the last REAL-run line for this PIN, or nothing.
 last_real_state() {
@@ -118,7 +118,7 @@ RUN_FINISHED_OK=0
 # the temporary matrix script and records a run that did not reach DEPLOY_RESULT=OK.
 real_run_exit() {
   cleanup_matrix
-  if [ "$RUN_FINISHED_OK" != 1 ]; then record_run_state FAILED; fi
+  if [ "$RUN_FINISHED_OK" != 1 ]; then record_run_state FAILED || true; fi
 }
 # record_deployed <sha> <how>: append-only and idempotent (no duplicate lines),
 # private mode. Returns non-zero when the file cannot be written.
@@ -367,9 +367,12 @@ compare_matrix() {
   fi
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   base="$LOG_DIR/matrix-$stamp-${PIN:0:7}"
-  ( umask 077; cp "$WORK_DIR/matrix-before.json" "$base-before.json"; cp "$WORK_DIR/matrix-after.json" "$base-after.json" )
   cat "$WORK_DIR/matrix-diff.out"
-  echo "both matrices were written to $base-before.json and $base-after.json" >&2
+  if ( set -e; umask 077; cp "$WORK_DIR/matrix-before.json" "$base-before.json"; cp "$WORK_DIR/matrix-after.json" "$base-after.json" ); then
+    echo "both matrices were written to $base-before.json and $base-after.json" >&2
+  else
+    echo "WARNING: could not write the matrices to $LOG_DIR." >&2
+  fi
   return 1
 }
 
@@ -399,23 +402,35 @@ STATE_PREV=""
 if [ "$PROD" = "$PIN" ]; then
   last_state="$(last_real_state)"
   case "$last_state" in
+    "" | *" REAL OK "*)
+      # the last real run for this PIN was OK, or nothing is recorded (a manual deploy)
+      echo "PIN equals the commit already deployed: nothing to do."
+      echo "ALREADY DEPLOYED"
+      RESULT_LINE=no
+      exit 0
+      ;;
     *" REAL FAILED "*)
-      failed_step="$(echo "$last_state" | sed -n 's/.* step=\([0-9][0-9]*\) .*/\1/p')"
-      STATE_PREV="$(echo "$last_state" | sed -n 's/.* prev=\([0-9a-f]\{40\}\)$/\1/p')"
+      failed_step="$(echo "$last_state" | sed -n 's/^[^ ]* [0-9a-f]\{40\} REAL FAILED step=\([0-9]\{1,3\}\) prev=[0-9a-f]\{40\}$/\1/p')"
+      STATE_PREV="$(echo "$last_state" | sed -n 's/^[^ ]* [0-9a-f]\{40\} REAL FAILED step=[0-9]\{1,3\} prev=\([0-9a-f]\{40\}\)$/\1/p')"
       echo "HEAD already equals the PIN, but the last real run for it FAILED at step ${failed_step:-?}: $last_state"
-      if [ -z "$failed_step" ] || [ "$failed_step" -lt 10 ] || [ -z "$STATE_PREV" ]; then
-        refuse "HEAD == PIN after a run that failed at step ${failed_step:-?} (before or inside the data gates): it is not resumed, because the gate that stopped it may be what failed. Fix forward with a NEWER commit (the gates re-run against the already-migrated database), or run rollback.sh to the previous commit (${STATE_PREV:-unknown}). Nothing was changed."
+      if [ -z "$failed_step" ] || [ -z "$STATE_PREV" ]; then
+        refuse "HEAD == PIN and the recorded state line is malformed; not resuming (nothing was changed): $last_state"
+      fi
+      if [ "$failed_step" -lt 10 ]; then
+        refuse "HEAD == PIN after a run that failed at step $failed_step (before or inside the data gates): it is not resumed, because the gate that stopped it may be what failed. Fix forward with a NEWER commit (the gates re-run against the already-migrated database), or run rollback.sh to the previous commit ($STATE_PREV). Nothing was changed."
+      fi
+      if [ "$failed_step" -eq 13 ]; then
+        refuse "the last run failed at step 13 (the .env fingerprints changed during the deploy). A resume would take the changed .env as its new baseline, so it is not resumed. Check what changed .env, then fix forward with a newer commit or run rollback.sh to $STATE_PREV. Nothing was changed."
       fi
       RESUME=1
       PROD="$STATE_PREV"
       note "RESUME mode: migrations and data gates passed in the failed run; this run rebuilds, restarts and smoke-tests. previous commit: $PROD"
       ;;
     *)
-      # the last real run for this PIN was OK, or nothing is recorded (a manual deploy)
-      echo "PIN equals the commit already deployed: nothing to do."
-      echo "ALREADY DEPLOYED"
-      RESULT_LINE=no
-      exit 0
+      # STARTED (the run was killed hard: SIGKILL, OOM, reboot), ROLLED_BACK, or anything
+      # unparseable: the state of the tree is unknown, so never guess "already deployed".
+      echo "HEAD already equals the PIN, but the last recorded run state is not OK or FAILED: $last_state"
+      refuse "HEAD == PIN and the last real run for it did not end cleanly (it was killed, or the code was rolled back since). The state of the services is unknown, so this is neither 'already deployed' nor resumed. Inspect pm2 and the log, then fix forward with a NEWER commit or run rollback.sh. Nothing was changed."
       ;;
   esac
 fi
@@ -538,6 +553,10 @@ fi
 # ===== from here on this run changes things ======================================================
 rm -f "$MARKER"   # consumed: one dry-run authorises one real attempt
 EXIT_HOOK=real_run_exit
+# A hard kill (SIGKILL, OOM, reboot) skips every trap. Leave a STARTED line first so
+# that a later run of this PIN (HEAD == PIN after step 8) sees "did not end cleanly"
+# instead of "nothing recorded"; if it cannot be written, change nothing.
+record_run_state STARTED || fail "cannot write $STATE_FILE, so an interrupted run could not be told apart later. Fix that and run again (nothing has been changed)."
 
 BACKUP_FILE="(none: resumed run)"
 if [ "$RESUME" = 0 ]; then   # steps 6 to 9 are skipped in RESUME mode (not re-indented on purpose)
