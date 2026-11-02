@@ -40,6 +40,16 @@
 # ("deploy"); rollback.sh only accepts commits listed there, so the rollback hint
 # printed by a deploy that failed after step 8 is always usable.
 #
+# $LOG_DIR/run-state (append-only) records how every REAL run ended:
+#   <utc> <PIN> REAL <OK|FAILED> step=<n> prev=<commit that was running before>
+# It is what lets a re-run of the SAME PIN (HEAD == PIN) tell "already deployed"
+# (last real run OK) from "merged but failed" (last real run FAILED). RESUME mode:
+# only when that run failed at step 10 or later (the migrations ran and the data
+# gates of step 9 had PASSED; what is left is builds, restarts, smoke), no migration
+# is pending and backend/dist/main.js exists. A run that failed at step 9 or earlier
+# is never resumed (its data gate may be the very thing that failed): deploy a newer
+# commit or use rollback.sh. A resume still needs a fresh dry-run of the PIN.
+#
 # See docs/runbook.md ("Deploy via GitHub Actions" and "Backup").
 
 set -euo pipefail
@@ -89,6 +99,27 @@ make_workdir
 acquire_lock
 setup_logging deploy "$PIN"
 DEPLOYED_FILE="$LOG_DIR/deployed-shas"
+STATE_FILE="$LOG_DIR/run-state"
+# record_run_state <OK|FAILED>: one line per REAL run, private mode, never fatal.
+record_run_state() {
+  (
+    umask 077
+    mkdir -p "$LOG_DIR"
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $PIN REAL $1 step=$CURRENT_STEP prev=${STATE_PREV:-$PROD}" >> "$STATE_FILE"
+  ) || echo "WARNING: could not append to $STATE_FILE." >&2
+}
+# last_real_state: the last REAL-run line for this PIN, or nothing.
+last_real_state() {
+  [ -f "$STATE_FILE" ] || return 0
+  awk -v pin="$PIN" '$2 == pin && $3 == "REAL" { line = $0 } END { if (line != "") print line }' "$STATE_FILE"
+}
+RUN_FINISHED_OK=0
+# Runs on every exit of a REAL run (after the dry-run marker was consumed): removes
+# the temporary matrix script and records a run that did not reach DEPLOY_RESULT=OK.
+real_run_exit() {
+  cleanup_matrix
+  if [ "$RUN_FINISHED_OK" != 1 ]; then record_run_state FAILED; fi
+}
 # record_deployed <sha> <how>: append-only and idempotent (no duplicate lines),
 # private mode. Returns non-zero when the file cannot be written.
 record_deployed() {
@@ -312,11 +343,34 @@ run_matrix() {
   ( cd "$APP_DIR/backend" && npx --no-install ts-node -r tsconfig-paths/register "scripts/$(basename "$MATRIX_TMP")" )
 }
 
-# print the strict subset of the matrix JSON (.matrix .shop .shopfeatureoverride)
+# print the strict subset of the matrix JSON (.matrix .shop .shopfeatureoverride
+# .shopSuspension). lib/matrix-diff.js compares two of these (per-shop key
+# INTERSECTION, new keys must be false), never the whole document: BEFORE runs the
+# old FeaturesService and AFTER the new one, so a PIN that adds a feature key
+# changes the document's shape by design.
 matrix_strict_view() {
   node -e '
     const j = JSON.parse(require("fs").readFileSync(0, "utf8"));
-    console.log(JSON.stringify({ matrix: j.matrix, shop: j.shop, shopfeatureoverride: j.shopfeatureoverride }));'
+    console.log(JSON.stringify({ matrix: j.matrix, shop: j.shop, shopfeatureoverride: j.shopfeatureoverride, shopSuspension: j.shopSuspension === undefined ? null : j.shopSuspension }));'
+}
+
+# compare_matrix: BEFORE (in $MATRIX_BEFORE) against AFTER (in $MATRIX_AFTER). On any
+# problem BOTH documents are written to the log directory (private mode) and the exact
+# differences (shop id, key, before, after) are printed BEFORE the run stops.
+compare_matrix() {
+  local stamp base
+  printf '%s\n' "$MATRIX_BEFORE" > "$WORK_DIR/matrix-before.json"
+  printf '%s\n' "$MATRIX_AFTER" > "$WORK_DIR/matrix-after.json"
+  if node "$SELF_DIR/lib/matrix-diff.js" "$WORK_DIR/matrix-before.json" "$WORK_DIR/matrix-after.json" > "$WORK_DIR/matrix-diff.out"; then
+    cat "$WORK_DIR/matrix-diff.out"
+    return 0
+  fi
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  base="$LOG_DIR/matrix-$stamp-${PIN:0:7}"
+  ( umask 077; cp "$WORK_DIR/matrix-before.json" "$base-before.json"; cp "$WORK_DIR/matrix-after.json" "$base-after.json" )
+  cat "$WORK_DIR/matrix-diff.out"
+  echo "both matrices were written to $base-before.json and $base-after.json" >&2
+  return 1
 }
 
 # ===========================================================================================
@@ -340,11 +394,31 @@ BRANCH="$(git -C "$APP_DIR" symbolic-ref --short -q HEAD || true)"
 [ "$BRANCH" = "main" ] || refuse "the checkout is on '${BRANCH:-detached HEAD}', not main."
 PROD="$(git -C "$APP_DIR" rev-parse HEAD)"
 note "production HEAD: $PROD"
+RESUME=0
+STATE_PREV=""
 if [ "$PROD" = "$PIN" ]; then
-  echo "PIN equals the commit already deployed: nothing to do."
-  echo "ALREADY DEPLOYED"
-  RESULT_LINE=no
-  exit 0
+  last_state="$(last_real_state)"
+  case "$last_state" in
+    *" REAL FAILED "*)
+      failed_step="$(echo "$last_state" | sed -n 's/.* step=\([0-9][0-9]*\) .*/\1/p')"
+      STATE_PREV="$(echo "$last_state" | sed -n 's/.* prev=\([0-9a-f]\{40\}\)$/\1/p')"
+      echo "HEAD already equals the PIN, but the last real run for it FAILED at step ${failed_step:-?}: $last_state"
+      if [ -z "$failed_step" ] || [ "$failed_step" -lt 10 ] || [ -z "$STATE_PREV" ]; then
+        refuse "HEAD == PIN after a run that failed at step ${failed_step:-?} (before or inside the data gates): it is not resumed, because the gate that stopped it may be what failed. Fix forward with a NEWER commit (the gates re-run against the already-migrated database), or run rollback.sh to the previous commit (${STATE_PREV:-unknown}). Nothing was changed."
+      fi
+      git -C "$APP_DIR" merge-base --is-ancestor "$STATE_PREV" "$PIN" || refuse "recorded previous commit $STATE_PREV is not an ancestor of the PIN; not resuming."
+      RESUME=1
+      PROD="$STATE_PREV"
+      note "RESUME mode: migrations and data gates passed in the failed run; this run rebuilds, restarts and smoke-tests. previous commit: $PROD"
+      ;;
+    *)
+      # the last real run for this PIN was OK, or nothing is recorded (a manual deploy)
+      echo "PIN equals the commit already deployed: nothing to do."
+      echo "ALREADY DEPLOYED"
+      RESULT_LINE=no
+      exit 0
+      ;;
+  esac
 fi
 git -C "$APP_DIR" merge-base --is-ancestor "$PROD" "$PIN" || refuse "production HEAD $PROD is not an ancestor of PIN (diverged or a rollback target). Use rollback.sh for going backwards."
 ROLLBACK_HINT="Rollback (code only, no database restore): run the Deploy workflow with mode=rollback and sha=$PROD, or on the VPS: $APP_DIR/tools/deploy/rollback.sh $PROD"
@@ -411,6 +485,10 @@ if [ -n "$PENDING" ]; then
 else
   echo "pending migrations: none"
 fi
+if [ "$RESUME" = 1 ]; then
+  [ -z "$PENDING" ] || refuse "RESUME mode needs a fully migrated database, but migrations are pending (listed above). Not resuming; nothing was changed."
+  [ -f "$APP_DIR/backend/dist/main.js" ] || refuse "RESUME mode needs backend/dist/main.js and it is missing. Not resuming; nothing was changed."
+fi
 MATRIX_REQUIRED=0
 case $'\n'"$PENDING"$'\n' in *$'\n20261124100000_billing_plt1_tables\n'*) MATRIX_REQUIRED=1 ;; esac
 MATRIX_AVAILABLE=0
@@ -427,6 +505,16 @@ echo "$ENV_BEFORE" | sed 's/^/  /'
 resolve_smoke_slug
 echo "smoke shop slug: $SMOKE_SLUG"
 
+if [ "$DRY_RUN" = 1 ] && [ "$RESUME" = 1 ]; then
+  echo
+  echo "WOULD DO (RESUME): skip steps 6 to 9 (no backup, no merge, no migration, no data gates: the failed run passed them); step 10 rebuild storefront/admin as needed, step 11 restart in order, step 12 smoke, step 13 env fingerprints, step 14 report"
+  mkdir -p "$LOG_DIR"
+  ( umask 077; date -u +%Y-%m-%dT%H:%M:%SZ > "$MARKER" )
+  echo "dry-run marker written: $MARKER (valid 24h)"
+  RESULT_LINE=no
+  echo "DRYRUN OK"
+  exit 0
+fi
 if [ "$DRY_RUN" = 1 ]; then
   validate_row_queries
   echo
@@ -450,7 +538,10 @@ fi
 
 # ===== from here on this run changes things ======================================================
 rm -f "$MARKER"   # consumed: one dry-run authorises one real attempt
-EXIT_HOOK=cleanup_matrix
+EXIT_HOOK=real_run_exit
+
+BACKUP_FILE="(none: resumed run)"
+if [ "$RESUME" = 0 ]; then   # steps 6 to 9 are skipped in RESUME mode (not re-indented on purpose)
 
 step 6 "backup and restore drill"
 DRILL_DB="${DRILL_DB_NAME:-${DB_NAME}_drill}"
@@ -540,9 +631,11 @@ if ! compare_rows; then
 fi
 if [ -n "$MATRIX_BEFORE" ]; then
   MATRIX_AFTER="$(run_matrix | matrix_strict_view)" || fail "billing flag matrix AFTER failed."
-  [ "$MATRIX_BEFORE" = "$MATRIX_AFTER" ] || { echo "STOP: billing flag matrix differs before/after the migrations. No restart performed." >&2; exit 1; }
-  echo "billing flag matrix: identical before/after"
+  compare_matrix || { echo "STOP: billing flag matrix differs before/after the migrations. No restart performed." >&2; exit 1; }
+  echo "billing flag matrix: identical before/after (shared keys; new keys all false)"
 fi
+
+fi   # end of the steps skipped in RESUME mode
 
 step 10 "storefront and admin builds (all builds finish before any restart)"
 [ "$STOREFRONT_CHANGED" = 0 ] || build_storefront
@@ -583,4 +676,7 @@ echo "LOG_FILE=$LOG_FILE"
 echo "$ROLLBACK_HINT"
 echo "NOT automated: the authenticated testadmin smoke needs a temporary staff user on production; do it by hand with the owner's approval."
 RESULT_LINE=no
+CURRENT_STEP=14
+record_run_state OK
+RUN_FINISHED_OK=1
 echo "DEPLOY_RESULT=OK"
