@@ -126,6 +126,7 @@ Each run seeds a fresh shop via the real backend API (`global-setup.ts` → `see
 
 Production runs on a single Hostinger VPS. Connection details live in `deploy/.env` (gitignored, not committed — see `deploy/.env`'s own header comment; recreate it from this section on a fresh machine): `VPS_HOST`, `VPS_SSH_USER`, `VPS_SSH_KEY`, `VPS_APP_USER`, `VPS_APP_DIR`, `VPS_PM2_{BACKEND,ADMIN,STOREFRONT}`, `VPS_PORT_{BACKEND,ADMIN,STOREFRONT}`.
 
+- **Automated path (preferred once the owner has done the one-time setup):** the `Deploy` GitHub Actions workflow (`.github/workflows/deploy.yml`, `tools/deploy/`) runs the whole procedure below with hard gates, dry-run by default; see `docs/runbook.md` "Deploy via GitHub Actions". The manual steps below stay valid. The workflow's gate matches the five required CI check names exactly: renaming a CI job makes deploys fail closed, so update the list in `tools/deploy/lib/check-runs.js` in the same PR.
 - **Connecting**: SSH in as `VPS_SSH_USER` (root) with `VPS_SSH_KEY`, then run app commands as `VPS_APP_USER` (`deploy`) via `sudo -u deploy` — the app's files/processes are owned by `deploy`, not root.
   ```bash
   ssh -i ~/.ssh/hostinger_vps root@187.52.114.246
