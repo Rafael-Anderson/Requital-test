@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Fake npm for the deploy-tool tests. Logs every call (with the working
+# directory's basename) to $FAKE_LOG and produces just enough build output for
+# the scripts' assertions. Behaviour switches come from FAKE_* env vars.
+app="$(basename "$PWD")"
+echo "npm[$app] $*" >> "$FAKE_LOG"
+case "$*" in
+  "ci")
+    if [ "${FAKE_LINGER:-}" = 1 ]; then
+      # a detached child that outlives the build; it must not hold the deploy lock
+      ( sleep 20 > /dev/null 2>&1 & echo $! > "$FAKE_DIR/linger-pid" )
+    fi
+    if [ "${FAKE_LEAK:-}" = 1 ]; then
+      echo "debug DATABASE_URL=mysql://root:topsecretpw@db.internal/prod"
+      echo "request header Authorization: Bearer abcdef0123456789abcdef"
+      echo "connecting to mysql://admin:hunter2pass@10.0.0.1:3306/x"
+    fi
+    ;;
+  "run db:migrate")
+    echo "Applying 20990101000000_new_thing..."
+    touch "$FAKE_DIR/migrated"
+    if [ "${FAKE_MIGRATE_FAIL:-}" = 1 ]; then
+      echo "Migration 20990101000000_new_thing failed: boom" >&2
+      exit 1
+    fi
+    [ "${FAKE_MIGRATE_MUTATES:-}" != 1 ] || touch "$FAKE_DIR/mutated"
+    [ "${FAKE_MATRIX_MUTATES:-}" != 1 ] || touch "$FAKE_DIR/mutated-matrix"
+    ;;
+  "run build")
+    case "$app" in
+      backend)
+        if [ "${FAKE_NO_DIST:-}" = always ]; then exit 0; fi
+        if [ "${FAKE_NO_DIST:-}" = first ] && [ ! -e "$FAKE_DIR/dist-retry" ]; then
+          touch "$FAKE_DIR/dist-retry"; exit 0
+        fi
+        [ "${FAKE_TOUCH_ENV:-}" != 1 ] || echo "X=1" >> .env
+        mkdir -p dist && echo "// fake" > dist/main.js
+        ;;
+      storefront)
+        mkdir -p .next
+        dest="${INTERNAL_API_URL:-http://localhost:3000}/:path*"
+        [ "${FAKE_BAD_REWRITE:-}" != 1 ] || dest="http://localhost:3000/:path*"
+        printf '{"rewrites":{"beforeFiles":[],"afterFiles":[{"source":"/api/:path*","destination":"%s"}],"fallback":[]}}\n' "$dest" > .next/routes-manifest.json
+        ;;
+      admin) mkdir -p .next ;;
+    esac
+    ;;
+esac
+exit 0

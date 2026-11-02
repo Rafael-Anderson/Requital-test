@@ -1,0 +1,175 @@
+# Deploy to the production VPS, from the Actions tab (Run workflow). Nothing runs
+# on push, on a schedule or from a pull request: workflow_dispatch only, from the
+# main branch only. The only privileged action is ONE ssh call whose forced
+# command (tools/deploy/ssh-entry.sh on the VPS) accepts nothing but
+# `deploy <sha> [--dry-run] [--ci-verified]`, `rollback <sha>` and `status`.
+#
+# mode:
+#   dry-run  (default) run every read-only gate on the VPS, change nothing, write
+#            the dry-run marker that a real deploy of the SAME sha requires
+#   deploy   the real thing; refused by the VPS unless a dry-run of the same sha
+#            succeeded in the last 24 hours
+#   status   print the newest deploy log tail and the last DEPLOY_RESULT; no CI
+#            gate, no deploy
+#   rollback code-only rollback to `sha` (the PREVIOUS_SHA a deploy printed)
+#
+# Secrets (GitHub Environment "production", see docs/runbook.md "Deploy via
+# GitHub Actions"): DEPLOY_SSH_KEY, DEPLOY_HOST, DEPLOY_USER, DEPLOY_KNOWN_HOSTS.
+# User-controlled inputs reach shell code ONLY through env: and are validated by
+# tools/deploy/lib/validate-sha.sh; they are never interpolated into run: text.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run (default, changes nothing), deploy, status, or rollback"
+        type: choice
+        options:
+          - dry-run
+          - deploy
+          - status
+          - rollback
+        default: dry-run
+      sha:
+        description: "Full 40-character commit SHA on main. Needed for dry-run, deploy and rollback (for rollback: the PREVIOUS_SHA). Ignored for status."
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: gate (main only, sha on main, CI green)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      sha: ${{ steps.validate.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate mode and sha
+        id: validate
+        env:
+          MODE: ${{ inputs.mode }}
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            dry-run|deploy|status|rollback) ;;
+            *) echo "Error: unknown mode." >&2; exit 1 ;;
+          esac
+          if [ "$MODE" = "status" ]; then
+            echo "sha=" >> "$GITHUB_OUTPUT"
+            echo "status mode: no sha needed, no CI gate, nothing is deployed."
+            exit 0
+          fi
+          . tools/deploy/lib/validate-sha.sh
+          sha="$(validate_sha "$INPUT_SHA")"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "mode=$MODE sha=$sha"
+
+      # GITHUB_SHA is the commit this run was dispatched on (the tip of main when
+      # the branch rule did its job). Comparing against it, not the name "main",
+      # also removes any branch/tag name ambiguity.
+      - name: The sha is on main
+        if: inputs.mode != 'status'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.validate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          curl -fsS \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$REPO/compare/$SHA...$GITHUB_SHA" -o "$RUNNER_TEMP/compare.json"
+          state="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).status)' "$RUNNER_TEMP/compare.json")"
+          echo "compare $SHA...$GITHUB_SHA (the commit this run was dispatched on): $state"
+          case "$state" in
+            ahead|identical) ;;
+            *) echo "Error: $SHA is not an ancestor of (or equal to) the dispatched main commit." >&2; exit 1 ;;
+          esac
+
+      - name: The five required CI checks succeeded on the sha
+        if: inputs.mode == 'dry-run' || inputs.mode == 'deploy'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.validate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          curl -fsS \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$REPO/commits/$SHA/check-runs?per_page=100" -o "$RUNNER_TEMP/check-runs.json"
+          node tools/deploy/lib/check-runs.js "$RUNNER_TEMP/check-runs.json"
+
+  deploy:
+    name: ${{ inputs.mode }} on the VPS
+    needs: gate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - name: Run over SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          MODE: ${{ inputs.mode }}
+          SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          echo "::add-mask::$DEPLOY_HOST"
+          echo "::add-mask::$DEPLOY_USER"
+
+          case "$MODE" in
+            dry-run)  remote="deploy $SHA --dry-run --ci-verified" ;;
+            deploy)   remote="deploy $SHA --ci-verified" ;;
+            rollback) remote="rollback $SHA" ;;
+            status)   remote="status" ;;
+            *) echo "Error: unknown mode." >&2; exit 1 ;;
+          esac
+          if [ "$MODE" != "status" ] && ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Error: the gate job did not produce a valid sha." >&2
+            exit 1
+          fi
+
+          keydir="$(mktemp -d "$RUNNER_TEMP/deploykey.XXXXXX")"
+          cleanup() {
+            shred -u "$keydir/id" 2>/dev/null || rm -f "$keydir/id"
+            rm -rf "$keydir"
+          }
+          trap cleanup EXIT
+          # tr -d '\r': a key pasted from Windows may carry CRLF line endings, which
+          # ssh rejects as an invalid format.
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$keydir/id"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" | tr -d '\r' > "$keydir/known_hosts"
+
+          ssh -T \
+            -i "$keydir/id" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$keydir/known_hosts" \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=6 \
+            -o ConnectTimeout=20 \
+            "$DEPLOY_USER@$DEPLOY_HOST" "$remote"

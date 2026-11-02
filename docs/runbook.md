@@ -444,6 +444,233 @@ Platform > Audit log (or `GET /platform-admin/audit-log?shopId=<id>`): action `s
 
 The platform tier has no one above it in the UI: from `backend/` on the server run `npm run db:reset-platform-2fa -- <email>` (needs database access and writes no audit row, so note it in the ticket), then enrol again. If `PLATFORM_REQUIRE_2FA` is on, an unenrolled platform admin can reach only the enrolment page, which is also why this endpoint is unreachable to them.
 
+## Deploy via GitHub Actions
+
+A deploy can be started from the GitHub Actions tab instead of a person with an SSH key at a keyboard. The manual path in CLAUDE.md ("VPS deploy") stays valid and is the fallback. Everything privileged is one SSH call into a script on the VPS that runs the whole procedure with hard gates (`tools/deploy/deploy.sh`). Nothing here is deployed or created by merging the code: the one-time setup below is yours to do, and every VPS and runner behaviour in this section was tested against fakes only (see "Not verified" at the end).
+
+### How it works
+
+1. **Actions > Deploy > Run workflow** (branch `main` only), pick a `mode` and a full 40-character `sha` that is on `main`:
+   - `dry-run` (the default): runs every read-only gate on the VPS and changes nothing except a log file and a marker file.
+   - `deploy`: the real thing. The VPS refuses it unless a successful dry-run of the SAME sha finished in the last 24 hours (marker `/home/deploy/deploy-logs/dryrun-ok-<sha>`, consumed by the real run).
+   - `status`: prints the tail of the newest deploy log and the last `DEPLOY_RESULT`. No CI gate, no deploy.
+   - `rollback`: CODE-ONLY rollback to `sha` (use the `PREVIOUS_SHA` a deploy printed).
+2. The **gate** job (no secrets) checks that the run is on `main`, that `sha` is an ancestor of `main`, and that the five required CI checks succeeded on it: `backend (tsc, unit, e2e)`, `admin (tsc, lint, vitest, build)`, `storefront (tsc, lint, vitest, build)`, `guardrails (outlet-scoping, page-width, sendEmail)`, `e2e (playwright)`.
+3. The **deploy** job waits for a reviewer to approve the `production` environment, then opens one SSH connection with a key that can run exactly `deploy <sha> [--dry-run] [--ci-verified]`, `rollback <sha>` or `status`, and streams the output.
+4. The VPS holds **no GitHub token**. It cannot check CI itself, so a real deploy requires the `--ci-verified` flag that only the workflow's gate job sends. There is deliberately no token path.
+
+What `deploy.sh` does, in order (it stops at the first failed gate, and all of these also run in a dry-run up to step 5):
+
+| Step | What |
+|---|---|
+| 1 | Preflight: running as `deploy`, tools present, 2 GB free, all three pm2 processes online, database reachable |
+| 2 | Working tree must be completely clean (untracked files count) |
+| 3 | `git fetch`; the sha must be an ancestor of `origin/main`; production HEAD must be an ancestor of the sha; equal means "already deployed" |
+| 4 | `--ci-verified` present (real run), a fresh dry-run marker for this sha (real run) |
+| 5 | Plan: which apps changed, pending migrations (a migration that sorts before the last applied one is flagged), `.env` fingerprints |
+| 6 | Backup with `tools/backup-db.sh`, `gzip -t`, restore into a scratch database, require `rows before <= restored <= rows after` |
+| 7 | BEFORE row hashes of the protected tables (an MD5 per row over explicit columns, bounded by the max id captured now; plus count and XOR totals for the log), plus the billing flag matrix from the PIN's own script |
+| 8 | `git merge --ff-only` to the sha |
+| 9 | Backend `npm ci`, `db:migrate`, build, `dist/main.js` assertion; AFTER row hashes are compared row by row, and an unexplained change STOPS the run before any restart (see "Protected rows" below) |
+| 10 | Storefront (`INTERNAL_API_URL=http://127.0.0.1:3000`, routes-manifest assertion) and admin builds. All builds finish before any restart |
+| 11 | `pm2 restart` backend, storefront, admin (only rebuilt apps), each with an online and health wait |
+| 12 | Redirect-map smoke, new `Cannot find module` in the logs is fatal, `backup.log` check |
+| 13 | `.env` fingerprints must be unchanged |
+| 14 | Prints `PREVIOUS_SHA=`, `NEW_SHA=`, `BACKUP_FILE=` and `DEPLOY_RESULT=OK` (or `FAILED step=<n>`, or `REFUSED`) |
+
+Not automated, on purpose: the authenticated `testadmin` smoke needs a temporary staff user on production, so it stays a manual step that needs your approval each time.
+
+Logs are in `/home/deploy/deploy-logs/` (mode 600, secrets redacted). The run keeps going on the VPS if your connection or the workflow drops; run `status` to see how it ended. Only one deploy or rollback can run at a time (`/home/deploy/.requital-deploy.lock`).
+
+**Rollback is code-only.** `rollback.sh` resets the checkout to the earlier commit, rebuilds all three apps and restarts them. It does NOT restore the database: migrations here are additive, so the previous code runs against the migrated schema, and restoring a dump would also discard every order placed since the backup. A database restore stays a human decision; see "Restore" and "Migration rollback reference" in this file before doing one.
+
+### One-time setup (you do this; nothing has been created for you)
+
+You need: the existing root SSH access to the VPS that you use today, and admin rights on the GitHub repository. These commands are for Windows PowerShell with the built-in OpenSSH client (Settings > Apps > Optional features > "OpenSSH Client"). `<VPS_HOST>` is the same address you already use to reach the VPS.
+
+**Prerequisite:** the pull request that adds `tools/deploy/` must be merged to `main` first (the bootstrap copies a file out of `origin/main`).
+
+#### 1. Create a dedicated key on your PC
+
+```powershell
+ssh-keygen -t ed25519 -f "$env:USERPROFILE\.ssh\requital_gha_deploy" -C requital-gha-deploy
+```
+
+When it asks for a passphrase, **press Enter twice (no passphrase)**. A GitHub runner cannot type a passphrase, so a key that GitHub uses must have none. That is acceptable only because this key is dedicated, can run nothing but the three commands above, and will live ONLY in the GitHub secret: after your first successful dry-run (step 7) delete the local copy (step 7 shows how). If you ever suspect the key leaked, revoke it (see "Revoking access").
+
+Show the PUBLIC key (safe to share):
+
+```powershell
+Get-Content "$env:USERPROFILE\.ssh\requital_gha_deploy.pub"
+```
+
+Build the exact line you will install on the VPS (copy the single line it prints):
+
+```powershell
+$pub = (Get-Content "$env:USERPROFILE\.ssh\requital_gha_deploy.pub").Trim()
+"restrict,command=`"/usr/local/sbin/requital-ssh-entry.sh`",no-port-forwarding,no-agent-forwarding,no-pty,no-X11-forwarding $pub"
+```
+
+It looks like this (your key differs):
+
+```text
+restrict,command="/usr/local/sbin/requital-ssh-entry.sh",no-port-forwarding,no-agent-forwarding,no-pty,no-X11-forwarding ssh-ed25519 AAAA... requital-gha-deploy
+```
+
+`command=` forces that script for every connection with this key no matter what the client asks for. The script path is absolute (sshd does not expand `~` in `command=`). `restrict` already disables forwarding and a pty; the explicit options are belt and braces.
+
+#### 2. Install the entry script on the VPS, outside the git tree
+
+Log in as root the way you do today, then run this block. It copies `ssh-entry.sh` out of git into `/usr/local/sbin`, a directory owned by root (and so is its parent), so the file cannot be swapped or renamed from the `deploy` account and a `git merge` cannot change what the key is allowed to run:
+
+```bash
+sudo -u deploy git -C /home/deploy/requital fetch origin main
+sudo -u deploy git -C /home/deploy/requital show origin/main:tools/deploy/ssh-entry.sh > /usr/local/sbin/requital-ssh-entry.sh
+chown root:root /usr/local/sbin/requital-ssh-entry.sh
+chmod 755 /usr/local/sbin/requital-ssh-entry.sh
+sha256sum /usr/local/sbin/requital-ssh-entry.sh
+```
+
+The hash printed must equal this one (also printed in the pull request that introduced the pipeline). If it does not, stop and do not continue:
+
+```text
+7b741ffb67fad259ad101fa6b395723dc57f959d0625040e15af5ed422d2e690  /usr/local/sbin/requital-ssh-entry.sh
+```
+
+What this does and does not protect: it constrains the holder of THIS key (the GitHub secret). It is not a defence against a compromised `deploy` user, who owns the application, the checkout and `authorized_keys` and can do far more than this script allows anyway.
+
+Only `ssh-entry.sh` is bootstrapped this way. `deploy.sh` is taken from the commit being deployed (extracted with `git archive` on every run), and `rollback.sh` from the checked-out tree. **Whenever `ssh-entry.sh` changes (its sha256 changes) it must be re-copied with the block above and the hash re-checked**; the pull request that changes it prints the new hash, and the test suite fails if the hash in this runbook and the file differ.
+
+The script runs with a fixed `PATH=/usr/local/bin:/usr/bin:/bin` and fixed paths (`/home/deploy/requital`, `/home/deploy/deploy-logs`); nothing in the environment can change them. Check that every tool the deploy needs is reachable from that PATH, and symlink any that are not into `/usr/local/bin` (for example when `pm2` or `node` live under a version manager):
+
+```bash
+sudo -u deploy env -i PATH=/usr/local/bin:/usr/bin:/bin sh -c 'for c in git node npm pm2 mysql mysqldump gzip flock curl md5sum; do command -v "$c" || echo "MISSING: $c"; done'
+```
+
+Every tool must print a path. Any line starting with `MISSING:` must be fixed before the first dry-run (which would otherwise stop with `required command(s) missing`).
+
+The database URL in `backend/.env` must have its special characters percent-encoded (an `@` in the password is `%40`), as CLAUDE.md already says. The preflight refuses a raw `@` with a clear message, because the backup scripts split the URL at the first `@`.
+
+#### 3. Authorise the key on the VPS
+
+Still on the VPS as root:
+
+```bash
+cp -p /home/deploy/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys.bak
+nano /home/deploy/.ssh/authorized_keys
+```
+
+Go to the end of the file, paste the single line from step 1 as its own new line, then save (Ctrl+O, Enter) and exit (Ctrl+X). Leave the existing lines (for example the backup-pull key) untouched. Then:
+
+```bash
+chown deploy:deploy /home/deploy/.ssh/authorized_keys
+chmod 600 /home/deploy/.ssh/authorized_keys
+grep -c requital-gha-deploy /home/deploy/.ssh/authorized_keys
+```
+
+The last command must print `1`.
+
+#### 4. Capture the server's host key (this stops a man-in-the-middle)
+
+On the PC, scan using exactly the same `<VPS_HOST>` you will put in the `DEPLOY_HOST` secret:
+
+```powershell
+ssh-keyscan -t ed25519 <VPS_HOST>
+```
+
+It prints one line: `<VPS_HOST> ssh-ed25519 AAAA...`. That whole line is the value of the `DEPLOY_KNOWN_HOSTS` secret. Before you trust it, compare fingerprints. On the PC:
+
+```powershell
+ssh-keyscan -t ed25519 <VPS_HOST> | ssh-keygen -lf -
+```
+
+On the VPS:
+
+```bash
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+The two `SHA256:...` values must be identical. If they differ, something is between you and the server: stop.
+
+#### 5. Create the GitHub Environment and secrets
+
+In the repository on github.com:
+
+1. **Settings > Environments > New environment**, name it exactly `production`, click **Configure environment**.
+2. Tick **Required reviewers**, add yourself (and anyone else allowed to approve a deploy), click **Save protection rules**.
+3. Under **Deployment branches and tags** choose **Selected branches and tags**, click **Add deployment branch or tag rule**, enter `main`, and add it.
+4. Under **Environment secrets** click **Add environment secret** four times:
+
+| Secret | Value |
+|---|---|
+| `DEPLOY_SSH_KEY` | the full contents of the private key file, including the `-----BEGIN` and `-----END` lines. Copy it without printing it: `Get-Content "$env:USERPROFILE\.ssh\requital_gha_deploy" -Raw \| Set-Clipboard`, paste into the box, then clear your clipboard |
+| `DEPLOY_HOST` | `<VPS_HOST>`, exactly as used in step 4 |
+| `DEPLOY_USER` | `deploy` |
+| `DEPLOY_KNOWN_HOSTS` | the single `ssh-keyscan` line from step 4 |
+
+Environment secrets are only handed to jobs that passed the environment's rules. Put them nowhere else, and make the controls real:
+
+- **The deployment-branches rule is THE control** that keeps code from other branches away from the secrets. The `if: github.ref == 'refs/heads/main'` lines inside `deploy.yml` are not a control: anyone who can push a branch can edit that file on their branch. Only the environment's "selected branches" rule stops a job on another branch from being given the secrets.
+- **Prevent self-review.** If more than one person can approve, tick **Prevent self-review** on the environment so whoever starts a run cannot approve it. If you are the only maintainer you cannot enable it without locking yourself out; then the reviewer step is a guard against mistakes, not a second pair of eyes, and the real barriers are the branch rule and branch protection on `main`.
+- **Environment secrets only.** The four secrets must be Environment secrets of `production`. Delete any repository-level or organisation-level secret with the same names (**Settings > Secrets and variables > Actions**, tabs "Repository secrets" and, for an organisation, its own Secrets page): those would be handed to workflows regardless of the environment's rules.
+- **Plan caveat.** Required reviewers and deployment-branch rules on environments are available for private repositories only on paid GitHub plans (Pro, Team, Enterprise); on the free plan they work for public repositories only. If **Settings > Environments** does not offer them, do not put the key into GitHub until it does.
+- **Verify the rule instead of trusting it.** (a) Run the workflow from any branch other than `main` with mode `status`: the jobs must be skipped. (b) That only proves the `if:` lines. To prove the environment rule itself, push a scratch branch on which you delete the two `if: github.ref == 'refs/heads/main'` lines from `deploy.yml`, then dispatch mode `status` from that branch: GitHub must refuse the `deploy` job with a message like "Branch ... is not allowed to deploy to production due to environment protection rules", and no step may run. If the job starts instead, the rule is missing: fix it before going on. Delete the scratch branch afterwards.
+
+
+#### 6. Check that GitHub's runners can reach port 22
+
+GitHub-hosted runners do not have fixed IP addresses (the published ranges are large and change), so allow-listing them in a firewall is impractical. If the VPS firewall or the hosting provider's firewall only allows your own IP on port 22, the first run will fail at the connection step with `Connection timed out`; that is the test. The protection then rests on three things, so confirm them on the VPS:
+
+```bash
+sshd -T | grep -Ei '^(passwordauthentication|kbdinteractiveauthentication)'
+fail2ban-client status sshd
+```
+
+Both should show password logins disabled (`no`) and fail2ban active. The forced command (step 2) and the single-purpose key (step 1) limit what a connection can do. A self-hosted runner or a VPN is the stronger option later, if you want to close port 22 to the world.
+
+#### 7. First run: dry-run, then deploy
+
+1. Get the full sha of the commit to deploy: `git rev-parse origin/main` or the copy-full-SHA button on the commit in GitHub.
+2. **Actions > Deploy > Run workflow**: branch `main`, mode `dry-run` (the default), paste the sha. A reviewer approves the `production` environment. Read the output: it must end with `DRYRUN OK`. (If the VPS is already at that sha it prints `ALREADY DEPLOYED`: pick a newer sha.)
+3. Once that dry-run has worked once, delete the local private key copy; GitHub holds the only one:
+
+```powershell
+Remove-Item "$env:USERPROFILE\.ssh\requital_gha_deploy"
+```
+
+(Keep the `.pub` file if you like.)
+4. Run the workflow again with mode `deploy` and the SAME sha, within 24 hours. The output ends with `DEPLOY_RESULT=OK`. Write down `PREVIOUS_SHA`.
+5. Do the manual `testadmin` smoke with a temporary staff user, as before, and remove the user afterwards.
+
+Mode `status` shows how the last run ended, which is the thing to run after a dropped connection.
+
+### Operating notes
+
+- **A renamed CI job makes deploys fail closed.** The gate matches the five check names exactly, from the list in `tools/deploy/lib/check-runs.js`. A test (`tools/deploy/test/ci-job-names.test.js`) fails in CI when `ci.yml` and that list disagree, so rename a job and update the list in the same pull request. The same applies to adding a sixth required check.
+- **Failure behaviour.** A refusal (`DEPLOY_RESULT=REFUSED`, exit 2) changed nothing. `FAILED step=<n>` after step 8 means the new code is merged on disk; the output ends with the exact rollback instruction. A checksum mismatch at step 9 deliberately restarts nothing, so the old processes keep serving.
+- **Protected rows (steps 7 and 9).** Before the migrations the script stores an MD5 per row of the protected tables (orders, order items, payment transactions, shops, customers, gift cards, stock movements, stock consumption) and the money columns of every order; after them it compares row by row. A migration that only adds things must leave those rows alone, but the shop keeps trading during a deploy, so the rules are: (1) an order whose money columns changed in the window counts as edited by the shop, and the replaced item and consumption rows of an edited order are tolerated; but more than max(10, about 1% of the orders) edited orders is NOT trading, it is fatal, and so is anything else that changed; (2) gift cards are tolerated when their `updatedAt` moved; (3) a few changed or deleted customers (merges) are tolerated up to the same cap; (4) columns that a merchant or a customer merge can rewrite without a trace are compared with a cap of their own instead of being ignored: shop currency, timezone, domain type and country (at most 2 shops), `order.customerId` and `giftcard.purchasedByCustomerId` (at most max(100, 5%) rows); (5) shops are otherwise judged on `id` and `subdomain`. Tables without a trustworthy `updatedAt` use only columns that cannot change after creation. Each dump must also match the table's `COUNT(*)` and may not be empty when the table has rows. The dry-run runs every one of these queries once with `LIMIT 1`, so a wrong column name fails the dry-run instead of the real run. The run prints how many rows it tolerated. A STOP leaves the new code merged on disk and the schema migrated while the old processes keep serving: investigate before restarting anything.
+- **What the row check does not catch (residuals, stated plainly).** It is a tripwire, not a proof. A damaging migration that touches no more rows than a cap allows (up to 10 or about 1% of the orders, up to 10 or about 1% of the customers, up to 2 shops, up to max(100, 5%) customer references) passes. For a small table the floors dominate: with fewer than about 1000 orders the floor of 10 is more than 1%, and a table of 10 rows or fewer can be rewritten completely and still pass its capped rule. Columns that are not in the hash are not checked at all. The dry-run and the code that runs on the VPS (`deploy.sh`) come from the commit being deployed, so a commit that is already on `main` can weaken its own gates; what stops that is branch protection and review on `main`, not this pipeline. The workflow's CI gate accepts check runs only from the GitHub Actions app (slug `github-actions`, id 15368); that excludes third-party apps and anyone posting a check run through another token, but it does not exclude a malicious change to a workflow in this repository, which still runs as that app. Anyone holding the SSH key can skip the gate job altogether (see "Risks and mitigations").
+- **Rollback targets.** `rollback` accepts only commits listed in `/home/deploy/deploy-logs/deployed-shas`, an append-only file written by `deploy.sh`: the commit that is running now is recorded just BEFORE the merge of step 8 (so the rollback command a failed deploy prints is always usable), and the new commit after a successful deploy. A commit that was deployed by hand is not in the file: roll that back by hand, or add a line `<sha> <utc time> manual` yourself. The commit must also still be an ancestor of the checkout's HEAD and reachable from `origin/main`. A rollback is the repair path, so it does not insist on a healthy system: if `git fetch` fails (in the entry script, and again in `rollback.sh`) it warns and carries on with the `origin/main` already on disk, and a pm2 process that is errored or stopped is a warning, not a refusal (only a process that does not exist at all stops it). `deploy.sh` stays strict: all three processes must be online.
+- **Manual path.** Everything in CLAUDE.md "VPS deploy" still works unchanged, and `tools/deploy/deploy.sh <sha>` can be run on the VPS by hand as `deploy` (it takes the same lock and writes the same log).
+- **Rollback needs `tools/deploy` in the VPS checkout**, which it has after the first deploy that includes the pipeline. Until then use the manual path.
+- **The scratch restore needs privileges.** The drill creates a database named like the app database plus `_drill`; the `deploy` database user needs permission to create and drop that one name. If step 6 reports a permission error, grant it once in MySQL as an administrator (the grant is on the `_drill` database only). The failed run changed nothing.
+
+### Risks and mitigations
+
+**What the SSH key can do.** Whoever holds the key (the `DEPLOY_SSH_KEY` secret, or any copy of the private key file) can connect directly, without GitHub in the loop, and run `deploy <sha> --dry-run` followed by `deploy <sha> --ci-verified` for ANY sha that is an ancestor of `origin/main`, and `rollback` to any recorded sha. That bypasses the workflow's gate job and the `production` reviewer entirely. The VPS holds no GitHub token and cannot check CI itself, so `--ci-verified` is advisory on the VPS side: it is a statement by the caller, not a proof. What the key cannot do: run a commit that is not on `origin/main` (the entry script checks), run any other command, get a shell, forward ports.
+
+So a compromise of GitHub Actions, of the repository settings or of the `production` secrets gives an attacker exactly this: the power to deploy or roll back to commits that are already on `main`. What stops bad code from getting onto `main` is branch protection (pull requests and the required checks) and not this pipeline.
+
+Mitigations: keep the key only as an Environment secret of `production` (no repository or organisation copy, and delete the local copy on your PC after the first dry-run); a required reviewer on the environment, and "selected branches: main" as the deployment-branch rule (see step 5); the forced command with `restrict`; the sha-on-`main` and five-green-checks gate in the workflow; the mandatory dry-run; the pinned host key; rotate the key from time to time and whenever someone with access to the repository settings leaves (generate a new key, replace the line in `authorized_keys`, replace the secret); revoke at once by deleting the `authorized_keys` line.
+
+### Revoking access
+
+Delete the `requital-gha-deploy` line from `/home/deploy/.ssh/authorized_keys` on the VPS (`nano`, delete the line, save). The key stops working immediately. Then delete the four secrets and, if you want, the `production` environment on GitHub.
+
+### Not verified
+
+Everything above was tested against fakes and real temporary git repositories, never against the VPS, GitHub or a real SSH connection. In particular unconfirmed: the real VPS paths and pm2 names, the `deploy` database user's rights for the scratch restore, how the VPS's sshd treats `restrict` with `command=`, port 22 reachability from GitHub runners, environment reviewer behaviour, the Actions token reading check runs, a real SSH disconnect during a deploy, build timings, and the shellcheck version on the runner. Treat the first dry-run as the real test.
+
 ## Migration rollback reference
 
 This project's migrations are hand-authored `migration.sql` files applied by `npm run db:migrate` (`backend/scripts/migrate.ts`, see CLAUDE.md) — nothing generates a down migration for any of them, and the runner has no "rollback" command. The table below is the manual down-path for every migration currently in the repo, so a rollback is a deliberate, reviewed action rather than a guess made under pressure.

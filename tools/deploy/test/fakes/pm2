@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Fake pm2. jlist reports three online processes; restart is logged; logs prints
+# a baseline line plus (optionally) a fresh "Cannot find module" after a restart.
+echo "pm2 $*" >> "$FAKE_LOG"
+case "$1" in
+  jlist)
+    now=$(( $(date +%s) * 1000 - 100000 ))
+    first=1
+    printf '['
+    for name in requital-backend requital-storefront requital-admin; do
+      [ "$first" = 1 ] || printf ','
+      first=0
+      status=online
+      [ ! -e "$FAKE_DIR/errored-$name" ] || status=errored
+      restarts=0
+      [ ! -e "$FAKE_DIR/restarts-$name" ] || restarts="$(cat "$FAKE_DIR/restarts-$name")"
+      if [ "${FAKE_CRASHLOOP:-}" = "$name" ] && [ -e "$FAKE_DIR/restarted-$name" ]; then
+        restarts=$((restarts + 1)); echo "$restarts" > "$FAKE_DIR/restarts-$name"
+      fi
+      [ "${FAKE_PM2_DOWN:-}" != "$name" ] || status=stopped
+      printf '{"name":"%s","pm2_env":{"status":"%s","pm_uptime":%s,"restart_time":%s,"env":{"SECRET":"must-not-be-printed"}}}' "$name" "$status" "$now" "$restarts"
+    done
+    printf ']\n'
+    ;;
+  restart)
+    touch "$FAKE_DIR/restarted-$2"
+    rm -f "$FAKE_DIR/errored-$2"   # a restart repairs an errored process, unless the test says otherwise
+    [ "${FAKE_PM2_FAIL:-}" != "$2" ] || touch "$FAKE_DIR/errored-$2"
+    ;;
+  logs)
+    echo "old stale line: all quiet"
+    [ "${FAKE_STALE_CNF:-}" != 1 ] || echo "Error: Cannot find module '/x/dist/main.js' (stale, from before dist existed)"
+    if [ "${FAKE_CANNOT_FIND:-}" = "$2" ] && [ -e "$FAKE_DIR/restarted-$2" ]; then
+      echo "Error: Cannot find module '/x/dist/main.js'"
+    fi
+    ;;
+esac
+exit 0

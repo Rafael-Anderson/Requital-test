@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Fake mysql client. Answers the exact queries the deploy scripts run, from
+# canned values and state files; refuses to run if the password is in argv.
+for a in "$@"; do
+  case "$a" in -p*|--password*) echo "FAKE mysql: password in argv" >&2; exit 9 ;; esac
+done
+[ -n "${MYSQL_PWD:-}" ] || { echo "FAKE mysql: MYSQL_PWD not set" >&2; exit 9; }
+db=""; sql=""
+echo "$MYSQL_PWD" > "$FAKE_DIR/pwd-seen"
+: > "$FAKE_DIR/args-seen"
+while [ "$#" -gt 0 ]; do
+  case "$1" in -e) sql="$2"; shift 2; continue ;; --*) echo "$1" >> "$FAKE_DIR/args-seen" ;; *) db="$1" ;; esac
+  shift
+done
+echo "mysql[$db] $sql" >> "$FAKE_LOG"
+if [ -n "${FAKE_FAIL_SQL_MATCH:-}" ] && [[ "$sql" == *"$FAKE_FAIL_SQL_MATCH"* ]]; then
+  echo "ERROR 1054 (42S22): Unknown column in field list" >&2
+  exit 1
+fi
+case "$sql" in
+  "SELECT 1") echo 1 ;;
+  "SELECT name FROM _migrations"*)
+    case "$db" in
+      *_drill) if [ -n "${FAKE_DRILL_MIGRATIONS:-}" ]; then echo "$FAKE_DRILL_MIGRATIONS"; else cat "$FAKE_DIR/applied-migrations"; fi ;;
+      *) cat "$FAKE_DIR/applied-migrations" ;;
+    esac ;;
+  "SELECT subdomain FROM shop"*) echo "${FAKE_SLUG-testshop}" ;;
+  "SELECT IFNULL(MAX("*) echo 100 ;;
+  "SELECT \`"*"\`, MD5(CONCAT_WS"*)
+    # per-row hashes: rows/<table>.before|after if the test provided them,
+    # otherwise a default two-row table (row 1 "damaged" after a mutating migration)
+    tbl="$(printf '%s' "$sql" | sed -E 's/.* FROM `([a-z]+)`.*/\1/')"
+    case "$sql" in *'`total`'*) tbl=ordermoney ;; esac
+    # the capped sets (columns a merchant or a customer merge may rewrite) get their own keys
+    base="$tbl"
+    case "$tbl:$sql" in
+      shop:*'`domainType`'*) tbl=shopmutable ;;
+      order:*'`customerId`'*) tbl=ordercustomer ;;
+      giftcard:*'`purchasedByCustomerId`'*) tbl=giftcardcustomer ;;
+    esac
+    phase=before; [ ! -e "$FAKE_DIR/migrated" ] || phase=after
+    if [ "$tbl" != "$base" ] && [ ! -f "$FAKE_DIR/data/$tbl.$phase.json" ] && [ ! -f "$FAKE_DIR/rows/$tbl.$phase" ]; then
+      # a capped set the test did not script: same ids as the base table, constant
+      # hashes, so it never reports a change and the row counts always agree
+      if [ -f "$FAKE_DIR/rows/$base.$phase" ]; then cut -f1 "$FAKE_DIR/rows/$base.$phase" | sed 's/$/\tk/'; else printf '1\tk\n2\tk\n'; fi
+    elif [ -f "$FAKE_DIR/data/$tbl.$phase.json" ]; then
+      # data-driven: hash exactly the columns the SQL asks for, so a test can prove
+      # that a column (e.g. customer.phone) is or is not part of the hash
+      FAKE_SQL="$sql" node -e '
+        const rows = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+        const m = process.env.FAKE_SQL.match(/CONCAT_WS\(.\|., (.*?)\)\) FROM/);
+        const cols = [...m[1].matchAll(/CAST\(`(\w+)` AS CHAR\)/g)].map((x) => x[1]);
+        for (const r of rows) {
+          const v = cols.map((c) => (r[c] === null || r[c] === undefined ? "~NULL~" : String(r[c])));
+          console.log(r.id + "\t" + require("crypto").createHash("md5").update(v.join("|")).digest("hex"));
+        }' "$FAKE_DIR/data/$tbl.$phase.json"
+    elif [ -f "$FAKE_DIR/rows/$tbl.$phase" ]; then
+      cat "$FAKE_DIR/rows/$tbl.$phase"
+    else
+      for id in 1 2; do
+        h="h$id"
+        [ "$phase$id" != "after1" ] || [ ! -e "$FAKE_DIR/mutated" ] || h="h1-damaged"
+        line="$id	$h"
+        case "$sql" in *'CAST(`updatedAt` AS CHAR)'*) line="$line	U$id" ;; esac
+        case "$sql" in *', `orderId` FROM'*) line="$line	$id" ;; esac
+        printf '%s\n' "$line"
+      done
+    fi ;;
+  *BIT_XOR*)
+    # COUNT = the number of rows the matching per-row dump returns, so the real
+    # script's "dump rows == COUNT(*)" sanity check holds unless a test skews it
+    tbl="$(printf '%s' "$sql" | sed -E 's/.* FROM `([a-z]+)`.*/\1/')"
+    phase=before; [ ! -e "$FAKE_DIR/migrated" ] || phase=after
+    n=2
+    count_of() {
+      if [ -f "$FAKE_DIR/data/$1.$phase.json" ]; then node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).length)' "$FAKE_DIR/data/$1.$phase.json"
+      elif [ -f "$FAKE_DIR/rows/$1.$phase" ]; then grep -c '' "$FAKE_DIR/rows/$1.$phase" || true
+      else echo ""; fi
+    }
+    c="$(count_of "$tbl")"
+    if [ "$tbl" = order ]; then cm="$(count_of ordermoney)"; [ -z "$cm" ] || c="$cm"; fi
+    [ -z "$c" ] || n="$c"
+    [ -z "${FAKE_COUNT_SKEW:-}" ] || n=$((n + 1))
+    h=123456; [ ! -e "$FAKE_DIR/mutated" ] || h=999
+    printf '%s\t%s\n' "$n" "$h" ;;
+  "SELECT (SELECT COUNT(*) FROM shop)"*)
+    case "$db" in
+      *_drill) echo "${FAKE_DRILL_COUNTS:-1	10	20	5	60}" ;;
+      *) echo "1	10	20	5	60" ;;
+    esac ;;
+  *) ;;
+esac
+exit 0
