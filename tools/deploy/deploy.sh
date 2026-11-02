@@ -406,7 +406,6 @@ if [ "$PROD" = "$PIN" ]; then
       if [ -z "$failed_step" ] || [ "$failed_step" -lt 10 ] || [ -z "$STATE_PREV" ]; then
         refuse "HEAD == PIN after a run that failed at step ${failed_step:-?} (before or inside the data gates): it is not resumed, because the gate that stopped it may be what failed. Fix forward with a NEWER commit (the gates re-run against the already-migrated database), or run rollback.sh to the previous commit (${STATE_PREV:-unknown}). Nothing was changed."
       fi
-      git -C "$APP_DIR" merge-base --is-ancestor "$STATE_PREV" "$PIN" || refuse "recorded previous commit $STATE_PREV is not an ancestor of the PIN; not resuming."
       RESUME=1
       PROD="$STATE_PREV"
       note "RESUME mode: migrations and data gates passed in the failed run; this run rebuilds, restarts and smoke-tests. previous commit: $PROD"

@@ -320,3 +320,13 @@ test('runbook documents the intersection rule, the diff output and the resume ru
     'FAILED at step 9 or earlier** it is never resumed',
   ]) assert.ok(rb.includes(needle), `runbook is missing: ${needle}`);
 });
+
+test('resume: a recorded previous commit that is not an ancestor of the PIN is refused (the ancestry gate applies to it)', () => withSb((sb) => {
+  const pin = failedAtStep11(sb);
+  const side = sb.sideCommit({ 'backend/src/side.txt': 's\n' });
+  fs.writeFileSync(path.join(sb.logs, 'run-state'), `2026-01-01T00:00:00Z ${pin} REAL FAILED step=11 prev=${side}\n`);
+  const r = real(sb, pin);
+  assert.equal(r.status, 2, r.out);
+  assert.match(r.out, /not an ancestor of PIN/);
+  assert.equal(restarts(sb).length, 0);
+}));
