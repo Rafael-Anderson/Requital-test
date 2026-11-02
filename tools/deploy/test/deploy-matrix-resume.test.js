@@ -371,7 +371,7 @@ test('state: a truncated or garbled REAL line is refused, never "already deploye
 
 test('resume: a forged huge or malformed step is refused instead of tripping the integer test', () => withSb((sb) => {
   const pin = failedAtStep11(sb);
-  for (const step of ['99999999999999999999', '1x', '', '-1']) {
+  for (const step of ['99999999999999999999', '1234', '1x', '', '-1']) {
     writeState(sb, `2026-01-01T00:00:00Z ${pin} REAL FAILED step=${step} prev=${sb.base}\n`);
     const r = real(sb, pin);
     assert.equal(r.status, 2, `step=${step}\n${r.out}`);
@@ -432,4 +432,17 @@ test('matrix-diff: inherited object properties are not shops or features', () =>
   const r = compare(doc({ 1: { k: true } }), doc(evil));
   assert.equal(r.ok, false);
   assert.match(r.problems.join('\n'), /exists only AFTER/);
+});
+
+test('deploy.sh checks the copy of the matrices (set -e inside the subshell, a warning instead of a false claim)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../deploy.sh'), 'utf8');
+  assert.match(src, /if \( set -e; umask 077; cp "\$WORK_DIR\/matrix-before\.json"/);
+  assert.match(src, /WARNING: could not write the matrices to \$LOG_DIR\./);
+});
+
+test('an unknown last state is refused through the default branch, not through a pattern that merely happens to match', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../deploy.sh'), 'utf8');
+  const i = src.indexOf('# STARTED (the run was killed hard');
+  assert.ok(i > 0);
+  assert.match(src.slice(i, i + 900), /refuse "HEAD == PIN and the last real run for it did not end cleanly/);
 });
