@@ -6,7 +6,6 @@ import { cancelOrder, collectCash, listOrders, updateOrderStatus } from "@/lib/a
 import { getNextAction, type Order } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
 import { useOutletFilter } from "@/lib/outlet-context";
-import { useShopMode } from "@/lib/useShopMode";
 import StatusBadge from "@/components/StatusBadge";
 import AddressUnverifiedNotice from "@/components/AddressUnverifiedNotice";
 import Button from "@/components/ui/Button";
@@ -18,7 +17,6 @@ import BackButton from "@/components/ui/BackButton";
 import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
-import SimpleOrderDetailModal from "@/components/SimpleOrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
 import ScrollFade from "@/components/ui/ScrollFade";
 import { formatMoney } from "@/lib/money";
@@ -64,8 +62,6 @@ function OrdersPageContent() {
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const toast = useToast();
   const { selectedOutletId } = useOutletFilter();
-  const mode = useShopMode();
-  const isSimple = mode === "simple";
   const searchParams = useSearchParams();
 
   // Deep-link from NewOrderBanner's "View order" action
@@ -226,12 +222,10 @@ function OrdersPageContent() {
                             {order.deliveryTimeSlot ? ` · ${order.deliveryTimeSlot}` : ""}
                           </div>
                         )}
-                        {!isSimple && (
-                          <div className="text-xs text-text-faint mt-1">
-                            Ordered {relativeTime(order.createdAt)}
-                          </div>
-                        )}
-                        {!isSimple && order.orderitem.some((item) => item.note) && (
+                        <div className="text-xs text-text-faint mt-1">
+                          Ordered {relativeTime(order.createdAt)}
+                        </div>
+                        {order.orderitem.some((item) => item.note) && (
                           <div className="mt-1.5 space-y-0.5">
                             {order.orderitem
                               .filter((item) => item.note)
@@ -284,19 +278,11 @@ function OrdersPageContent() {
             ))}
       </ScrollFade>
 
-      {isSimple ? (
-        <SimpleOrderDetailModal
-          orderId={selectedOrderId}
-          onClose={() => setSelectedOrderId(null)}
-          onChanged={refresh}
-        />
-      ) : (
-        <OrderDetailModal
-          orderId={selectedOrderId}
-          onClose={() => setSelectedOrderId(null)}
-          onChanged={refresh}
-        />
-      )}
+      <OrderDetailModal
+        orderId={selectedOrderId}
+        onClose={() => setSelectedOrderId(null)}
+        onChanged={refresh}
+      />
     </PageShell>
   );
 }

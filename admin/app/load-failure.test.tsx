@@ -126,13 +126,6 @@ const ENTRIES: Entry[] = [
     },
   ],
   [
-    "simple order detail modal",
-    async () => {
-      const { default: M } = await import("@/components/SimpleOrderDetailModal");
-      return <M orderId={1} onClose={() => {}} onChanged={() => {}} />;
-    },
-  ],
-  [
     "simple dashboard",
     async () => {
       const { default: M } = await import("@/components/SimpleDashboard");

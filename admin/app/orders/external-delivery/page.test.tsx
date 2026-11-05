@@ -11,7 +11,6 @@ vi.mock("@/lib/api", () => ({
   listExternalDeliveryReport: vi.fn(),
   listOutlets: vi.fn(),
 }));
-vi.mock("@/lib/useShopMode", () => ({ useShopMode: () => "advanced" }));
 vi.mock("@/components/ReportsFilterBar", () => ({ default: () => null }));
 vi.mock("@/components/OrdersTabs", () => ({ default: () => null }));
 vi.mock("@/components/BranchBar", () => ({ default: () => null }));
@@ -19,7 +18,6 @@ vi.mock("@/components/OrderDetailModal", () => ({
   default: ({ orderId }: { orderId: number | null }) =>
     orderId === null ? null : <div>MODAL-{orderId}</div>,
 }));
-vi.mock("@/components/SimpleOrderDetailModal", () => ({ default: () => null }));
 
 const row: ExternalDeliveryRow = {
   id: 1,
