@@ -37,10 +37,6 @@ vi.mock("@/components/OrderDetailModal", () => ({
   default: ({ orderId }: { orderId: number | null }) =>
     orderId === null ? null : <div>ADVANCED-MODAL-{orderId}</div>,
 }));
-vi.mock("@/components/SimpleOrderDetailModal", () => ({
-  default: ({ orderId }: { orderId: number | null }) =>
-    orderId === null ? null : <div>SIMPLE-MODAL-{orderId}</div>,
-}));
 
 const order: Order = {
   id: 101,
@@ -81,8 +77,8 @@ function renderPage() {
   );
 }
 
-describe("OrdersPage — simple/advanced mode", () => {
-  it("simple mode: still shows the Order History tab (tabs are the same in both modes)", async () => {
+describe("OrdersPage — the same screen for every shop, whatever its editor mode", () => {
+  it("simple mode: shows the Order History tab (tabs are the same in both modes)", async () => {
     vi.mocked(getShop).mockResolvedValue({ productEditorMode: "simple" } as never);
     vi.mocked(listOrders).mockResolvedValue({ data: [order], total: 1 } as never);
     renderPage();
@@ -91,21 +87,17 @@ describe("OrdersPage — simple/advanced mode", () => {
     expect(screen.getByText("Order History")).toBeInTheDocument();
   });
 
-  it("simple mode: still shows the delivery date (a same-day-delivery merchant needs it), but omits 'Ordered ago'", async () => {
-    // Bug 6a QA-sweep fix: the delivery-date line used to be gated behind
-    // !isSimple too, meaning a simple-mode merchant had no way to see when
-    // an order was due anywhere in the Orders UI. Only "Ordered X ago"
-    // stays hidden in simple mode.
+  it("simple mode: shows the delivery date and 'Ordered ago' on the card, like every other shop", async () => {
     vi.mocked(getShop).mockResolvedValue({ productEditorMode: "simple" } as never);
     vi.mocked(listOrders).mockResolvedValue({ data: [order], total: 1 } as never);
     renderPage();
 
     await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
     expect(screen.getByText(/10am-12pm/)).toBeInTheDocument();
-    expect(screen.queryByText(/Ordered/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Ordered/)).toBeInTheDocument();
   });
 
-  it("simple mode: clicking an order opens the condensed modal", async () => {
+  it("simple mode: clicking an order opens the full detail modal (there is no condensed one)", async () => {
     const user = userEvent.setup();
     vi.mocked(getShop).mockResolvedValue({ productEditorMode: "simple" } as never);
     vi.mocked(listOrders).mockResolvedValue({ data: [order], total: 1 } as never);
@@ -113,8 +105,7 @@ describe("OrdersPage — simple/advanced mode", () => {
 
     await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
     await user.click(screen.getByText("Sara Ahmed"));
-    expect(await screen.findByText("SIMPLE-MODAL-101")).toBeInTheDocument();
-    expect(screen.queryByText("ADVANCED-MODAL-101")).not.toBeInTheDocument();
+    expect(await screen.findByText("ADVANCED-MODAL-101")).toBeInTheDocument();
   });
 
   it("advanced mode: shows the Order History tab", async () => {
@@ -143,7 +134,6 @@ describe("OrdersPage — simple/advanced mode", () => {
     await waitFor(() => expect(screen.getByText("Sara Ahmed")).toBeInTheDocument());
     await user.click(screen.getByText("Sara Ahmed"));
     expect(await screen.findByText("ADVANCED-MODAL-101")).toBeInTheDocument();
-    expect(screen.queryByText("SIMPLE-MODAL-101")).not.toBeInTheDocument();
   });
 });
 

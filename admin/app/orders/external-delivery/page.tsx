@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { listExternalDeliveryReport, listOutlets } from "@/lib/api";
 import type { ExternalDeliveryRow, Outlet, ReportsFilters } from "@/lib/types";
-import { useShopMode } from "@/lib/useShopMode";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
@@ -18,7 +17,6 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
-import SimpleOrderDetailModal from "@/components/SimpleOrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
 import { formatMoney } from "@/lib/money";
 
@@ -43,8 +41,6 @@ export default function ExternalDeliveryOrdersTabPage() {
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-  const mode = useShopMode();
-  const isSimple = mode === "simple";
 
   useEffect(() => {
     listOutlets().then(setOutlets).catch(() => setOutlets([]));
@@ -248,19 +244,11 @@ export default function ExternalDeliveryOrdersTabPage() {
         </div>
       )}
 
-      {isSimple ? (
-        <SimpleOrderDetailModal
-          orderId={selectedOrderId}
-          onClose={() => setSelectedOrderId(null)}
-          onChanged={refresh}
-        />
-      ) : (
-        <OrderDetailModal
-          orderId={selectedOrderId}
-          onClose={() => setSelectedOrderId(null)}
-          onChanged={refresh}
-        />
-      )}
+      <OrderDetailModal
+        orderId={selectedOrderId}
+        onClose={() => setSelectedOrderId(null)}
+        onChanged={refresh}
+      />
     </PageShell>
   );
 }
