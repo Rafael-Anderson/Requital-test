@@ -1,3 +1,4 @@
+import { CollectionRulesService } from '../collections/collection-rules.service';
 import {
   Injectable,
   BadRequestException,
@@ -28,6 +29,7 @@ export class ProductOrderItemsService {
     private readonly db: DatabaseService,
     private readonly discountsService: DiscountsService,
     private readonly features: FeaturesService,
+    private readonly collectionRules: CollectionRulesService,
   ) {}
 
   // Shared by OrdersService/PublicService order creation — validates that
@@ -87,6 +89,21 @@ export class ProductOrderItemsService {
       const list = collectionIdsByProduct.get(pid) ?? [];
       list.push(row.collectionId as number);
       collectionIdsByProduct.set(pid, list);
+    }
+    // plus the automated collections each product currently matches (an auto-discount
+    // scoped to an automated collection must reach the same products the page lists)
+    if (autoDiscounts.length) {
+      const automated =
+        await this.collectionRules.automatedCollectionIdsByProduct(
+          shopId,
+          productIds,
+        );
+      for (const [pid, collectionIds] of automated) {
+        collectionIdsByProduct.set(pid, [
+          ...(collectionIdsByProduct.get(pid) ?? []),
+          ...collectionIds,
+        ]);
+      }
     }
 
     // Tax classes for the per-line tax capture (Phase 2b / B2). ONE shop-wide

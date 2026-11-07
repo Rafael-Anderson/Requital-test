@@ -1,3 +1,4 @@
+import { CollectionRulesService } from '../collections/collection-rules.service';
 import {
   BadRequestException,
   ConflictException,
@@ -69,6 +70,7 @@ export class DiscountsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly auditLogService: AuditLogService,
+    private readonly collectionRules: CollectionRulesService,
   ) {}
 
   async findAll(ctx: TenantContext) {
@@ -308,6 +310,19 @@ export class DiscountsService {
       const list = byProduct.get(r.productId as number) ?? [];
       list.push(r.collectionId as number);
       byProduct.set(r.productId as number, list);
+    }
+    // plus the AUTOMATED collections each product currently matches, so a discount
+    // scoped to an automated collection applies to exactly the products it lists
+    const automated =
+      await this.collectionRules.automatedCollectionIdsByProduct(
+        shopId,
+        productIds,
+      );
+    for (const [productId, collectionIds] of automated) {
+      byProduct.set(productId, [
+        ...(byProduct.get(productId) ?? []),
+        ...collectionIds,
+      ]);
     }
     return byProduct;
   }
