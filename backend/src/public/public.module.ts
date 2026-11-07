@@ -12,6 +12,7 @@ import { PaymentsModule } from '../payments/payments.module';
 import { CustomersModule } from '../customers/customers.module';
 import { AffiliateModule } from '../affiliate/affiliate.module';
 import { BioLinksModule } from '../bio-links/bio-links.module';
+import { CollectionsModule } from '../collections/collections.module';
 import { ProductsModule } from '../products/products.module';
 import { DiscountsModule } from '../discounts/discounts.module';
 import { OrderNotificationsModule } from '../orders/order-notifications.module';
@@ -43,6 +44,7 @@ import { NewsletterModule } from '../newsletter/newsletter.module';
     AffiliateModule,
     BioLinksModule,
     ProductsModule,
+    CollectionsModule,
     DiscountsModule,
     OrderNotificationsModule,
     TemplatesModule,

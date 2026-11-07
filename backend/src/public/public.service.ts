@@ -89,6 +89,8 @@ import { CustomersService } from '../customers/customers.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { BioLinksService } from '../bio-links/bio-links.service';
 import { ProductsService } from '../products/products.service';
+import { CollectionRulesService } from '../collections/collection-rules.service';
+import type { MatchMode } from '../collections/collection-rules';
 import type { ConsumedRow } from '../products/product-order-items.service';
 import { buildVariantLabel } from '../products/variant-generator';
 import { DiscountsService } from '../discounts/discounts.service';
@@ -213,6 +215,7 @@ export class PublicService {
     private readonly codeGuessLimiter: CodeGuessLimiter,
     private readonly ordersService: OrdersService,
     private readonly newsletterConfirm: NewsletterConfirmService,
+    private readonly collectionRules: CollectionRulesService,
   ) {}
 
   // Backs the theme builder's live preview for a shop that hasn't published
@@ -644,14 +647,24 @@ export class PublicService {
     if (!collection) {
       throw new NotFoundException(`Collection '${slug}' not found`);
     }
-    const productRows = await this.db.query<RowDataPacket[]>(
-      `SELECT p.id FROM product p
+    // Automated collections evaluate their conditions at read time; manual ones
+    // read the hand-picked links, exactly as before.
+    const productIds =
+      collection.collectionType === 'automated'
+        ? await this.collectionRules.availableProductIds(
+            shop.id,
+            collection.id,
+            collection.matchMode as MatchMode,
+          )
+        : (
+            await this.db.query<RowDataPacket[]>(
+              `SELECT p.id FROM product p
        JOIN productcollection pc ON pc.productId = p.id
        WHERE p.shopId = ? AND p.status = 'Available' AND pc.collectionId = ?
        ORDER BY p.id ASC`,
-      [shop.id, collection.id],
-    );
-    const productIds = productRows.map((r) => r.id as number);
+              [shop.id, collection.id],
+            )
+          ).map((r) => r.id as number);
     const [products, salesCounts] = await Promise.all([
       this.loadPublicProductsWithRelations(productIds, shop.id, outletId),
       this.loadSalesCounts(productIds),
@@ -810,11 +823,27 @@ export class PublicService {
     await this.assertPublishedOrPreview(shop, previewToken);
     const conditions = ['shopId = ?', "status = 'Available'"];
     const params: QueryParam[] = [shop.id];
+    let automatedIds: number[] | null = null;
     if (collectionId !== undefined) {
-      conditions.push(
-        'EXISTS (SELECT 1 FROM productcollection pc WHERE pc.productId = product.id AND pc.collectionId = ?)',
+      const [coll] = await this.db.query<RowDataPacket[]>(
+        `SELECT collectionType, matchMode FROM collection WHERE id = ? AND shopId = ?`,
+        [collectionId, shop.id],
       );
-      params.push(collectionId);
+      if (coll?.collectionType === 'automated') {
+        automatedIds = await this.collectionRules.availableProductIds(
+          shop.id,
+          collectionId,
+          coll.matchMode as MatchMode,
+        );
+        if (automatedIds.length === 0) return [];
+        conditions.push(`id IN (${automatedIds.map(() => '?').join(', ')})`);
+        params.push(...automatedIds);
+      } else {
+        conditions.push(
+          'EXISTS (SELECT 1 FROM productcollection pc WHERE pc.productId = product.id AND pc.collectionId = ?)',
+        );
+        params.push(collectionId);
+      }
     }
     if (isCheckoutAddon !== undefined) {
       conditions.push('isCheckoutAddon = ?');

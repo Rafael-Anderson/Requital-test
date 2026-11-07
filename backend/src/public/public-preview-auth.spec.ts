@@ -60,6 +60,7 @@ function buildService(db: DatabaseService) {
     unused, // codeGuessLimiter
     unused, // ordersService
     unused, // newsletterConfirm
+    unused, // collectionRules
   );
   return { service, jwtService };
 }
