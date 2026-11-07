@@ -16,6 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CollectionsService } from './collections.service';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
+import { PreviewCollectionRulesDto } from './dto/collection-rule.dto';
 import { ReorderCollectionsDto } from './dto/reorder-collections.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
 import { StorageService } from '../storage/storage.service';
@@ -81,6 +82,17 @@ export class CollectionsController {
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
     return this.collectionImport.confirm(ctx, file, query.onExisting);
+  }
+
+  // Live "N products match" for the editor. Read-only; POST because the
+  // conditions are a body, not a URL.
+  @Roles('admin')
+  @Post('rules/preview')
+  previewRules(
+    @CurrentUser() ctx: TenantContext,
+    @Body() dto: PreviewCollectionRulesDto,
+  ) {
+    return this.collectionsService.previewRules(ctx, dto);
   }
 
   // Placed before the :id route, same reason bio-links documents: a numeric

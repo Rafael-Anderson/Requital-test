@@ -513,6 +513,35 @@ export interface Collection {
   isFeatured: boolean;
   parentCollectionId: number | null;
   description: string | null;
+  // Absent on an older API response: treat as manual.
+  collectionType?: "manual" | "automated";
+  matchMode?: "all" | "any";
+}
+
+export type CollectionRuleField =
+  | "title"
+  | "variant_title"
+  | "vendor"
+  | "product_type"
+  | "price"
+  | "compare_at_price"
+  | "stock"
+  | "weight"
+  | "status"
+  | "tag"
+  | "category";
+
+export interface CollectionRule {
+  field: CollectionRuleField;
+  operator: string;
+  value?: string;
+}
+
+export interface CollectionRulePreview {
+  total: number;
+  page: number;
+  pageSize: number;
+  data: { id: number; name: string; thumbnail: string; status: string; price: string }[];
 }
 
 export interface CollectionNode extends Collection {

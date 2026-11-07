@@ -506,7 +506,20 @@ export interface CollectionRow {
   isFeatured: boolean;
   parentCollectionId: number | null;
   description: string | null;
+  // 'manual' (hand-picked via productcollection) or 'automated' (rules).
+  collectionType: string;
+  matchMode: string;
   createdAt: Date;
+}
+
+export interface CollectionruleRow {
+  id: number;
+  shopId: number;
+  collectionId: number;
+  field: string;
+  operator: string;
+  value: string | null;
+  position: number;
 }
 
 export interface ProductcollectionRow {
