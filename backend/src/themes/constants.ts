@@ -401,3 +401,9 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
     },
   ],
 };
+
+// Banner height (px) a merchant may set on the collection page banner and on a Hero
+// section. Mirrored in storefront/lib/banner-height.ts and admin/lib/banner-height.ts.
+export const BANNER_HEIGHT_MIN = 120;
+export const BANNER_HEIGHT_MAX = 900;
+export const BANNER_TITLE_SPACING_MAX = 200;

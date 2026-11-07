@@ -391,6 +391,16 @@ export interface CollectionPageSettings {
   // Today / Tomorrow" line on each collection-page product card, resolved
   // from shop.sameDayCutoffTime in the shop's timezone.
   showDeliveryEstimate?: boolean;
+  // Banner height in px (120 to 900), desktop and mobile. Absent = the long-standing
+  // 220px, so a shop that never edits it renders exactly as before.
+  bannerHeight?: number;
+  bannerMobileHeight?: number;
+  // Used only when the collection has NO banner image: the banner area is not rendered
+  // at all and the page title (breadcrumb, heading, description) is a plain block with
+  // this alignment and spacing (px, 0 to 200). Absent = start-aligned, 24px above, 16px below.
+  noBannerTitleAlign?: "start" | "center" | "end";
+  noBannerTitleSpacingTop?: number;
+  noBannerTitleSpacingBottom?: number;
 }
 
 // Governs the PDP's stock/delivery/pickup status line — see backend

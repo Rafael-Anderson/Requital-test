@@ -531,6 +531,15 @@ export interface CollectionPageSettings {
   // / Tomorrow" line resolved from shop.sameDayCutoffTime in the shop's
   // timezone. Renders nothing when the shop has no cutoff configured.
   showDeliveryEstimate?: boolean;
+  // Banner height in px (120 to 900), desktop and mobile; absent = the long-standing
+  // 220px. Validated in theme-config.validation.ts.
+  bannerHeight?: number;
+  bannerMobileHeight?: number;
+  // When the collection has NO banner image the banner area is not rendered and the
+  // page title is a plain block with this alignment and spacing (px, 0 to 200).
+  noBannerTitleAlign?: 'start' | 'center' | 'end';
+  noBannerTitleSpacingTop?: number;
+  noBannerTitleSpacingBottom?: number;
 }
 
 // Governs the PDP's stock/delivery/pickup status line

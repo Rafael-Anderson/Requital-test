@@ -13,6 +13,44 @@ function baseConfig(): ThemeConfig {
   return JSON.parse(JSON.stringify(DEFAULT_THEME_CONFIG)) as ThemeConfig;
 }
 
+describe('assertValidThemeConfig: banner height and the no-image title block', () => {
+  function withCollectionPage(patch: Record<string, unknown>): ThemeConfig {
+    const config = baseConfig();
+    Object.assign(config.globalSettings.collectionPage, patch);
+    return config;
+  }
+  function heroConfig(settings: Record<string, unknown>): ThemeConfig {
+    const config = baseConfig();
+    const hero = config.sections.find((sec) => sec.type === 'hero');
+    if (!hero) throw new Error('default config has no hero section');
+    Object.assign(hero.settings, settings);
+    return config;
+  }
+
+  it('accepts the bounds and absent values (an untouched shop keeps its height)', () => {
+    expect(() => assertValidThemeConfig(baseConfig())).not.toThrow();
+    expect(() => assertValidThemeConfig(withCollectionPage({ bannerHeight: 120, bannerMobileHeight: 900 }))).not.toThrow();
+    expect(() => assertValidThemeConfig(heroConfig({ heightPx: 120, mobileHeightPx: 900 }))).not.toThrow();
+    expect(() => assertValidThemeConfig(withCollectionPage({ noBannerTitleAlign: 'center', noBannerTitleSpacingTop: 0, noBannerTitleSpacingBottom: 200 }))).not.toThrow();
+  });
+
+  it.each([119, 901, 0, -5, 220.5, '300', null, Number.NaN])('rejects collection banner height %p', (bad) => {
+    expect(() => assertValidThemeConfig(withCollectionPage({ bannerHeight: bad }))).toThrow(BadRequestException);
+    expect(() => assertValidThemeConfig(withCollectionPage({ bannerMobileHeight: bad }))).toThrow(BadRequestException);
+  });
+
+  it.each([119, 901, 1e9, '300'])('rejects hero height %p (desktop and mobile)', (bad) => {
+    expect(() => assertValidThemeConfig(heroConfig({ heightPx: bad }))).toThrow(/heightPx/);
+    expect(() => assertValidThemeConfig(heroConfig({ mobileHeightPx: bad }))).toThrow(/mobileHeightPx/);
+  });
+
+  it('rejects an out-of-range title spacing and an unknown alignment', () => {
+    expect(() => assertValidThemeConfig(withCollectionPage({ noBannerTitleSpacingTop: 201 }))).toThrow(/noBannerTitleSpacingTop/);
+    expect(() => assertValidThemeConfig(withCollectionPage({ noBannerTitleSpacingBottom: -1 }))).toThrow(/noBannerTitleSpacingBottom/);
+    expect(() => assertValidThemeConfig(withCollectionPage({ noBannerTitleAlign: 'left; color: red' }))).toThrow(/noBannerTitleAlign/);
+  });
+});
+
 describe('assertValidThemeConfig', () => {
   it('accepts the real DEFAULT_THEME_CONFIG unchanged', () => {
     expect(() => assertValidThemeConfig(baseConfig())).not.toThrow();

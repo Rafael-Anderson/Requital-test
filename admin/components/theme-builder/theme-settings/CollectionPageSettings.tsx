@@ -9,6 +9,7 @@ import RichTextBlockEditor from "../RichTextBlockEditor";
 import { schemeColorPresets } from "@/lib/scheme-color-presets";
 import type { CollectionPageSettings as CollectionPageSettingsType } from "@/lib/types";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
+import BannerHeightControl from "@/components/theme-builder/BannerHeightControl";
 
 const FONT_PRESETS = ["system-ui", "serif", "monospace"] as const;
 
@@ -125,6 +126,52 @@ export default function CollectionPageSettings({ editor }: { editor: ThemeEditor
           ]}
           onChange={(v) => update({ mobileColumns: v === "auto" ? undefined : (Number(v) as 1 | 2) })}
         />
+      </div>
+
+      <hr className="border-black/10 dark:border-white/10" />
+
+      {/* The collection page is not made of theme sections, so its banner is configured here
+          rather than as a movable block. With no image there is no banner at all. */}
+      <BannerHeightControl
+        label="Banner height"
+        desktop={settings.bannerHeight}
+        mobile={settings.bannerMobileHeight}
+        defaultPx={220}
+        onChange={(next) => update({ bannerHeight: next.desktop, bannerMobileHeight: next.mobile })}
+      />
+
+      <div>
+        <span className="mb-1.5 block text-sm font-medium">Page title when there is no banner image</span>
+        <p className="mb-2 text-xs text-zinc-500">
+          A collection without an image shows no banner. Its title, breadcrumb and description appear as a plain block.
+        </p>
+        <SegmentedToggle
+          value={settings.noBannerTitleAlign ?? "start"}
+          options={[
+            { value: "start", label: "Start" },
+            { value: "center", label: "Center" },
+            { value: "end", label: "End" },
+          ]}
+          onChange={(v) => update({ noBannerTitleAlign: v as NonNullable<CollectionPageSettingsType["noBannerTitleAlign"]> })}
+        />
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Input
+            label="Space above (px)"
+            type="number"
+            min={0}
+            max={200}
+            value={String(settings.noBannerTitleSpacingTop ?? 24)}
+            onChange={(e) => update({ noBannerTitleSpacingTop: Math.min(200, Math.max(0, Math.round(Number(e.target.value) || 0))) })}
+          />
+          <Input
+            label="Space below (px)"
+            type="number"
+            min={0}
+            max={200}
+            value={String(settings.noBannerTitleSpacingBottom ?? 16)}
+            onChange={(e) => update({ noBannerTitleSpacingBottom: Math.min(200, Math.max(0, Math.round(Number(e.target.value) || 0))) })}
+          />
+        </div>
       </div>
 
       <hr className="border-black/10 dark:border-white/10" />

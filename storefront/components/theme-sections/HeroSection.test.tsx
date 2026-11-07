@@ -279,3 +279,28 @@ describe("HeroSection CTA button hoverEffect/pressEffect (§8.7 item 1)", () => 
     expect(cta.className).toContain("theme-btn-press");
   });
 });
+
+describe("HeroSection banner height", () => {
+  it("keeps the preset height class when no pixel height was set (existing shops are unchanged)", () => {
+    const { container } = renderHero({ bannerImages: [{ url: IMG_A }], height: "large" });
+    const hero = container.querySelector("[data-theme-hero]") as HTMLElement;
+    expect(hero.className).toContain("min-h-[560px]");
+    expect(hero.className).not.toContain("theme-banner-minh");
+  });
+
+  it("a pixel height replaces the preset on a hero with an image, per breakpoint, clamped", () => {
+    const { container } = renderHero({ bannerImages: [{ url: IMG_A }], height: "large", heightPx: 640, mobileHeightPx: 10 });
+    const hero = container.querySelector("[data-theme-hero]") as HTMLElement;
+    expect(hero.className).toContain("theme-banner-minh");
+    expect(hero.className).not.toContain("min-h-[560px]");
+    expect(hero.style.getPropertyValue("--theme-banner-h")).toBe("640px");
+    expect(hero.style.getPropertyValue("--theme-banner-h-m")).toBe("120px");
+  });
+
+  it("is ignored on a hero without a banner image (that one keeps its content-sized floor)", () => {
+    const { container } = renderHero({ bannerImages: [], heightPx: 800 });
+    const hero = container.querySelector("[data-theme-hero]") as HTMLElement;
+    expect(hero.className).toContain("min-h-[300px]");
+    expect(hero.className).not.toContain("theme-banner-minh");
+  });
+});

@@ -1,5 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
-import { MAX_BLOCK_DEPTH, SECTION_TYPES } from './constants';
+import {
+  BANNER_HEIGHT_MAX,
+  BANNER_HEIGHT_MIN,
+  BANNER_TITLE_SPACING_MAX,
+  MAX_BLOCK_DEPTH,
+  SECTION_TYPES,
+} from './constants';
 import type { ThemeConfig } from './theme-config.types';
 
 // Safety cap, not the spec's 50KB *target* for a well-formed theme (which
@@ -141,6 +147,36 @@ function assertValidBlockContainer(container: unknown, path: string): void {
   c.blocks.forEach((block, i) => assertValidBlock(block, `${path}.blocks[${i}]`, 1));
 }
 
+// An optional whole-number setting within [min, max]. Absent is fine (it means the
+// default); anything else, including a string or a fraction, is a 400.
+function assertOptionalIntInRange(
+  value: unknown,
+  path: string,
+  min: number,
+  max: number,
+): void {
+  if (value === undefined) return;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
+    throw new BadRequestException(`${path} must be a whole number from ${min} to ${max}`);
+  }
+}
+
+function assertValidCollectionPageBanner(collectionPage: unknown): void {
+  if (collectionPage === undefined) return;
+  if (typeof collectionPage !== 'object' || collectionPage === null || Array.isArray(collectionPage)) {
+    throw new BadRequestException('globalSettings.collectionPage must be an object');
+  }
+  const cp = collectionPage as Record<string, unknown>;
+  const base = 'globalSettings.collectionPage';
+  assertOptionalIntInRange(cp.bannerHeight, `${base}.bannerHeight`, BANNER_HEIGHT_MIN, BANNER_HEIGHT_MAX);
+  assertOptionalIntInRange(cp.bannerMobileHeight, `${base}.bannerMobileHeight`, BANNER_HEIGHT_MIN, BANNER_HEIGHT_MAX);
+  assertOptionalIntInRange(cp.noBannerTitleSpacingTop, `${base}.noBannerTitleSpacingTop`, 0, BANNER_TITLE_SPACING_MAX);
+  assertOptionalIntInRange(cp.noBannerTitleSpacingBottom, `${base}.noBannerTitleSpacingBottom`, 0, BANNER_TITLE_SPACING_MAX);
+  if (cp.noBannerTitleAlign !== undefined && !['start', 'center', 'end'].includes(cp.noBannerTitleAlign as string)) {
+    throw new BadRequestException(`${base}.noBannerTitleAlign must be start, center or end`);
+  }
+}
+
 function assertValidCustomCss(customCss: unknown): void {
   if (typeof customCss !== 'object' || customCss === null) {
     throw new BadRequestException('globalSettings.customCss must be an object');
@@ -221,6 +257,7 @@ export function assertValidThemeConfig(config: unknown): asserts config is Theme
     if (g.customCss !== undefined) {
       assertValidCustomCss(g.customCss);
     }
+    assertValidCollectionPageBanner(g.collectionPage);
   }
 
   if (c.header !== undefined) assertValidBlockContainer(c.header, 'header');
@@ -252,6 +289,11 @@ export function assertValidThemeConfig(config: unknown): asserts config is Theme
     }
     if (typeof s.settings !== 'object' || s.settings === null) {
       throw new BadRequestException(`sections[${index}].settings must be an object`);
+    }
+    if (s.type === 'hero') {
+      const hs = s.settings as Record<string, unknown>;
+      assertOptionalIntInRange(hs.heightPx, `sections[${index}].settings.heightPx`, BANNER_HEIGHT_MIN, BANNER_HEIGHT_MAX);
+      assertOptionalIntInRange(hs.mobileHeightPx, `sections[${index}].settings.mobileHeightPx`, BANNER_HEIGHT_MIN, BANNER_HEIGHT_MAX);
     }
     if (s.blocks !== undefined) {
       if (!Array.isArray(s.blocks)) {

@@ -1,5 +1,6 @@
 "use client";
 
+import BannerHeightControl from "@/components/theme-builder/BannerHeightControl";
 import Select from "@/components/ui/Select";
 import Input from "@/components/ui/Input";
 import Toggle from "@/components/ui/Toggle";
@@ -64,6 +65,18 @@ export default function HeroSettings({
           </option>
         ))}
       </Select>
+      {/* A pixel height replaces the preset on a hero that has a banner image; empty keeps the preset. */}
+      <BannerHeightControl
+        label="Banner height in pixels"
+        desktop={settings.heightPx as number | undefined}
+        mobile={settings.mobileHeightPx as number | undefined}
+        defaultPx={400}
+        onChange={(next) => {
+          // one setting per call: two back-to-back updates would each start from the same snapshot
+          if (next.desktop !== settings.heightPx) onUpdate("heightPx", next.desktop);
+          else if (next.mobile !== settings.mobileHeightPx) onUpdate("mobileHeightPx", next.mobile);
+        }}
+      />
 
       <Select
         label="Layout"
