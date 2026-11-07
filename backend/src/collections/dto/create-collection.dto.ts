@@ -11,7 +11,9 @@ import {
   Min,
 } from 'class-validator';
 
-export class CreateCollectionDto {
+import { CollectionRulesFieldsDto } from './collection-rule.dto';
+
+export class CreateCollectionDto extends CollectionRulesFieldsDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)

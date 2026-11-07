@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   createCollection,
+  getCollection,
   resolveImageUrl,
   updateCollection,
   uploadCollectionImage,
@@ -13,7 +14,11 @@ import {
   descendantIds,
   flattenCollectionTree,
   type Collection,
+  type CollectionRule,
 } from "@/lib/types";
+import { isRuleComplete } from "@/lib/collection-rules";
+import CollectionRulesEditor from "@/components/CollectionRulesEditor";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
@@ -58,6 +63,13 @@ export default function CollectionFormModal({
     resolveImageUrl(collection?.image),
   );
   const [saving, setSaving] = useState(false);
+  const [collectionType, setCollectionType] = useState<"manual" | "automated">(
+    collection?.collectionType ?? "manual",
+  );
+  const [matchMode, setMatchMode] = useState<"all" | "any">(collection?.matchMode ?? "all");
+  const [rules, setRules] = useState<CollectionRule[]>([]);
+  const [rulesLoaded, setRulesLoaded] = useState(!collection || collection.collectionType !== "automated");
+  const [rulesError, setRulesError] = useState<string | null>(null);
   const metafields = useMetafieldEditor("collection", collection?.id ?? null);
   const toast = useToast();
 
@@ -65,6 +77,25 @@ export default function CollectionFormModal({
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   }
+
+  // An existing automated collection's conditions come from the detail read.
+  useEffect(() => {
+    if (!collection || collection.collectionType !== "automated") return;
+    let cancelled = false;
+    getCollection(collection.id)
+      .then((full) => {
+        if (cancelled) return;
+        setRules(full.rules ?? []);
+        setMatchMode(full.matchMode ?? "all");
+        setRulesLoaded(true);
+      })
+      .catch((err) => {
+        if (!cancelled) setRulesError(err instanceof Error ? err.message : "Could not load the conditions");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [collection]);
 
   useEffect(() => {
     if (!slugTouched) setSlug(slugify(name));
@@ -90,6 +121,13 @@ export default function CollectionFormModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !slug.trim()) return;
+    if (collectionType === "automated") {
+      if (!rulesLoaded) return;
+      if (!rules.every(isRuleComplete)) {
+        toast("Finish or remove the incomplete conditions", "error");
+        return;
+      }
+    }
     const metafieldError = metafields.validate();
     if (metafieldError) {
       toast(metafieldError, "error");
@@ -112,13 +150,24 @@ export default function CollectionFormModal({
           isFeatured,
           description,
           parentCollectionId: parentCollectionId === "" ? null : Number(parentCollectionId),
+          collectionType,
+          ...(collectionType === "automated" && { matchMode, rules }),
           ...(image !== undefined && { image }),
         };
         await updateCollection(collection.id, payload);
         await saveMetafields(collection.id);
         toast(`"${name}" updated`);
       } else {
-        const payload: CollectionInput = { name, slug, displayOrder: order, isFeatured, description, image };
+        const payload: CollectionInput = {
+          name,
+          slug,
+          displayOrder: order,
+          isFeatured,
+          description,
+          image,
+          collectionType,
+          ...(collectionType === "automated" && { matchMode, rules }),
+        };
         if (parentCollectionId !== "") {
           payload.parentCollectionId = Number(parentCollectionId);
         }
@@ -136,7 +185,7 @@ export default function CollectionFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={collection ? `Edit "${collection.name}"` : "New collection"}>
+    <Modal onClose={onClose} size={collectionType === "automated" ? "lg" : "sm"} title={collection ? `Edit "${collection.name}"` : "New collection"}>
       {(requestClose) => (
       <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
@@ -191,6 +240,42 @@ export default function CollectionFormModal({
             />
             <span className="text-sm">Featured on homepage</span>
           </div>
+
+          <div className="space-y-2">
+            <span className="block text-sm font-medium">Collection type</span>
+            <SegmentedToggle
+              value={collectionType}
+              onChange={setCollectionType}
+              options={[
+                { value: "manual", label: "Manual" },
+                { value: "automated", label: "Automated" },
+              ]}
+            />
+            <p className="text-xs text-zinc-500">
+              {collectionType === "manual"
+                ? "You add products to this collection yourself, from each product's Organization step."
+                : "Products join this collection automatically when they match your conditions."}
+            </p>
+          </div>
+
+          {collectionType === "automated" &&
+            (rulesError ? (
+              <p className="text-sm text-red-600" role="alert">
+                {rulesError}
+              </p>
+            ) : rulesLoaded ? (
+              <CollectionRulesEditor
+                matchMode={matchMode}
+                onMatchModeChange={setMatchMode}
+                rules={rules}
+                onRulesChange={setRules}
+                manualCollections={collections.filter(
+                  (c) => (c.collectionType ?? "manual") === "manual",
+                )}
+              />
+            ) : (
+              <p className="text-sm text-zinc-500">Loading conditions...</p>
+            ))}
 
           <MetafieldsSection editor={metafields} />
         </div>

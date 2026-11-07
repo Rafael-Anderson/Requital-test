@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { RowDataPacket } from 'mysql2/promise';
+import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
 import { isDuplicateKeyError } from '../database/mysql-errors';
@@ -16,12 +16,16 @@ import { UpdateCollectionDto } from './dto/update-collection.dto';
 import { ReorderCollectionsDto } from './dto/reorder-collections.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { deleteMetafieldValues } from '../metafields/metafield-cleanup';
+import { CollectionRulesService } from './collection-rules.service';
+import type { MatchMode, ParsedRule } from './collection-rules';
+import type { PreviewCollectionRulesDto } from './dto/collection-rule.dto';
 
 @Injectable()
 export class CollectionsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly auditLogService: AuditLogService,
+    private readonly rulesService: CollectionRulesService,
   ) {}
 
   findAll(ctx: TenantContext) {
@@ -39,7 +43,18 @@ export class CollectionsService {
     if (rows.length === 0) {
       throw new NotFoundException(`Collection ${id} not found`);
     }
-    return rows[0];
+    return { ...rows[0], rules: await this.rulesService.load(ctx.shopId, id) };
+  }
+
+  async previewRules(ctx: TenantContext, dto: PreviewCollectionRulesDto) {
+    const rules = await this.rulesService.validate(ctx.shopId, dto.rules);
+    return this.rulesService.preview(
+      ctx.shopId,
+      dto.matchMode as MatchMode,
+      rules,
+      dto.page ?? 1,
+      dto.pageSize ?? 20,
+    );
   }
 
   async create(ctx: TenantContext, dto: CreateCollectionDto) {
@@ -47,22 +62,33 @@ export class CollectionsService {
       await this.assertParentBelongsToShop(ctx, dto.parentCollectionId);
     }
 
+    const automated = dto.collectionType === 'automated';
+    const rules: ParsedRule[] = automated
+      ? await this.rulesService.validate(ctx.shopId, dto.rules ?? [])
+      : [];
+
     try {
-      const result = await this.db.execute(
-        `INSERT INTO collection (shopId, name, slug, parentCollectionId, displayOrder, image, isFeatured, description)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          ctx.shopId,
-          dto.name,
-          dto.slug ?? slugify(dto.name),
-          dto.parentCollectionId ?? null,
-          dto.displayOrder ?? 0,
-          dto.image ?? null,
-          dto.isFeatured ?? false,
-          dto.description ?? null,
-        ],
-      );
-      return this.findById(result.insertId);
+      const insertId = await this.db.transaction(async (conn) => {
+        const [result] = await conn.query<ResultSetHeader>(
+          `INSERT INTO collection (shopId, name, slug, parentCollectionId, displayOrder, image, isFeatured, description, collectionType, matchMode)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            ctx.shopId,
+            dto.name,
+            dto.slug ?? slugify(dto.name),
+            dto.parentCollectionId ?? null,
+            dto.displayOrder ?? 0,
+            dto.image ?? null,
+            dto.isFeatured ?? false,
+            dto.description ?? null,
+            automated ? 'automated' : 'manual',
+            dto.matchMode ?? 'all',
+          ],
+        );
+        await this.rulesService.replace(conn, ctx.shopId, result.insertId, rules);
+        return result.insertId;
+      });
+      return this.findById(insertId);
     } catch (error) {
       this.handleDbError(error);
     }
@@ -70,6 +96,13 @@ export class CollectionsService {
 
   async update(ctx: TenantContext, id: number, dto: UpdateCollectionDto) {
     await this.findOne(ctx, id);
+
+    // Rules are only (re)written for an automated collection; switching back to
+    // manual keeps the stored conditions inert rather than deleting them.
+    const rules: ParsedRule[] | undefined =
+      dto.rules !== undefined
+        ? await this.rulesService.validate(ctx.shopId, dto.rules)
+        : undefined;
 
     if (dto.parentCollectionId !== undefined && dto.parentCollectionId !== null) {
       if (dto.parentCollectionId === id) {
@@ -88,13 +121,20 @@ export class CollectionsService {
         parentCollectionId: dto.parentCollectionId,
         image: dto.image,
         description: dto.description,
+        collectionType: dto.collectionType,
+        matchMode: dto.matchMode,
       });
-      if (set) {
-        await this.db.execute(
-          `UPDATE collection SET ${set.setClause} WHERE id = ?`,
-          [...set.params, id],
-        );
-      }
+      await this.db.transaction(async (conn) => {
+        if (set) {
+          await conn.query(
+            `UPDATE collection SET ${set.setClause} WHERE id = ? AND shopId = ?`,
+            [...set.params, id, ctx.shopId],
+          );
+        }
+        if (rules !== undefined) {
+          await this.rulesService.replace(conn, ctx.shopId, id, rules);
+        }
+      });
       return this.findById(id);
     } catch (error) {
       this.handleDbError(error);
@@ -115,13 +155,19 @@ export class CollectionsService {
       ),
     ]);
     const childCount = Number(childRows[0].c);
-    const productCount = Number(productRows[0].c);
+    // An automated collection owns no hand-picked products (any left over from
+    // before it was switched are dropped with it).
+    const productCount =
+      collection.collectionType === 'automated' ? 0 : Number(productRows[0].c);
     if (childCount > 0 || productCount > 0) {
       throw new ConflictException(
         `Cannot delete: this collection has ${childCount} sub-collection${childCount === 1 ? '' : 's'} and ${productCount} product${productCount === 1 ? '' : 's'} assigned. Reassign or remove them first.`,
       );
     }
 
+    if (collection.collectionType === 'automated') {
+      await this.db.execute(`DELETE FROM productcollection WHERE collectionId = ?`, [id]);
+    }
     await this.db.execute(`DELETE FROM collection WHERE id = ?`, [id]);
     await deleteMetafieldValues(this.db, 'collection', [id]);
     await this.auditLogService.logCtx(ctx, {

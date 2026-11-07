@@ -31,6 +31,8 @@ import type {
   BioPageConfig,
   BusinessHours,
   Collection,
+  CollectionRule,
+  CollectionRulePreview,
   Brand,
   BrandInput,
   TaxClass,
@@ -1642,6 +1644,22 @@ export interface CollectionInput {
   image?: string | null;
   isFeatured?: boolean;
   description?: string;
+  collectionType?: "manual" | "automated";
+  matchMode?: "all" | "any";
+  rules?: CollectionRule[];
+}
+
+export function getCollection(id: number) {
+  return apiFetch<Collection & { rules: CollectionRule[] }>(`/collections/${id}`);
+}
+
+export function previewCollectionRules(
+  body: { matchMode: "all" | "any"; rules: CollectionRule[]; page?: number; pageSize?: number },
+) {
+  return apiFetch<CollectionRulePreview>("/collections/rules/preview", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function uploadCollectionImage(file: File) {

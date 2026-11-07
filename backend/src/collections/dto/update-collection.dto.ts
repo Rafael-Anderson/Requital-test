@@ -10,7 +10,9 @@ import {
   Min,
 } from 'class-validator';
 
-export class UpdateCollectionDto {
+import { CollectionRulesFieldsDto } from './collection-rule.dto';
+
+export class UpdateCollectionDto extends CollectionRulesFieldsDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
