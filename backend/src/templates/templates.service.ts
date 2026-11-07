@@ -1,3 +1,4 @@
+import { CollectionRulesService } from '../collections/collection-rules.service';
 import {
   BadRequestException,
   Injectable,
@@ -35,6 +36,7 @@ export class TemplatesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly auditLogService: AuditLogService,
+    private readonly collectionRules: CollectionRulesService,
   ) {}
 
   // ---------- Admin CRUD ----------
@@ -311,16 +313,16 @@ export class TemplatesService {
       const seen = new Set<number>();
       const ids: number[] = [];
       for (const { collectionId } of memberships) {
-        const rows = await this.db.query<RowDataPacket[]>(
-          `SELECT pc.productId AS productId FROM productcollection pc
-           JOIN product p ON p.id = pc.productId
-           WHERE pc.collectionId = ? AND p.shopId = ? AND p.status = 'Available'`,
-          [collectionId as number, shopId],
+        // manual: the hand-picked links; automated: its conditions (same builder as the
+        // storefront collection page), both shop-scoped and Available only.
+        const memberIds = await this.collectionRules.availableMemberIds(
+          shopId,
+          collectionId as number,
         );
-        for (const { productId } of rows) {
-          if (!seen.has(productId as number)) {
-            seen.add(productId as number);
-            ids.push(productId as number);
+        for (const productId of memberIds) {
+          if (!seen.has(productId)) {
+            seen.add(productId);
+            ids.push(productId);
           }
         }
       }
@@ -335,10 +337,12 @@ export class TemplatesService {
     const conditions: string[] = ['p.shopId = ?', "p.status = 'Available'"];
     const params: QueryParam[] = [shopId];
     if (rules.collectionId !== undefined) {
-      conditions.push(
-        'EXISTS (SELECT 1 FROM productcollection pc WHERE pc.productId = p.id AND pc.collectionId = ?)',
+      const member = await this.collectionRules.memberPredicate(
+        shopId,
+        rules.collectionId,
       );
-      params.push(rules.collectionId);
+      conditions.push(`(${member.sql})`);
+      params.push(...member.params);
     }
     if (rules.tagName !== undefined) {
       conditions.push(

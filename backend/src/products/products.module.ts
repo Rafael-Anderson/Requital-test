@@ -1,3 +1,4 @@
+import { CollectionsModule } from '../collections/collections.module';
 import { Module } from '@nestjs/common';
 import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
@@ -27,6 +28,7 @@ import { TaxClassesModule } from '../tax-classes/tax-classes.module';
     StorageModule,
     DiscountsModule,
     TaxClassesModule,
+    CollectionsModule,
   ],
   controllers: [ProductsController],
   providers: [

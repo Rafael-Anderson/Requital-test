@@ -1,3 +1,4 @@
+import { CollectionsModule } from '../collections/collections.module';
 import { Module } from '@nestjs/common';
 import {
   DiscountValidationController,
@@ -17,6 +18,7 @@ import { RegionsModule } from '../regions/regions.module';
     OrdersModule,
     PaymentsModule,
     RegionsModule,
+    CollectionsModule,
   ],
   controllers: [DraftOrdersController, DiscountValidationController],
   providers: [DraftOrdersService],

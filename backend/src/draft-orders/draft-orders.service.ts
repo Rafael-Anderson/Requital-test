@@ -1,3 +1,4 @@
+import { CollectionRulesService } from '../collections/collection-rules.service';
 import {
   BadRequestException,
   Injectable,
@@ -70,6 +71,7 @@ export class DraftOrdersService {
     private readonly ordersService: OrdersService,
     private readonly paymentsService: PaymentsService,
     private readonly regionsService: RegionsService,
+    private readonly collectionRules: CollectionRulesService,
   ) {}
 
   async findAll(ctx: TenantContext) {
@@ -624,6 +626,18 @@ export class DraftOrdersService {
         const list = collectionsByProduct.get(r.productId as number) ?? [];
         list.push(r.collectionId as number);
         collectionsByProduct.set(r.productId as number, list);
+      }
+      // plus the automated collections each product currently matches
+      const automated =
+        await this.collectionRules.automatedCollectionIdsByProduct(
+          drafts[0].shopId,
+          itemProductIds,
+        );
+      for (const [productId, collectionIds] of automated) {
+        collectionsByProduct.set(productId, [
+          ...(collectionsByProduct.get(productId) ?? []),
+          ...collectionIds,
+        ]);
       }
     }
     for (const d of await attachRegion(this.db, drafts)) {
