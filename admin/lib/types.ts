@@ -1845,6 +1845,13 @@ export interface CollectionPageSettings {
   // #13 — OPTIONAL, absent ⇒ false ⇒ no line. Per-card "Earliest Delivery:
   // Today / Tomorrow" from shop.sameDayCutoffTime.
   showDeliveryEstimate?: boolean;
+  // Banner height in px (120 to 900); absent = the long-standing 220px.
+  bannerHeight?: number;
+  bannerMobileHeight?: number;
+  // Used when the collection has no banner image: no banner area, a plain title block.
+  noBannerTitleAlign?: "start" | "center" | "end";
+  noBannerTitleSpacingTop?: number;
+  noBannerTitleSpacingBottom?: number;
 }
 
 // Governs the PDP's stock/delivery/pickup status line — see backend

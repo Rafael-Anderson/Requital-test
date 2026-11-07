@@ -17,6 +17,7 @@ import PriceRangeSlider from "@/components/PriceRangeSlider";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import StorefrontLoadingSkeleton from "@/components/StorefrontLoadingSkeleton";
 import StorefrontErrorState from "@/components/StorefrontErrorState";
+import { bannerHeightVars } from "@/lib/banner-height";
 
 const SORT_OPTIONS = [
   { value: "best_selling", label: "Best Selling" },
@@ -158,6 +159,51 @@ function sortProducts(products: Product[], sort: SortOption): Product[] {
 // rich text above/below the grid — all client-side, since the backend
 // fetches this collection's full product list in one shot (no pagination
 // params on GET /public/:shopSlug/collections/:slug to page through).
+// 0 to 200px of spacing around the plain title block; undefined falls back to the default.
+function clampSpacing(value: unknown, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.min(200, Math.max(0, Math.round(value)));
+}
+
+// Breadcrumb, heading and description. `light` = over a dark banner image.
+function CollectionTitle({
+  collection,
+  parent,
+  shopBasePath,
+  light = false,
+}: {
+  collection: CollectionDetail;
+  parent: Collection | undefined;
+  shopBasePath: string;
+  light?: boolean;
+}) {
+  return (
+    <>
+      <nav className={`text-xs mb-2 ${light ? "text-white/80" : "text-zinc-500"}`}>
+        <Link href={shopBasePath || "/"} className="hover:underline">
+          Home
+        </Link>
+        {parent && (
+          <>
+            {" / "}
+            <Link href={`${shopBasePath}/collections/${parent.slug}`} className="hover:underline">
+              {parent.name}
+            </Link>
+          </>
+        )}
+        {" / "}
+        <span>{collection.name}</span>
+      </nav>
+      <h1 className={`text-[32px] font-extrabold leading-tight ${light ? "text-white" : "text-product-name"}`}>
+        {collection.name}
+      </h1>
+      {collection.description && (
+        <p className={`mt-1 text-[15px] max-w-2xl ${light ? "text-white/85" : "text-zinc-600"}`}>{collection.description}</p>
+      )}
+    </>
+  );
+}
+
 export default function CollectionPage() {
   const params = useParams<{ shop: string; slug: string }>();
   const router = useRouter();
@@ -289,6 +335,7 @@ export default function CollectionPage() {
   const parent = collection.parentCollectionId ? allCollections.find((c) => c.id === collection.parentCollectionId) : undefined;
   const siblings = allCollections.filter((c) => c.parentCollectionId === collection.parentCollectionId && c.id !== collection.id);
   const bannerImage = resolveImageUrl(collection.image);
+  const bannerSettings = collectionPageSettings;
 
   const richTextStyle = collectionPageSettings
     ? {
@@ -300,47 +347,37 @@ export default function CollectionPage() {
 
   return (
     <>
-      {/* Banner (2A) — merchant image with a dark overlay for text
-          legibility, or a flat accent-tint fallback when the collection has
-          no image of its own. */}
-      <div
-        className="relative w-full flex items-end"
-        style={{
-          height: 220,
-          background: bannerImage ? undefined : "#E6F5F3",
-        }}
-      >
-        {bannerImage && (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={bannerImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/40" />
-          </>
-        )}
-        <div className="relative mx-auto w-full px-4 sm:px-6 pb-6" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
-          <nav className={`text-xs mb-2 ${bannerImage ? "text-white/80" : "text-zinc-500"}`}>
-            <Link href={shopBasePath || "/"} className="hover:underline">
-              Home
-            </Link>
-            {parent && (
-              <>
-                {" / "}
-                <Link href={`${shopBasePath}/collections/${parent.slug}`} className="hover:underline">
-                  {parent.name}
-                </Link>
-              </>
-            )}
-            {" / "}
-            <span>{collection.name}</span>
-          </nav>
-          <h1 className={`text-[32px] font-extrabold leading-tight ${bannerImage ? "text-white" : "text-product-name"}`}>
-            {collection.name}
-          </h1>
-          {collection.description && (
-            <p className={`mt-1 text-[15px] max-w-2xl ${bannerImage ? "text-white/85" : "text-zinc-600"}`}>{collection.description}</p>
-          )}
+      {bannerImage ? (
+        /* Banner (2A): the merchant's image with a dark overlay for text legibility.
+           Height is the merchant's setting (desktop / mobile), 220px when never set;
+           width is automatic (the image fills it, object-fit: cover). */
+        <div
+          className="theme-banner-h relative w-full flex items-end"
+          style={bannerHeightVars(bannerSettings?.bannerHeight ?? 220, bannerSettings?.bannerMobileHeight ?? bannerSettings?.bannerHeight ?? 220)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={bannerImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative mx-auto w-full px-4 sm:px-6 pb-6" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
+            <CollectionTitle light collection={collection} parent={parent} shopBasePath={shopBasePath} />
+          </div>
         </div>
-      </div>
+      ) : (
+        /* No banner image: no banner area at all (no empty tinted block). The title
+           is a plain block with its own alignment and spacing from the theme settings. */
+        <div
+          className="mx-auto w-full px-4 sm:px-6"
+          style={{
+            maxWidth: "var(--theme-max-width, 80rem)",
+            paddingTop: clampSpacing(bannerSettings?.noBannerTitleSpacingTop, 24),
+            paddingBottom: clampSpacing(bannerSettings?.noBannerTitleSpacingBottom, 16),
+            textAlign: bannerSettings?.noBannerTitleAlign ?? "start",
+          }}
+          data-testid="collection-title-block"
+        >
+          <CollectionTitle collection={collection} parent={parent} shopBasePath={shopBasePath} />
+        </div>
+      )}
 
       <StorefrontPageShell variant="wide">
         {collectionPageSettings?.textAboveProducts && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { bannerHeightVars } from "@/lib/banner-height";
 import { ArrowRight } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
@@ -214,8 +215,13 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
   // an empty band — the text sits in a sea of blank canvas. Fall back to a
   // modest content-sized floor so an image-less hero reads as a heading
   // block, not dead space. A hero WITH a backdrop keeps its configured height.
-  const height =
-    bannerImages.length > 0
+  // A merchant-set pixel height (desktop / mobile, 120 to 900) replaces the preset on a
+  // hero WITH a backdrop; unset keeps the preset, so existing shops render as before.
+  const pxHeightVars =
+    bannerImages.length > 0 ? bannerHeightVars(settings.heightPx, settings.mobileHeightPx) : undefined;
+  const height = pxHeightVars
+    ? "theme-banner-minh"
+    : bannerImages.length > 0
       ? (HEIGHT_CLASS[settings.height as string] ?? HEIGHT_CLASS.medium)
       : "min-h-[300px]";
   const slideDurationS =
@@ -297,7 +303,10 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
       // getBoundingClientRect() instead of a cross-tree ref.
       data-theme-hero="true"
       className={`relative flex ${height} ${position} overflow-hidden px-6 py-12`}
-      style={inset && cornerRadius ? { borderRadius: `${cornerRadius}px` } : undefined}
+      style={{
+        ...(inset && cornerRadius ? { borderRadius: `${cornerRadius}px` } : null),
+        ...pxHeightVars,
+      }}
     >
       {bannerImages.length > 0 && (
         <HeroSlideshow

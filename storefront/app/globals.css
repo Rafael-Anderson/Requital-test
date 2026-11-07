@@ -1100,3 +1100,21 @@ body {
 .dropdown-in {
   animation: dropdown-in var(--motion-duration-fast, 0.14s) var(--motion-ease, ease-out);
 }
+
+/* Banner height (lib/banner-height.ts). Mobile value below 640px, desktop from 640px up.
+   --theme-* names on purpose: a custom property in a Tailwind namespace would redefine
+   that utility family (see the radius-token note in CLAUDE.md). */
+.theme-banner-h {
+  height: var(--theme-banner-h-m, 220px);
+}
+.theme-banner-minh {
+  min-height: var(--theme-banner-h-m, 300px);
+}
+@media (min-width: 640px) {
+  .theme-banner-h {
+    height: var(--theme-banner-h, 220px);
+  }
+  .theme-banner-minh {
+    min-height: var(--theme-banner-h, 300px);
+  }
+}
