@@ -513,6 +513,18 @@ export interface Collection {
   isFeatured: boolean;
   parentCollectionId: number | null;
   description: string | null;
+  // Automated collections (conditions evaluated at read time). Absent on rows from an
+  // older API, which means manual.
+  collectionType?: "manual" | "automated";
+  matchMode?: "all" | "any";
+  rules?: CollectionRule[];
+}
+
+export interface CollectionRule {
+  id?: number;
+  field: string;
+  operator: string;
+  value?: string | null;
 }
 
 export interface CollectionNode extends Collection {

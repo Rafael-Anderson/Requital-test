@@ -1642,6 +1642,29 @@ export interface CollectionInput {
   image?: string | null;
   isFeatured?: boolean;
   description?: string;
+  collectionType?: "manual" | "automated";
+  matchMode?: "all" | "any";
+  rules?: { field: string; operator: string; value?: string | null }[];
+}
+
+export interface CollectionRulePreview {
+  total: number;
+  page: number;
+  pageSize: number;
+  products: { id: number; name: string; price: string; status: string; thumbnail: string | null }[];
+}
+
+// Live "N products match" for the collection editor; works on an unsaved rule set.
+export function previewCollectionRules(data: {
+  matchMode: "all" | "any";
+  rules: { field: string; operator: string; value?: string | null }[];
+  page?: number;
+  pageSize?: number;
+}) {
+  return apiFetch<CollectionRulePreview>("/collections/preview-rules", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 export function uploadCollectionImage(file: File) {

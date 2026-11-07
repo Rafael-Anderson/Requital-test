@@ -506,6 +506,21 @@ export interface CollectionRow {
   isFeatured: boolean;
   parentCollectionId: number | null;
   description: string | null;
+  // 'manual' (products assigned through productcollection) or 'automated' (computed
+  // from collectionrule rows at read time). matchMode: 'all' | 'any'.
+  collectionType: string;
+  matchMode: string;
+  createdAt: Date;
+}
+
+export interface CollectionruleRow {
+  id: number;
+  shopId: number;
+  collectionId: number;
+  position: number;
+  field: string;
+  operator: string;
+  value: string | null;
   createdAt: Date;
 }
 

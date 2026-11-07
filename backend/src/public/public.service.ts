@@ -184,6 +184,12 @@ const INDEPENDENT_ONLINE_PROVIDERS = ['paypal', 'tabby', 'tamara'] as const;
 // now that assembly happens in one pass at query time (see that method).
 type PublicProductResponse = Record<string, unknown>;
 
+import { buildMembershipWhere } from '../collections/collection-rules';
+
+// The storefront collection page loads one collection's products in one response;
+// an automated collection is capped so a broad rule cannot return the whole catalogue.
+const AUTOMATED_COLLECTION_PRODUCT_CAP = 500;
+
 @Injectable()
 export class PublicService {
   constructor(
@@ -644,13 +650,16 @@ export class PublicService {
     if (!collection) {
       throw new NotFoundException(`Collection '${slug}' not found`);
     }
-    const productRows = await this.db.query<RowDataPacket[]>(
-      `SELECT p.id FROM product p
+    const productRows =
+      collection.collectionType === 'automated'
+        ? await this.automatedCollectionProductIds(shop.id, collection)
+        : await this.db.query<RowDataPacket[]>(
+            `SELECT p.id FROM product p
        JOIN productcollection pc ON pc.productId = p.id
        WHERE p.shopId = ? AND p.status = 'Available' AND pc.collectionId = ?
        ORDER BY p.id ASC`,
-      [shop.id, collection.id],
-    );
+            [shop.id, collection.id],
+          );
     const productIds = productRows.map((r) => r.id as number);
     const [products, salesCounts] = await Promise.all([
       this.loadPublicProductsWithRelations(productIds, shop.id, outletId),
@@ -671,6 +680,36 @@ export class PublicService {
           salesCount: salesCounts.get(p.id as number) ?? 0,
         })),
     };
+  }
+
+  // Automated collection: members are computed from the collection's conditions at
+  // read time (collections/collection-rules.ts is the only place that builds that
+  // SQL), Available products of this shop only, capped like a page of results.
+  private async automatedCollectionProductIds(
+    shopId: number,
+    collection: CollectionRow,
+  ): Promise<RowDataPacket[]> {
+    const rules = await this.db.query<RowDataPacket[]>(
+      `SELECT field, operator, value FROM collectionrule
+        WHERE collectionId = ? AND shopId = ? ORDER BY position ASC, id ASC`,
+      [collection.id, shopId],
+    );
+    const where = buildMembershipWhere(
+      shopId,
+      {
+        matchMode: collection.matchMode,
+        rules: rules.map((r) => ({
+          field: r.field as string,
+          operator: r.operator as string,
+          value: r.value as string | null,
+        })),
+      },
+      { onlyAvailable: true },
+    );
+    return this.db.query<RowDataPacket[]>(
+      `SELECT p.id FROM product p WHERE ${where.sql} ORDER BY p.id ASC LIMIT ${AUTOMATED_COLLECTION_PRODUCT_CAP}`,
+      where.params,
+    );
   }
 
   // "Best selling" sort on the storefront collection page (storefront-v2

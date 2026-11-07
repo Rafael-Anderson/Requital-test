@@ -151,6 +151,9 @@ export default function CollectionsPage() {
                     <GripVertical className="size-4" />
                   </span>
                   <span className="font-medium">{c.name}</span>
+                  {c.collectionType === "automated" && (
+                    <span className="ms-2 rounded-md bg-black/5 px-1.5 py-0.5 text-[11px] font-medium text-text-muted dark:bg-white/10">Automated</span>
+                  )}
                   <span className="text-text-faint ms-2 text-xs">{c.slug}</span>
                 </div>
                 <div className="flex gap-1">

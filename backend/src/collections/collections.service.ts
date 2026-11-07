@@ -4,15 +4,22 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { RowDataPacket } from 'mysql2/promise';
+import type { PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { buildSetClause } from '../database/update.util';
 import { isDuplicateKeyError } from '../database/mysql-errors';
-import type { CollectionRow } from '../db/types';
+import type { CollectionRow, CollectionruleRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { slugify } from '../common/slugify';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
+import type { PreviewRulesDto } from './dto/collection-rule.dto';
+import {
+  buildMembershipWhere,
+  validateRules,
+  type RuleInput,
+} from './collection-rules';
+import type { QueryParam } from '../database/database.service';
 import { ReorderCollectionsDto } from './dto/reorder-collections.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { deleteMetafieldValues } from '../metafields/metafield-cleanup';
@@ -39,7 +46,106 @@ export class CollectionsService {
     if (rows.length === 0) {
       throw new NotFoundException(`Collection ${id} not found`);
     }
-    return rows[0];
+    return { ...rows[0], rules: await this.loadRules(ctx.shopId, id) };
+  }
+
+  private async loadRules(shopId: number, collectionId: number) {
+    const rows = await this.db.query<(CollectionruleRow & RowDataPacket)[]>(
+      `SELECT id, field, operator, value FROM collectionrule
+        WHERE collectionId = ? AND shopId = ? ORDER BY position ASC, id ASC`,
+      [collectionId, shopId],
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      field: r.field,
+      operator: r.operator,
+      value: r.value,
+    }));
+  }
+
+  // Rules are validated against the allowlist, and a "Category" condition may only
+  // point at a MANUAL collection of the SAME shop (an automated one has no
+  // productcollection rows to match, and a foreign id must never be accepted).
+  private async assertRulesValid(
+    ctx: TenantContext,
+    rules: RuleInput[],
+    ownId?: number,
+  ) {
+    validateRules(rules);
+    const ids = [
+      ...new Set(
+        rules.filter((r) => r.field === 'category').map((r) => Number(r.value)),
+      ),
+    ];
+    if (ids.length === 0) return;
+    if (ownId !== undefined && ids.includes(ownId)) {
+      throw new BadRequestException('A Category condition cannot point at the collection itself');
+    }
+    const found = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM collection
+        WHERE shopId = ? AND collectionType = 'manual' AND id IN (${ids.map(() => '?').join(', ')})`,
+      [ctx.shopId, ...ids],
+    );
+    if (found.length !== ids.length) {
+      throw new BadRequestException(
+        'A Category condition must point at a manual collection of this shop',
+      );
+    }
+  }
+
+  private async replaceRules(
+    conn: PoolConnection,
+    shopId: number,
+    collectionId: number,
+    rules: RuleInput[],
+  ) {
+    await conn.query(`DELETE FROM collectionrule WHERE collectionId = ? AND shopId = ?`, [
+      collectionId,
+      shopId,
+    ]);
+    for (let i = 0; i < rules.length; i++) {
+      await conn.query(
+        `INSERT INTO collectionrule (shopId, collectionId, position, field, operator, value)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [shopId, collectionId, i, rules[i].field, rules[i].operator, rules[i].value ?? null],
+      );
+    }
+  }
+
+  // Members of an automated collection (or of an unsaved rule set, for the editor
+  // preview), paginated. Evaluated at read time, always scoped to the shop.
+  async previewRules(ctx: TenantContext, dto: PreviewRulesDto) {
+    await this.assertRulesValid(ctx, dto.rules);
+    const page = dto.page ?? 1;
+    const pageSize = dto.pageSize ?? 20;
+    const where = buildMembershipWhere(
+      ctx.shopId,
+      { matchMode: dto.matchMode, rules: dto.rules },
+      { onlyAvailable: false },
+    );
+    const [countRows, products] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS total FROM product p WHERE ${where.sql}`,
+        where.params,
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT p.id, p.name, p.price, p.status, p.thumbnail FROM product p
+          WHERE ${where.sql} ORDER BY p.id ASC LIMIT ? OFFSET ?`,
+        [...where.params, pageSize, (page - 1) * pageSize] as QueryParam[],
+      ),
+    ]);
+    return {
+      total: Number(countRows[0].total),
+      page,
+      pageSize,
+      products: products.map((p) => ({
+        id: p.id as number,
+        name: p.name as string,
+        price: p.price as string,
+        status: p.status as string,
+        thumbnail: p.thumbnail as string | null,
+      })),
+    };
   }
 
   async create(ctx: TenantContext, dto: CreateCollectionDto) {
@@ -47,22 +153,35 @@ export class CollectionsService {
       await this.assertParentBelongsToShop(ctx, dto.parentCollectionId);
     }
 
+    const collectionType = dto.collectionType ?? 'manual';
+    const rules = collectionType === 'automated' ? (dto.rules ?? []) : [];
+    if (collectionType === 'manual' && dto.rules && dto.rules.length > 0) {
+      throw new BadRequestException('Conditions are only for automated collections');
+    }
+    await this.assertRulesValid(ctx, rules);
+
     try {
-      const result = await this.db.execute(
-        `INSERT INTO collection (shopId, name, slug, parentCollectionId, displayOrder, image, isFeatured, description)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          ctx.shopId,
-          dto.name,
-          dto.slug ?? slugify(dto.name),
-          dto.parentCollectionId ?? null,
-          dto.displayOrder ?? 0,
-          dto.image ?? null,
-          dto.isFeatured ?? false,
-          dto.description ?? null,
-        ],
-      );
-      return this.findById(result.insertId);
+      const insertId = await this.db.transaction(async (conn) => {
+        const [result] = await conn.query<ResultSetHeader>(
+          `INSERT INTO collection (shopId, name, slug, parentCollectionId, displayOrder, image, isFeatured, description, collectionType, matchMode)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            ctx.shopId,
+            dto.name,
+            dto.slug ?? slugify(dto.name),
+            dto.parentCollectionId ?? null,
+            dto.displayOrder ?? 0,
+            dto.image ?? null,
+            dto.isFeatured ?? false,
+            dto.description ?? null,
+            collectionType,
+            dto.matchMode ?? 'all',
+          ],
+        );
+        await this.replaceRules(conn, ctx.shopId, result.insertId, rules);
+        return result.insertId;
+      });
+      return this.findOne(ctx, insertId);
     } catch (error) {
       this.handleDbError(error);
     }
@@ -79,6 +198,19 @@ export class CollectionsService {
       await this.assertNoCycle(ctx, id, dto.parentCollectionId);
     }
 
+    // Switching to manual drops the conditions; switching to (or staying) automated
+    // replaces them only when `rules` is sent.
+    const existing = await this.findOne(ctx, id);
+    const nextType = dto.collectionType ?? existing.collectionType;
+    let nextRules: RuleInput[] | undefined = dto.rules;
+    if (nextType === 'manual') {
+      if (dto.rules && dto.rules.length > 0) {
+        throw new BadRequestException('Conditions are only for automated collections');
+      }
+      if (existing.collectionType === 'automated') nextRules = [];
+    }
+    if (nextRules !== undefined) await this.assertRulesValid(ctx, nextRules, id);
+
     try {
       const set = buildSetClause({
         name: dto.name,
@@ -88,14 +220,22 @@ export class CollectionsService {
         parentCollectionId: dto.parentCollectionId,
         image: dto.image,
         description: dto.description,
+        collectionType: dto.collectionType,
+        matchMode: dto.matchMode,
       });
-      if (set) {
-        await this.db.execute(
-          `UPDATE collection SET ${set.setClause} WHERE id = ?`,
-          [...set.params, id],
-        );
-      }
-      return this.findById(id);
+      await this.db.transaction(async (conn) => {
+        if (set) {
+          await conn.query(`UPDATE collection SET ${set.setClause} WHERE id = ? AND shopId = ?`, [
+            ...set.params,
+            id,
+            ctx.shopId,
+          ]);
+        }
+        if (nextRules !== undefined) {
+          await this.replaceRules(conn, ctx.shopId, id, nextRules);
+        }
+      });
+      return this.findOne(ctx, id);
     } catch (error) {
       this.handleDbError(error);
     }
@@ -161,14 +301,6 @@ export class CollectionsService {
       }
     });
     return this.findAll(ctx);
-  }
-
-  private async findById(id: number) {
-    const rows = await this.db.query<(CollectionRow & RowDataPacket)[]>(
-      `SELECT * FROM collection WHERE id = ?`,
-      [id],
-    );
-    return rows[0];
   }
 
   private async assertParentBelongsToShop(

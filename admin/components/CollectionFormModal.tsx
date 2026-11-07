@@ -21,6 +21,10 @@ import Toggle from "@/components/ui/Toggle";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import Modal from "@/components/ui/Modal";
 import Combobox from "@/components/ui/Combobox";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import CollectionConditions, { newConditionKey, type ConditionDraft } from "@/components/CollectionConditions";
+import { conditionError, isPresenceOperator, MAX_RULES } from "@/lib/collection-rules";
+import { useShopCurrency } from "@/lib/useShopCurrency";
 import { useToast } from "@/components/ui/Toast";
 import { useMetafieldEditor } from "@/lib/useMetafieldEditor";
 import { MetafieldsSection } from "@/components/MetafieldsFields";
@@ -57,6 +61,19 @@ export default function CollectionFormModal({
   const [imagePreview, setImagePreview] = useState<string | null>(
     resolveImageUrl(collection?.image),
   );
+  const [collectionType, setCollectionType] = useState<"manual" | "automated">(
+    collection?.collectionType === "automated" ? "automated" : "manual",
+  );
+  const [matchMode, setMatchMode] = useState<"all" | "any">(collection?.matchMode === "any" ? "any" : "all");
+  const [conditions, setConditions] = useState<ConditionDraft[]>(
+    (collection?.rules ?? []).map((r) => ({
+      key: newConditionKey(),
+      field: r.field,
+      operator: r.operator,
+      value: r.value ?? "",
+    })),
+  );
+  const currency = useShopCurrency();
   const [saving, setSaving] = useState(false);
   const metafields = useMetafieldEditor("collection", collection?.id ?? null);
   const toast = useToast();
@@ -90,6 +107,16 @@ export default function CollectionFormModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !slug.trim()) return;
+    if (collectionType === "automated") {
+      if (conditions.length === 0) {
+        toast("Add at least one condition, or switch this collection to Manual", "error");
+        return;
+      }
+      if (conditions.length > MAX_RULES || conditions.some((c) => conditionError(c) !== null)) {
+        toast("Complete or remove the incomplete conditions", "error");
+        return;
+      }
+    }
     const metafieldError = metafields.validate();
     if (metafieldError) {
       toast(metafieldError, "error");
@@ -104,8 +131,22 @@ export default function CollectionFormModal({
         image = uploaded.url;
       }
 
+      const ruleFields: Partial<CollectionInput> =
+        collectionType === "automated"
+          ? {
+              collectionType,
+              matchMode,
+              rules: conditions.map((c) => ({
+                field: c.field,
+                operator: c.operator,
+                value: isPresenceOperator(c.operator) ? null : c.value.trim(),
+              })),
+            }
+          : { collectionType: "manual" };
+
       if (collection) {
         const payload: Partial<CollectionInput> = {
+          ...ruleFields,
           name,
           slug,
           displayOrder: order,
@@ -118,7 +159,7 @@ export default function CollectionFormModal({
         await saveMetafields(collection.id);
         toast(`"${name}" updated`);
       } else {
-        const payload: CollectionInput = { name, slug, displayOrder: order, isFeatured, description, image };
+        const payload: CollectionInput = { ...ruleFields, name, slug, displayOrder: order, isFeatured, description, image };
         if (parentCollectionId !== "") {
           payload.parentCollectionId = Number(parentCollectionId);
         }
@@ -136,7 +177,7 @@ export default function CollectionFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={collection ? `Edit "${collection.name}"` : "New collection"}>
+    <Modal onClose={onClose} size={collectionType === "automated" ? "lg" : "sm"} title={collection ? `Edit "${collection.name}"` : "New collection"}>
       {(requestClose) => (
       <form onSubmit={handleSubmit}>
         <div className="space-y-3.5">
@@ -165,6 +206,36 @@ export default function CollectionFormModal({
               })),
             ]}
           />
+
+          <div>
+            <p className="mb-1.5 text-[13px] font-medium text-text-secondary dark:text-zinc-400">Collection type</p>
+            <SegmentedToggle
+              value={collectionType}
+              onChange={setCollectionType}
+              options={[
+                { value: "manual", label: "Manual" },
+                { value: "automated", label: "Automated" },
+              ]}
+            />
+            <p className="mt-1.5 text-xs text-text-muted">
+              {collectionType === "manual"
+                ? "Products are added to this collection from each product's page."
+                : "Products join automatically when they match the conditions below."}
+            </p>
+          </div>
+
+          {collectionType === "automated" && (
+            <CollectionConditions
+              matchMode={matchMode}
+              onMatchModeChange={setMatchMode}
+              conditions={conditions}
+              onConditionsChange={setConditions}
+              manualCollections={collections.filter(
+                (c) => c.collectionType !== "automated" && c.id !== collection?.id,
+              )}
+              currency={currency}
+            />
+          )}
 
           <Textarea
             label="Description"

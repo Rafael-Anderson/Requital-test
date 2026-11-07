@@ -1,6 +1,9 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -8,7 +11,10 @@ import {
   Matches,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { COLLECTION_TYPES, MATCH_MODES, MAX_RULES } from '../collection-rules';
+import { CollectionRuleDto } from './collection-rule.dto';
 
 export class UpdateCollectionDto {
   @IsOptional()
@@ -55,4 +61,20 @@ export class UpdateCollectionDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  @IsOptional()
+  @IsIn(COLLECTION_TYPES)
+  collectionType?: string;
+
+  @IsOptional()
+  @IsIn(MATCH_MODES)
+  matchMode?: string;
+
+  // Present = replace all conditions; absent = leave them unchanged.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_RULES)
+  @ValidateNested({ each: true })
+  @Type(() => CollectionRuleDto)
+  rules?: CollectionRuleDto[];
 }

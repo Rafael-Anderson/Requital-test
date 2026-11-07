@@ -17,6 +17,7 @@ import { CollectionsService } from './collections.service';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
 import { ReorderCollectionsDto } from './dto/reorder-collections.dto';
+import { PreviewRulesDto } from './dto/collection-rule.dto';
 import { createImageUploadOptions } from '../common/image-upload.config';
 import { StorageService } from '../storage/storage.service';
 import { CollectionImportService } from './collection-import.service';
@@ -93,6 +94,14 @@ export class CollectionsController {
     @Body() dto: ReorderCollectionsDto,
   ) {
     return this.collectionsService.reorder(ctx, dto);
+  }
+
+  // Live "N products match" + the matching list for the collection editor; works on
+  // an unsaved rule set. Admin only, always scoped to the caller's shop.
+  @Roles('admin')
+  @Post('preview-rules')
+  previewRules(@CurrentUser() ctx: TenantContext, @Body() dto: PreviewRulesDto) {
+    return this.collectionsService.previewRules(ctx, dto);
   }
 
   @Get(':id')

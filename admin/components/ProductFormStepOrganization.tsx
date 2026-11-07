@@ -47,7 +47,9 @@ export default function ProductFormStepOrganization({
   const sortedImages = [...form.images].sort((a, b) => a.order - b.order);
 
   const collectionOptions = flattenCollectionTree(
-    buildCollectionTree(form.collections ?? []),
+    // Automated collections are computed from their conditions; products are not
+    // assigned to them by hand.
+    buildCollectionTree((form.collections ?? []).filter((c) => c.collectionType !== "automated")),
   ).map((c) => ({ value: String(c.id), label: c.name, depth: c.depth }));
   const brandOptions = form.brands.map((b) => ({
     value: String(b.id),

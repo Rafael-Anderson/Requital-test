@@ -1,6 +1,9 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -9,7 +12,10 @@ import {
   Matches,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { COLLECTION_TYPES, MATCH_MODES, MAX_RULES } from '../collection-rules';
+import { CollectionRuleDto } from './collection-rule.dto';
 
 export class CreateCollectionDto {
   @IsString()
@@ -52,4 +58,21 @@ export class CreateCollectionDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  // 'manual' (default): products are assigned from the product form. 'automated':
+  // members are computed from `rules` at read time.
+  @IsOptional()
+  @IsIn(COLLECTION_TYPES)
+  collectionType?: string;
+
+  @IsOptional()
+  @IsIn(MATCH_MODES)
+  matchMode?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_RULES)
+  @ValidateNested({ each: true })
+  @Type(() => CollectionRuleDto)
+  rules?: CollectionRuleDto[];
 }
