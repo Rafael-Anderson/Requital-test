@@ -151,10 +151,15 @@ function createMockDb() {
   return { db, discounts, productLinks, collectionLinks };
 }
 
+// No automated collections in these unit tests (membership is covered by the e2e suite).
+const noAutomatedCollections = {
+  automatedCollectionIdsByProduct: () => Promise.resolve(new Map()),
+} as never;
+
 describe('DiscountsService — auto-apply discounts', () => {
   it('rejects an auto discount with a code set', async () => {
     const { db } = createMockDb();
-    const service = new DiscountsService(db, mockAuditLog, { automatedCollectionIdsByProduct: async () => new Map() } as never);
+    const service = new DiscountsService(db, mockAuditLog, noAutomatedCollections);
 
     await expect(
       service.create(adminCtx, {
@@ -170,7 +175,7 @@ describe('DiscountsService — auto-apply discounts', () => {
 
   it('rejects a code-based discount with no code', async () => {
     const { db } = createMockDb();
-    const service = new DiscountsService(db, mockAuditLog, { automatedCollectionIdsByProduct: async () => new Map() } as never);
+    const service = new DiscountsService(db, mockAuditLog, noAutomatedCollections);
 
     await expect(
       service.create(adminCtx, { type: 'PERCENTAGE', value: 10 }),
@@ -179,7 +184,7 @@ describe('DiscountsService — auto-apply discounts', () => {
 
   it('rejects an auto discount scoped to ALL_PRODUCTS (must target specific products/collections)', async () => {
     const { db } = createMockDb();
-    const service = new DiscountsService(db, mockAuditLog, { automatedCollectionIdsByProduct: async () => new Map() } as never);
+    const service = new DiscountsService(db, mockAuditLog, noAutomatedCollections);
 
     await expect(
       service.create(adminCtx, { discountType: 'auto', type: 'PERCENTAGE', value: 10 }),
@@ -188,7 +193,7 @@ describe('DiscountsService — auto-apply discounts', () => {
 
   it('creates an auto discount scoped to specific products with no code, stored as code = null', async () => {
     const { db, discounts } = createMockDb();
-    const service = new DiscountsService(db, mockAuditLog, { automatedCollectionIdsByProduct: async () => new Map() } as never);
+    const service = new DiscountsService(db, mockAuditLog, noAutomatedCollections);
 
     const result = await service.create(adminCtx, {
       discountType: 'auto',
@@ -205,7 +210,7 @@ describe('DiscountsService — auto-apply discounts', () => {
 
   it('switching an existing code discount to auto clears its code even if this request never sent one', async () => {
     const { db, discounts } = createMockDb();
-    const service = new DiscountsService(db, mockAuditLog, { automatedCollectionIdsByProduct: async () => new Map() } as never);
+    const service = new DiscountsService(db, mockAuditLog, noAutomatedCollections);
     const created = await service.create(adminCtx, {
       code: 'WELCOME10',
       type: 'PERCENTAGE',
@@ -222,7 +227,7 @@ describe('DiscountsService — auto-apply discounts', () => {
 
   it('rejects switching to auto while still scoped to ALL_PRODUCTS', async () => {
     const { db } = createMockDb();
-    const service = new DiscountsService(db, mockAuditLog, { automatedCollectionIdsByProduct: async () => new Map() } as never);
+    const service = new DiscountsService(db, mockAuditLog, noAutomatedCollections);
     const created = await service.create(adminCtx, { code: 'WELCOME10', type: 'PERCENTAGE', value: 10 });
 
     await expect(service.update(adminCtx, created.id, { discountType: 'auto' })).rejects.toThrow(
@@ -232,7 +237,7 @@ describe('DiscountsService — auto-apply discounts', () => {
 
   it('listActiveAutoDiscounts returns only active auto discounts, with resolved product/collection ids', async () => {
     const { db } = createMockDb();
-    const service = new DiscountsService(db, mockAuditLog, { automatedCollectionIdsByProduct: async () => new Map() } as never);
+    const service = new DiscountsService(db, mockAuditLog, noAutomatedCollections);
     await service.create(adminCtx, {
       discountType: 'auto',
       type: 'FIXED_AMOUNT',
