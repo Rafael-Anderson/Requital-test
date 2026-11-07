@@ -353,4 +353,52 @@ describe('assertValidThemeConfig', () => {
       expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);
     });
   });
+
+  describe('banner height', () => {
+    function heroConfig(settings: Record<string, unknown>): ThemeConfig {
+      const config = baseConfig();
+      config.sections = [
+        { id: 'h1', type: 'hero', visible: true, order: 0, settings, blocks: [] },
+      ] as ThemeConfig['sections'];
+      return config;
+    }
+
+    it('accepts the bounds on the collection page and a hero', () => {
+      const config = baseConfig();
+      Object.assign(config.globalSettings.collectionPage, {
+        bannerHeight: 120,
+        bannerHeightMobile: 900,
+        titleAlign: 'center',
+        titleSpacing: 40,
+      });
+      expect(() => assertValidThemeConfig(config)).not.toThrow();
+      expect(() =>
+        assertValidThemeConfig(heroConfig({ bannerHeight: 480, bannerHeightMobile: 240 })),
+      ).not.toThrow();
+    });
+
+    it.each([119, 901, 300.5, '300', -5])(
+      'rejects collectionPage.bannerHeight = %p',
+      (value) => {
+        const config = baseConfig();
+        Object.assign(config.globalSettings.collectionPage, { bannerHeight: value });
+        expect(() => assertValidThemeConfig(config)).toThrow(BadRequestException);
+      },
+    );
+
+    it.each([119, 901, 'tall'])('rejects a hero bannerHeightMobile = %p', (value) => {
+      expect(() =>
+        assertValidThemeConfig(heroConfig({ bannerHeightMobile: value })),
+      ).toThrow(BadRequestException);
+    });
+
+    it('rejects a bad title alignment and spacing', () => {
+      const a = baseConfig();
+      Object.assign(a.globalSettings.collectionPage, { titleAlign: 'left' });
+      expect(() => assertValidThemeConfig(a)).toThrow(BadRequestException);
+      const b = baseConfig();
+      Object.assign(b.globalSettings.collectionPage, { titleSpacing: 500 });
+      expect(() => assertValidThemeConfig(b)).toThrow(BadRequestException);
+    });
+  });
 });

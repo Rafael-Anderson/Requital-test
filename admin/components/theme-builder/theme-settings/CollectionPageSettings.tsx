@@ -6,6 +6,8 @@ import ColorPicker from "@/components/ui/ColorPicker";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Toggle from "@/components/ui/Toggle";
 import RichTextBlockEditor from "../RichTextBlockEditor";
+import BannerHeightControl from "../settings/shared/BannerHeightControl";
+import Slider from "@/components/ui/Slider";
 import { schemeColorPresets } from "@/lib/scheme-color-presets";
 import type { CollectionPageSettings as CollectionPageSettingsType } from "@/lib/types";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
@@ -40,6 +42,40 @@ export default function CollectionPageSettings({ editor }: { editor: ThemeEditor
         value={settings.textBelowProducts}
         onChange={(html) => update({ textBelowProducts: html })}
         colorPresets={colorPresets}
+      />
+
+      <hr className="border-black/10 dark:border-white/10" />
+
+      {/* Collections with a banner image. A collection without one shows no
+          banner area, only the plain title block below. */}
+      <BannerHeightControl
+        desktop={settings.bannerHeight}
+        mobile={settings.bannerHeightMobile}
+        defaultHeight={220}
+        defaultNote="Currently 220px on every screen. Applies to collections that have a banner image."
+        onChange={(next) => update({ bannerHeight: next.desktop, bannerHeightMobile: next.mobile })}
+      />
+
+      <div>
+        <span className="mb-1.5 block text-sm font-medium">Title alignment (collections without a banner image)</span>
+        <SegmentedToggle
+          value={settings.titleAlign ?? "start"}
+          options={[
+            { value: "start", label: "Start" },
+            { value: "center", label: "Center" },
+            { value: "end", label: "End" },
+          ]}
+          onChange={(v) => update({ titleAlign: v as NonNullable<CollectionPageSettingsType["titleAlign"]> })}
+        />
+      </div>
+      <Slider
+        label="Title spacing above and below"
+        suffix="px"
+        min={0}
+        max={120}
+        step={4}
+        value={settings.titleSpacing ?? 24}
+        onChange={(v) => update({ titleSpacing: Math.max(0, Math.min(120, Math.round(v))) })}
       />
 
       <hr className="border-black/10 dark:border-white/10" />

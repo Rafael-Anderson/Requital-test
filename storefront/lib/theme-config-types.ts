@@ -391,6 +391,15 @@ export interface CollectionPageSettings {
   // Today / Tomorrow" line on each collection-page product card, resolved
   // from shop.sameDayCutoffTime in the shop's timezone.
   showDeliveryEstimate?: boolean;
+  // OPTIONAL, absent ⇒ today's rendering. Banner height in px (120..900, validated
+  // in theme-config.validation.ts). Absent ⇒ 220 on every viewport, the previous
+  // fixed height. Only used when the collection has a banner image.
+  bannerHeight?: number;
+  bannerHeightMobile?: number;
+  // The plain title block shown when the collection has NO banner image.
+  titleAlign?: "start" | "center" | "end";
+  // Vertical padding (px) above and below that title block.
+  titleSpacing?: number;
 }
 
 // Governs the PDP's stock/delivery/pickup status line — see backend

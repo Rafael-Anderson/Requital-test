@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, ChevronDown, Search as SearchIcon } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
+import CollectionBanner from "@/components/CollectionBanner";
 import { HttpError, getCollectionBySlug, listBrands, listCollections, resolveImageUrl } from "@/lib/api";
 import NotFoundContent from "@/components/NotFoundContent";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
@@ -300,47 +301,14 @@ export default function CollectionPage() {
 
   return (
     <>
-      {/* Banner (2A) — merchant image with a dark overlay for text
-          legibility, or a flat accent-tint fallback when the collection has
-          no image of its own. */}
-      <div
-        className="relative w-full flex items-end"
-        style={{
-          height: 220,
-          background: bannerImage ? undefined : "#E6F5F3",
-        }}
-      >
-        {bannerImage && (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={bannerImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/40" />
-          </>
-        )}
-        <div className="relative mx-auto w-full px-4 sm:px-6 pb-6" style={{ maxWidth: "var(--theme-max-width, 80rem)" }}>
-          <nav className={`text-xs mb-2 ${bannerImage ? "text-white/80" : "text-zinc-500"}`}>
-            <Link href={shopBasePath || "/"} className="hover:underline">
-              Home
-            </Link>
-            {parent && (
-              <>
-                {" / "}
-                <Link href={`${shopBasePath}/collections/${parent.slug}`} className="hover:underline">
-                  {parent.name}
-                </Link>
-              </>
-            )}
-            {" / "}
-            <span>{collection.name}</span>
-          </nav>
-          <h1 className={`text-[32px] font-extrabold leading-tight ${bannerImage ? "text-white" : "text-product-name"}`}>
-            {collection.name}
-          </h1>
-          {collection.description && (
-            <p className={`mt-1 text-[15px] max-w-2xl ${bannerImage ? "text-white/85" : "text-zinc-600"}`}>{collection.description}</p>
-          )}
-        </div>
-      </div>
+      <CollectionBanner
+        name={collection.name}
+        description={collection.description}
+        parent={parent}
+        bannerImage={bannerImage}
+        shopBasePath={shopBasePath}
+        settings={collectionPageSettings}
+      />
 
       <StorefrontPageShell variant="wide">
         {collectionPageSettings?.textAboveProducts && (

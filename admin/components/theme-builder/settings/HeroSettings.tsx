@@ -11,6 +11,7 @@ import TypographyControls, { type TypographyValue } from "./shared/TypographyCon
 import SpacingControls, { type SpacingValue } from "./shared/SpacingControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
+import BannerHeightControl from "./shared/BannerHeightControl";
 import VisibilityControl from "./shared/VisibilityControl";
 import type { BannerImage, ScrollAnimation, SectionVisibility } from "@/lib/types";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
@@ -64,6 +65,18 @@ export default function HeroSettings({
           </option>
         ))}
       </Select>
+
+      {/* Only applies to a hero with a banner image; replaces the preset above. */}
+      <BannerHeightControl
+        desktop={typeof settings.bannerHeight === "number" ? settings.bannerHeight : undefined}
+        mobile={typeof settings.bannerHeightMobile === "number" ? settings.bannerHeightMobile : undefined}
+        defaultHeight={{ small: 240, medium: 400, large: 560, full: 800 }[(settings.height as string) ?? "medium"] ?? 400}
+        defaultNote="Uses the Height preset above. Set an exact height in pixels instead."
+        onChange={(next) => {
+          onUpdate("bannerHeight", next.desktop);
+          onUpdate("bannerHeightMobile", next.mobile);
+        }}
+      />
 
       <Select
         label="Layout"

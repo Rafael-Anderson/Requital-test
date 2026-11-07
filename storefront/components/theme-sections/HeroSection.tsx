@@ -18,6 +18,7 @@ import {
   themeTextPresetStyle,
 } from "@/lib/theme-element-style";
 import ThemeImageBlock from "./ThemeImageBlock";
+import { bannerHeightVars, resolveBannerHeights } from "@/lib/banner-height";
 import type { ScrollAnimation, SectionSettings, ThemeBlock } from "@/lib/theme-config-types";
 
 const HEIGHT_CLASS: Record<string, string> = {
@@ -214,8 +215,13 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
   // an empty band — the text sits in a sea of blank canvas. Fall back to a
   // modest content-sized floor so an image-less hero reads as a heading
   // block, not dead space. A hero WITH a backdrop keeps its configured height.
-  const height =
-    bannerImages.length > 0
+  // An explicit pixel height (bannerHeight, 120..900, optional mobile value)
+  // replaces the small/medium/large preset; absent keeps the preset exactly.
+  const pxHeights =
+    bannerImages.length > 0 ? resolveBannerHeights(settings.bannerHeight, settings.bannerHeightMobile) : null;
+  const height = pxHeights
+    ? "min-h-[var(--banner-h)] md:min-h-[var(--banner-h-md)]"
+    : bannerImages.length > 0
       ? (HEIGHT_CLASS[settings.height as string] ?? HEIGHT_CLASS.medium)
       : "min-h-[300px]";
   const slideDurationS =
@@ -297,7 +303,10 @@ export default function HeroSection({ sectionId, settings, blocks }: { sectionId
       // getBoundingClientRect() instead of a cross-tree ref.
       data-theme-hero="true"
       className={`relative flex ${height} ${position} overflow-hidden px-6 py-12`}
-      style={inset && cornerRadius ? { borderRadius: `${cornerRadius}px` } : undefined}
+      style={{
+        ...(inset && cornerRadius ? { borderRadius: `${cornerRadius}px` } : {}),
+        ...(pxHeights ? bannerHeightVars(pxHeights) : {}),
+      }}
     >
       {bannerImages.length > 0 && (
         <HeroSlideshow

@@ -279,3 +279,35 @@ describe("HeroSection CTA button hoverEffect/pressEffect (§8.7 item 1)", () => 
     expect(cta.className).toContain("theme-btn-press");
   });
 });
+
+describe("HeroSection banner height", () => {
+  function heroEl() {
+    return document.querySelector("[data-theme-hero]") as HTMLElement;
+  }
+
+  it("keeps the preset height when no pixel height is set", () => {
+    renderHero({ bannerImages: [{ url: IMG_A, order: 0 }], height: "large" } as never);
+    expect(heroEl().className).toContain("min-h-[560px]");
+    expect(heroEl().style.getPropertyValue("--banner-h")).toBe("");
+  });
+
+  it("applies desktop and mobile pixel heights to a hero with an image", () => {
+    renderHero({
+      bannerImages: [{ url: IMG_A, order: 0 }],
+      height: "large",
+      bannerHeight: 480,
+      bannerHeightMobile: 200,
+    } as never);
+    expect(heroEl().className).toContain("min-h-[var(--banner-h)]");
+    expect(heroEl().style.getPropertyValue("--banner-h")).toBe("200px");
+    expect(heroEl().style.getPropertyValue("--banner-h-md")).toBe("480px");
+  });
+
+  it("ignores an out-of-range value and an image-less hero", () => {
+    renderHero({ bannerImages: [{ url: IMG_A, order: 0 }], bannerHeight: 50 } as never);
+    expect(heroEl().style.getPropertyValue("--banner-h")).toBe("");
+    cleanup();
+    renderHero({ bannerHeight: 480 } as never);
+    expect(heroEl().className).toContain("min-h-[300px]");
+  });
+});

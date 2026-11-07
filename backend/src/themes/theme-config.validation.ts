@@ -181,6 +181,48 @@ function assertValidCustomCss(customCss: unknown): void {
 // 400ing the whole save. Custom CSS is the one exception (real length/
 // content restrictions), since it's injected as real CSS on the live
 // storefront, not just consumed as opaque settings data.
+// Banner height (px). Same bounds are mirrored in admin/lib/banner-height.ts and
+// storefront/lib/banner-height.ts.
+export const BANNER_HEIGHT_MIN = 120;
+export const BANNER_HEIGHT_MAX = 900;
+
+function assertBannerHeight(value: unknown, path: string): void {
+  if (value === undefined || value === null) return;
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < BANNER_HEIGHT_MIN ||
+    value > BANNER_HEIGHT_MAX
+  ) {
+    throw new BadRequestException(
+      `${path} must be a whole number between ${BANNER_HEIGHT_MIN} and ${BANNER_HEIGHT_MAX}`,
+    );
+  }
+}
+
+function assertCollectionPageBanner(cp: unknown): void {
+  if (cp === undefined || cp === null) return;
+  if (typeof cp !== 'object') {
+    throw new BadRequestException('globalSettings.collectionPage must be an object');
+  }
+  const c = cp as Record<string, unknown>;
+  assertBannerHeight(c.bannerHeight, 'globalSettings.collectionPage.bannerHeight');
+  assertBannerHeight(c.bannerHeightMobile, 'globalSettings.collectionPage.bannerHeightMobile');
+  if (c.titleAlign !== undefined && !['start', 'center', 'end'].includes(c.titleAlign as string)) {
+    throw new BadRequestException(
+      'globalSettings.collectionPage.titleAlign must be start, center or end',
+    );
+  }
+  if (
+    c.titleSpacing !== undefined &&
+    (typeof c.titleSpacing !== 'number' || c.titleSpacing < 0 || c.titleSpacing > 200)
+  ) {
+    throw new BadRequestException(
+      'globalSettings.collectionPage.titleSpacing must be a number between 0 and 200',
+    );
+  }
+}
+
 export function assertValidThemeConfig(config: unknown): asserts config is ThemeConfig {
   if (Buffer.byteLength(JSON.stringify(config)) > MAX_CONFIG_BYTES) {
     throw new BadRequestException(
@@ -221,6 +263,7 @@ export function assertValidThemeConfig(config: unknown): asserts config is Theme
     if (g.customCss !== undefined) {
       assertValidCustomCss(g.customCss);
     }
+    assertCollectionPageBanner(g.collectionPage);
   }
 
   if (c.header !== undefined) assertValidBlockContainer(c.header, 'header');
@@ -252,6 +295,11 @@ export function assertValidThemeConfig(config: unknown): asserts config is Theme
     }
     if (typeof s.settings !== 'object' || s.settings === null) {
       throw new BadRequestException(`sections[${index}].settings must be an object`);
+    }
+    if (s.type === 'hero') {
+      const hs = s.settings as Record<string, unknown>;
+      assertBannerHeight(hs.bannerHeight, `sections[${index}].settings.bannerHeight`);
+      assertBannerHeight(hs.bannerHeightMobile, `sections[${index}].settings.bannerHeightMobile`);
     }
     if (s.blocks !== undefined) {
       if (!Array.isArray(s.blocks)) {
