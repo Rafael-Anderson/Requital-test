@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getShop, getThemeConfig, HttpError, listOutlets, resolveImageUrl } from "@/lib/api";
+import { getShop, getThemeConfig, HttpError, listOutlets } from "@/lib/api";
 import { buildShopInitialData, type ShopInitialData } from "@/lib/shop-initial-data";
 import { resolveThemeVarsWithScheme } from "@/lib/theme-css-vars";
 import { buildShopMetadata, canonicalUrlFor } from "@/lib/seo";
@@ -24,17 +24,18 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { shop: shopSlug } = await params;
   try {
-    const shop = await getShop(shopSlug);
-    const favicon = resolveImageUrl(shop.faviconUrl);
-    return {
-      ...buildShopMetadata(shop),
-      icons: favicon ? { icon: favicon } : undefined,
-    };
+    // The favicon set in Theme settings lives in the published theme config, not on
+    // the shop row, so both are read (a failed theme fetch just means no theme favicon).
+    const [shop, themeConfig] = await Promise.all([
+      getShop(shopSlug),
+      getThemeConfig(shopSlug, { preview: false }).catch(() => null),
+    ]);
+    return buildShopMetadata(shop, themeConfig);
   } catch {
     // Unknown shop slug — the page body itself renders the real 404/error
     // state; metadata just falls back to something reasonable rather than
-    // failing the whole render.
-    return { title: shopSlug };
+    // failing the whole render. Never the slug/domain as a title.
+    return { title: "Online store" };
   }
 }
 

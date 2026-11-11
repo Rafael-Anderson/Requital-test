@@ -1,6 +1,34 @@
 import type { Metadata } from "next";
 import type { BioPageConfig, Brand, Product, Shop } from "./types";
+import type { ThemeConfig } from "./theme-config-types";
 import { resolveImageUrl } from "./api";
+
+// The name a shopper knows the business by. This, never a domain or slug, is what
+// the browser tab shows by default.
+export function businessName(shop: Pick<Shop, "displayName" | "name">): string {
+  return shop.displayName?.trim() || shop.name;
+}
+
+// Tab titles: the home page is just the business name (or the merchant's own SEO
+// title when they set one, which always wins there); every other page is
+// "Page name | Business name". Next applies `template` to any descendant segment
+// that sets a plain string title, so child layouts return only the page name.
+// A child that must stand alone (a merchant-set bio SEO title) uses
+// `{ absolute }` instead.
+export function shopTitle(shop: Pick<Shop, "displayName" | "name" | "metaTitle">): Metadata["title"] {
+  const name = businessName(shop);
+  return { default: shop.metaTitle?.trim() || name, template: `%s | ${name}` };
+}
+
+// The tab icon, most specific first: the favicon set in Theme settings, the
+// legacy shop favicon, the logo (theme logo, then business logo), else nothing.
+export function resolveFaviconUrl(
+  shop: Pick<Shop, "faviconUrl" | "logoUrl">,
+  themeConfig?: Pick<ThemeConfig, "globalSettings"> | null,
+): string | null {
+  const logo = themeConfig?.globalSettings?.logo;
+  return resolveImageUrl(logo?.faviconUrl || shop.faviconUrl || logo?.defaultLogoUrl || shop.logoUrl || null);
+}
 
 // Pulled out as pure functions (rather than inlined in the two
 // generateMetadata call sites — [shop]/layout.tsx and
@@ -86,8 +114,11 @@ export function buildCollectionMetadata(
   shop: Shop,
   collection: { name: string; slug: string; description?: string | null },
 ): Metadata {
-  const name = shop.displayName ?? shop.name;
-  const title = `${collection.name} | ${name}`;
+  const name = businessName(shop);
+  // Plain page name for <title> (the shop layout's template appends the business
+  // name); the full form is what link previews show, which have no template.
+  const title = collection.name;
+  const fullTitle = `${collection.name} | ${name}`;
   const description =
     collection.description ?? `Shop ${collection.name} at ${name}.`;
   const image = resolveImageUrl(shop.ogImage);
@@ -97,14 +128,14 @@ export function buildCollectionMetadata(
     description,
     ...(canonical ? { alternates: { canonical } } : {}),
     openGraph: {
-      title,
+      title: fullTitle,
       description,
       images: image ? [{ url: image }] : undefined,
       ...(canonical ? { url: canonical } : {}),
     },
     twitter: {
       card: image ? "summary_large_image" : "summary",
-      title,
+      title: fullTitle,
       description,
       images: image ? [image] : undefined,
     },
@@ -118,14 +149,16 @@ export function buildCollectionMetadata(
 // never touched the SEO tab still gets a real (not blank) title and OG
 // image (ogImage itself is already resolved server-side against Theme's
 // banner/logo, see PublicService.getShop).
-export function buildShopMetadata(shop: Shop): Metadata {
-  const title = shop.metaTitle ?? shop.displayName ?? shop.name;
+export function buildShopMetadata(shop: Shop, themeConfig?: Pick<ThemeConfig, "globalSettings"> | null): Metadata {
+  const title = shop.metaTitle?.trim() || businessName(shop);
+  const favicon = resolveFaviconUrl(shop, themeConfig);
   const description = shop.metaDescription ?? shop.description ?? undefined;
   const image = resolveImageUrl(shop.ogImage);
   const canonical = canonicalUrlFor(shop, "/");
   return {
-    title,
+    title: shopTitle(shop),
     description,
+    ...(favicon ? { icons: { icon: favicon } } : {}),
     ...(canonical ? { alternates: { canonical } } : {}),
     openGraph: {
       title,
@@ -156,15 +189,15 @@ export function buildShopMetadata(shop: Shop): Metadata {
 // name + the shop's own resolved name, and the OG image falls back to the
 // shop's — same "fallback lives here" shape as the helpers above.
 export function buildBrandMetadata(shop: Shop, brand: Pick<Brand, "name">): Metadata {
-  const shopName = shop.displayName ?? shop.name;
-  const title = `${brand.name} | ${shopName}`;
+  const shopName = businessName(shop);
+  const fullTitle = `${brand.name} | ${shopName}`;
   const description = `Shop ${brand.name} products at ${shopName}.`;
   const image = resolveImageUrl(shop.ogImage);
   return {
-    title,
+    title: brand.name,
     description,
     openGraph: {
-      title,
+      title: fullTitle,
       description,
       images: image ? [{ url: image }] : undefined,
     },
@@ -172,11 +205,13 @@ export function buildBrandMetadata(shop: Shop, brand: Pick<Brand, "name">): Meta
 }
 
 export function buildBioPageMetadata(shop: Shop, config: BioPageConfig): Metadata {
-  const title = config.metaTitle ?? shop.metaTitle ?? shop.displayName ?? shop.name;
+  const seoTitle = config.metaTitle?.trim() || shop.metaTitle?.trim();
+  const title = seoTitle || `Bio | ${businessName(shop)}`;
   const description = config.metaDescription ?? shop.metaDescription ?? shop.description ?? undefined;
   const image = resolveImageUrl(shop.ogImage);
   return {
-    title,
+    // A merchant-set bio SEO title stands alone; otherwise the shop template adds the name.
+    title: seoTitle ? { absolute: seoTitle } : "Bio",
     description,
     openGraph: {
       title,

@@ -121,9 +121,11 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
               style={{ "--i": i } as CSSProperties}
             >
               <div className="size-16 rounded-full overflow-hidden bg-black/5">
-                {c.image ? (
+                {/* The circle shows the collection's ICON only. The banner (c.image) belongs to
+                    the collection's own page; with no icon the first letter shows, never the banner. */}
+                {c.icon ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={resolveImageUrl(c.image) ?? undefined} alt="" className="w-full h-full object-cover theme-hover-zoom" />
+                  <img src={resolveImageUrl(c.icon) ?? undefined} alt="" className="w-full h-full object-cover theme-hover-zoom" />
                 ) : (
                   <span
                     className="w-full h-full flex items-center justify-center text-lg font-semibold uppercase"

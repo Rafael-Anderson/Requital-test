@@ -144,7 +144,7 @@ function TopBarLogoCenter(props: TopBarProps) {
   const iconProps = iconStyleProps(props.shop?.iconStyle, 1.75);
   const contactNumber = firstContactNumber(props.shop);
   return (
-    <div className={`mx-auto max-w-7xl px-4 ${headerPadding(props.shop)} grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4`}>
+    <div className={`mx-auto max-w-7xl px-4 ${headerPadding(props.shop)} grid grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)] items-center gap-4`}>
       <div className="flex items-center gap-1">
         {contactNumber && (
           <a href={`tel:${contactNumber}`} title={`Call ${contactNumber}`} className="flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors">

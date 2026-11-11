@@ -509,7 +509,10 @@ export interface Collection {
   name: string;
   slug: string;
   displayOrder: number;
+  // The BANNER: shown only on the collection's own page.
   image: string | null;
+  // Shown only in the Featured Collections circles. null = first-letter placeholder.
+  icon?: string | null;
   isFeatured: boolean;
   parentCollectionId: number | null;
   description: string | null;
@@ -1637,7 +1640,9 @@ export interface AnnouncementBarConfig {
   enabled: boolean;
   messages: string[];
   scrolling?: boolean;
-  speed?: "fast" | "medium" | "slow";
+  speed?: "fast" | "medium" | "slow"; // rotation interval of a non-marquee bar
+  // Marquee scroll speed in px/second (10..200). null / absent = 40.
+  marqueeSpeed?: number | null;
   dismissible?: boolean;
   background?: string;
   textColor?: string;

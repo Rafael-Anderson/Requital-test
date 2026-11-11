@@ -42,10 +42,11 @@ const SOCIAL_LABEL: Record<string, string> = {
 
 const ZONES = ["left", "center", "right"] as const;
 
-// left / centre / right. The side zones share the room equally (1fr each) and the middle takes what
-// its content needs. It used to be three EQUAL columns, which gave a logo only a third of the row
-// (99px of a 360px phone) and let a centred nav overflow its third into the logo and the icons.
-const THREE_ZONE_COLUMNS = "grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]";
+// left / centre / right. The side zones share the room equally (1fr each) but NEVER shrink below their
+// own content (max-content floor), and the middle takes the rest (its nav scrolls). It used to be three
+// EQUAL columns (logo got 99px of a 360px phone), then minmax(0,1fr): there a wide nav in the middle
+// squeezed the side tracks to 0 and the logo, which may shrink, collapsed to 0px and vanished.
+const THREE_ZONE_COLUMNS = "grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)]";
 
 // C1 — header.settings.height. Each render path keeps its own current
 // padding as the 'default'/absent case (the rows path and the classic
@@ -173,7 +174,7 @@ export default function ThemeDrivenHeader({
   // fallback for every shop that's never touched the new Logo category,
   // same "new system takes precedence, legacy is the fallback" convention
   // this app already uses for homepageLayout/colors/etc.
-  const logoUrl = resolveImageUrl(themeConfig?.globalSettings.logo.defaultLogoUrl ?? shop?.logoUrl ?? null);
+  const logoUrl = resolveImageUrl(themeConfig?.globalSettings.logo.defaultLogoUrl || shop?.logoUrl || null);
 
   const cartButtonClass =
     "relative flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors";

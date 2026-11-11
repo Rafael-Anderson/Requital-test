@@ -173,7 +173,9 @@ export interface AnnouncementBarConfig {
   enabled: boolean;
   messages: string[];
   scrolling?: boolean;
-  speed?: 'fast' | 'medium' | 'slow';
+  speed?: 'fast' | 'medium' | 'slow'; // how often a ROTATING (non-marquee) bar changes message
+  // Marquee scroll speed in pixels per second (MARQUEE_SPEED_MIN..MAX). null / absent = 40.
+  marqueeSpeed?: number | null;
   dismissible?: boolean;
   background?: string;
   textColor?: string;

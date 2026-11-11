@@ -392,3 +392,28 @@ describe('assertValidThemeConfig', () => {
     });
   });
 });
+
+describe('assertValidThemeConfig: announcement bar marqueeSpeed', () => {
+  function chrome(marqueeSpeed: unknown): ThemeConfig {
+    const config = baseConfig();
+    config.header.settings.announcementBar = { enabled: true, messages: ['Hi'], scrolling: true, marqueeSpeed };
+    return config;
+  }
+  function section(marqueeSpeed: unknown): ThemeConfig {
+    const config = baseConfig();
+    const bar = config.sections.find((s) => s.type === 'announcement_bar');
+    if (!bar) throw new Error('default config has no announcement_bar section');
+    bar.settings.marqueeSpeed = marqueeSpeed;
+    return config;
+  }
+
+  it.each([undefined, null, 10, 40, 200, 37.5])('accepts %p on both announcement bars (null/absent = default)', (v) => {
+    expect(() => assertValidThemeConfig(chrome(v))).not.toThrow();
+    expect(() => assertValidThemeConfig(section(v))).not.toThrow();
+  });
+
+  it.each([0, 9, 201, -5, 1e9, NaN, '40', true, {}])('rejects %p on both announcement bars', (v) => {
+    expect(() => assertValidThemeConfig(chrome(v))).toThrow(/marqueeSpeed/);
+    expect(() => assertValidThemeConfig(section(v))).toThrow(/marqueeSpeed/);
+  });
+});

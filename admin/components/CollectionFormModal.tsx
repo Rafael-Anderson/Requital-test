@@ -65,6 +65,8 @@ export default function CollectionFormModal({
   const [imagePreview, setImagePreview] = useState<string | null>(
     resolveImageUrl(collection?.image),
   );
+  const [iconFile, setIconFile] = useState<File | null>(null);
+  const [iconPreview, setIconPreview] = useState<string | null>(resolveImageUrl(collection?.icon));
   const [saving, setSaving] = useState(false);
   const [collectionType, setCollectionType] = useState<"manual" | "automated">(
     collection?.collectionType ?? "manual",
@@ -79,6 +81,11 @@ export default function CollectionFormModal({
   function handleFileSelected(file: File) {
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
+  }
+
+  function handleIconSelected(file: File) {
+    setIconFile(file);
+    setIconPreview(URL.createObjectURL(file));
   }
 
   // An existing automated collection's conditions come from the detail read.
@@ -144,6 +151,11 @@ export default function CollectionFormModal({
         const uploaded = await uploadCollectionImage(imageFile);
         image = uploaded.url;
       }
+      let icon: string | undefined;
+      if (iconFile) {
+        const uploaded = await uploadCollectionImage(iconFile);
+        icon = uploaded.url;
+      }
 
       if (collection) {
         const payload: Partial<CollectionInput> = {
@@ -157,6 +169,7 @@ export default function CollectionFormModal({
           collectionType,
           ...(collectionType === "automated" && { matchMode, rules }),
           ...(image !== undefined && { image }),
+          ...(icon !== undefined && { icon }),
         };
         await updateCollection(collection.id, payload);
         await saveMetafields(collection.id);
@@ -169,6 +182,7 @@ export default function CollectionFormModal({
           isFeatured,
           description,
           image,
+          ...(icon !== undefined && { icon }),
           defaultSort: defaultSort === "" ? null : defaultSort,
           collectionType,
           ...(collectionType === "automated" && { matchMode, rules }),
@@ -260,7 +274,20 @@ export default function CollectionFormModal({
             onChange={(e) => setDisplayOrder(e.target.value)}
           />
 
-          <ImageDropzone preview={imagePreview} onFileSelected={handleFileSelected} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <ImageDropzone
+              label="Icon"
+              hint="Shown in Featured Collections (the round icons on the homepage). Square works best."
+              preview={iconPreview}
+              onFileSelected={handleIconSelected}
+            />
+            <ImageDropzone
+              label="Banner"
+              hint="Shown on the collection page (the wide image at the top)."
+              preview={imagePreview}
+              onFileSelected={handleFileSelected}
+            />
+          </div>
 
           <div className="flex items-center gap-2">
             <Toggle

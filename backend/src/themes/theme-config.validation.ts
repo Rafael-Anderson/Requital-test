@@ -3,6 +3,8 @@ import {
   BANNER_HEIGHT_MAX,
   BANNER_HEIGHT_MIN,
   BANNER_TITLE_SPACING_MAX,
+  MARQUEE_SPEED_MAX,
+  MARQUEE_SPEED_MIN,
   MAX_BLOCK_DEPTH,
   SECTION_TYPES,
 } from './constants';
@@ -161,6 +163,27 @@ function assertOptionalIntInRange(
   }
 }
 
+// `marqueeSpeed` (px/second) on an announcement bar. null / absent = the default speed;
+// anything else must be a finite number inside the allowed range.
+function assertOptionalMarqueeSpeed(value: unknown, path: string): void {
+  if (value === undefined || value === null) return;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < MARQUEE_SPEED_MIN || value > MARQUEE_SPEED_MAX) {
+    throw new BadRequestException(`${path} must be a number from ${MARQUEE_SPEED_MIN} to ${MARQUEE_SPEED_MAX} (pixels per second)`);
+  }
+}
+
+function assertValidAnnouncementBar(header: unknown): void {
+  if (typeof header !== 'object' || header === null) return;
+  const settings = (header as Record<string, unknown>).settings;
+  if (typeof settings !== 'object' || settings === null) return;
+  const bar = (settings as Record<string, unknown>).announcementBar;
+  if (bar === undefined || bar === null) return;
+  if (typeof bar !== 'object' || Array.isArray(bar)) {
+    throw new BadRequestException('header.settings.announcementBar must be an object');
+  }
+  assertOptionalMarqueeSpeed((bar as Record<string, unknown>).marqueeSpeed, 'header.settings.announcementBar.marqueeSpeed');
+}
+
 function assertValidCollectionPageBanner(collectionPage: unknown): void {
   if (collectionPage === undefined) return;
   if (typeof collectionPage !== 'object' || collectionPage === null || Array.isArray(collectionPage)) {
@@ -260,7 +283,10 @@ export function assertValidThemeConfig(config: unknown): asserts config is Theme
     assertValidCollectionPageBanner(g.collectionPage);
   }
 
-  if (c.header !== undefined) assertValidBlockContainer(c.header, 'header');
+  if (c.header !== undefined) {
+    assertValidBlockContainer(c.header, 'header');
+    assertValidAnnouncementBar(c.header);
+  }
   if (c.footer !== undefined) assertValidBlockContainer(c.footer, 'footer');
 
   if (c.sections === undefined) return;
@@ -294,6 +320,12 @@ export function assertValidThemeConfig(config: unknown): asserts config is Theme
       const hs = s.settings as Record<string, unknown>;
       assertOptionalIntInRange(hs.heightPx, `sections[${index}].settings.heightPx`, BANNER_HEIGHT_MIN, BANNER_HEIGHT_MAX);
       assertOptionalIntInRange(hs.mobileHeightPx, `sections[${index}].settings.mobileHeightPx`, BANNER_HEIGHT_MIN, BANNER_HEIGHT_MAX);
+    }
+    if (s.type === 'announcement_bar') {
+      assertOptionalMarqueeSpeed(
+        (s.settings as Record<string, unknown>).marqueeSpeed,
+        `sections[${index}].settings.marqueeSpeed`,
+      );
     }
     if (s.blocks !== undefined) {
       if (!Array.isArray(s.blocks)) {

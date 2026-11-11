@@ -212,7 +212,10 @@ export interface Collection {
   name: string;
   slug: string;
   displayOrder: number;
+  // The BANNER: shown only on the collection's own page.
   image: string | null;
+  // Shown only in the Featured Collections circles. null/absent = first-letter placeholder.
+  icon?: string | null;
   isFeatured: boolean;
   parentCollectionId: number | null;
   description: string | null;

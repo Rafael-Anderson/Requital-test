@@ -38,4 +38,26 @@ describe("AnnouncementBarChromeSettings", () => {
     expect(screen.getByRole("button", { name: /add message/i })).toBeInTheDocument();
     expect(screen.getByText("Rotation speed")).toBeInTheDocument();
   });
+
+  it("scrolling mode shows a Speed slider (px/s); changing it stores a number, 'Use default' stores null", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <AnnouncementBarChromeSettings
+        value={{ enabled: true, messages: ["Free delivery"], scrolling: true, marqueeSpeed: 80 }}
+        onChange={onChange}
+      />,
+    );
+    expect(screen.getByText("Speed")).toBeInTheDocument();
+    expect(screen.queryByText("Rotation speed")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /use default \(40 px\/s\)/i }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ marqueeSpeed: null }));
+  });
+
+  it("no Speed slider when the bar is not scrolling", () => {
+    render(
+      <AnnouncementBarChromeSettings value={{ enabled: true, messages: ["a", "b"], scrolling: false }} onChange={vi.fn()} />,
+    );
+    expect(screen.queryByText("Speed")).not.toBeInTheDocument();
+  });
 });

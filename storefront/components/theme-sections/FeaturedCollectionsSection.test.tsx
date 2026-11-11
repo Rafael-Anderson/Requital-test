@@ -167,7 +167,7 @@ describe("FeaturedCollectionsSection", () => {
   describe("quick_icons display style (#9/#14)", () => {
     it("renders a scrollable circular-icon row, not the tile grid, and caps at 20", async () => {
       listCollections.mockResolvedValue(
-        Array.from({ length: 25 }, (_, i) => ({ ...collection(i + 1), image: `/img-${i}.jpg` })),
+        Array.from({ length: 25 }, (_, i) => ({ ...collection(i + 1), icon: `/icon-${i}.png` })),
       );
       const settings = { displayStyle: "quick_icons" } as unknown as SectionSettings;
       const { container, findAllByRole } = render(
@@ -178,6 +178,31 @@ describe("FeaturedCollectionsSection", () => {
       expect(container.querySelector(".grid")).toBeNull(); // no tile grid
       expect(container.querySelector(".overflow-x-auto")).not.toBeNull();
       expect(container.querySelector(".rounded-full")).not.toBeNull();
+    });
+
+    it("shows the ICON in the circle and never the banner", async () => {
+      listCollections.mockResolvedValue([
+        { ...collection(1), name: "Roses", image: "/banner.jpg", icon: "/icon.png" },
+      ]);
+      const settings = { displayStyle: "quick_icons" } as unknown as SectionSettings;
+      const { container, findAllByRole } = render(
+        <FeaturedCollectionsSection sectionId="s" settings={settings} blocks={[]} />,
+      );
+      await findAllByRole("link");
+      const imgs = Array.from(container.querySelectorAll("img")).map((i) => i.getAttribute("src"));
+      expect(imgs).toEqual(["/icon.png"]);
+    });
+
+    it("a collection with a banner but NO icon shows the first letter, not the banner", async () => {
+      listCollections.mockResolvedValue([
+        { ...collection(1), name: "Roses", image: "/banner.jpg", icon: null },
+      ]);
+      const settings = { displayStyle: "quick_icons" } as unknown as SectionSettings;
+      const { container, findByText } = render(
+        <FeaturedCollectionsSection sectionId="s" settings={settings} blocks={[]} />,
+      );
+      expect((await findByText("R")).className).toContain("uppercase");
+      expect(container.querySelector("img")).toBeNull();
     });
 
     it("falls back to a first-letter monogram circle when a collection has no image", async () => {
