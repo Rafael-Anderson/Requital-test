@@ -7,7 +7,6 @@ import { deleteSupplier, listSuppliers, updateSupplier } from "@/lib/api";
 import type { Supplier, SupplierListItem } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { useUndoableDelete } from "@/lib/useUndoableDelete";
-import { formatMoney } from "@/lib/money";
 import BackButton from "@/components/ui/BackButton";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
@@ -23,6 +22,7 @@ import { useToast } from "@/components/ui/Toast";
 import InventoryTabs from "@/components/InventoryTabs";
 import StatusBadge from "@/components/StatusBadge";
 import SupplierFormModal from "@/components/SupplierFormModal";
+import Money from "@/components/Money";
 
 const ICON_BTN =
   "p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer";
@@ -175,7 +175,7 @@ export default function SuppliersPage() {
                     {s.name}
                   </Link>
                   {s.minimumOrderAmount && s.currency && (
-                    <div className="text-xs text-text-muted">Min. {formatMoney(s.minimumOrderAmount, s.currency)}</div>
+                    <div className="text-xs text-text-muted">Min. <Money amount={s.minimumOrderAmount} currency={s.currency} /></div>
                   )}
                 </TD>
                 <TD>

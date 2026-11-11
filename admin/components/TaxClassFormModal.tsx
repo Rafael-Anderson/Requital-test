@@ -82,9 +82,24 @@ export default function TaxClassFormModal({
       onClose={onClose}
       size="sm"
       title={taxClass ? `Edit "${taxClass.name}"` : "New tax class"}
-    >
+    
+      footer={(requestClose) => (
+        <>
+            <Button type="button" variant="secondary" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button
+              type="submit" form="tax-class-form-modal-form"
+              variant="primary"
+              disabled={saving}
+              loading={saving}
+            >
+              {taxClass ? "Save changes" : "Create tax class"}
+            </Button>
+          </>
+      )}>
       {(requestClose) => (
-        <form onSubmit={handleSubmit}>
+        <form id="tax-class-form-modal-form" onSubmit={handleSubmit}>
           <div className="space-y-3.5">
             <Input
               label="Name"
@@ -141,20 +156,6 @@ export default function TaxClassFormModal({
                 </p>
               )}
             </div>
-          </div>
-
-          <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-            <Button type="button" variant="secondary" onClick={requestClose}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={saving}
-              loading={saving}
-            >
-              {taxClass ? "Save changes" : "Create tax class"}
-            </Button>
           </div>
         </form>
       )}

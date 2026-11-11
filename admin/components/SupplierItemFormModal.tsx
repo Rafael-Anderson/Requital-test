@@ -74,9 +74,19 @@ export default function SupplierItemFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={item ? `Edit ${item.ingredientName}` : "Add a supplied item"}>
+    <Modal onClose={onClose} size="sm" title={item ? `Edit ${item.ingredientName}` : "Add a supplied item"}
+      footer={(requestClose) => (
+        <>
+            <Button type="button" variant="secondary" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button type="submit" form="supplier-item-form-modal-form" variant="primary" disabled={saving || !ingredientId} loading={saving}>
+              {saving ? "Saving…" : "Save item"}
+            </Button>
+          </>
+      )}>
       {(requestClose) => (
-        <form onSubmit={handleSubmit}>
+        <form id="supplier-item-form-modal-form" onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {!item && (
               <div className="sm:col-span-2">
@@ -125,14 +135,6 @@ export default function SupplierItemFormModal({
               value={leadTime}
               onChange={(e) => setLeadTime(e.target.value)}
             />
-          </div>
-          <div className="sticky bottom-0 mt-5 flex justify-end gap-2 bg-surface pb-6 dark:bg-zinc-900">
-            <Button type="button" variant="secondary" onClick={requestClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={saving || !ingredientId} loading={saving}>
-              {saving ? "Saving…" : "Save item"}
-            </Button>
           </div>
         </form>
       )}

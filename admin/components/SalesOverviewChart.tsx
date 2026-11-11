@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import type { DailyRevenuePoint } from "@/lib/types";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 // Hand-rolled SVG line/area chart — same reasoning as the old RevenueChart
 // bar chart it replaces: a charting library is overkill for one chart, this
@@ -115,7 +115,7 @@ export default function SalesOverviewChart({ data }: { data: DailyRevenuePoint[]
           style={{ left: `${(active.x / width) * 100}%`, top: `${(active.y / height) * 100}%` }}
         >
           <div className="font-bold text-text-primary dark:text-zinc-50">{formatDateLabel(active.date)}</div>
-          <div className="text-text-muted dark:text-zinc-400">{formatMoney(active.revenue, currency)}</div>
+          <div className="text-text-muted dark:text-zinc-400"><Money amount={active.revenue} currency={currency} /></div>
         </div>
       )}
     </div>

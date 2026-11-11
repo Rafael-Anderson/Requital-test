@@ -79,9 +79,19 @@ export default function IngredientFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={ingredient ? "Edit ingredient" : "New ingredient"}>
+    <Modal onClose={onClose} size="sm" title={ingredient ? "Edit ingredient" : "New ingredient"}
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="ingredient-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+            {saving ? "Saving…" : ingredient ? "Save changes" : "Add ingredient"}
+          </Button>
+        </>
+      )}>
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="ingredient-form-modal-form" onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <ImageDropzone preview={imagePreview} onFileSelected={handleFileSelected} />
 
@@ -129,15 +139,6 @@ export default function IngredientFormModal({
               onChange={(e) => setSupplier(e.target.value)}
             />
           </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-            {saving ? "Saving…" : ingredient ? "Save changes" : "Add ingredient"}
-          </Button>
         </div>
       </form>
       )}

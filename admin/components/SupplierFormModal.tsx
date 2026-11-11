@@ -63,9 +63,19 @@ export default function SupplierFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="md" title={supplier ? "Edit supplier" : "New supplier"}>
+    <Modal onClose={onClose} size="md" title={supplier ? "Edit supplier" : "New supplier"}
+      footer={(requestClose) => (
+        <>
+            <Button type="button" variant="secondary" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button type="submit" form="supplier-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+              {saving ? "Saving…" : supplier ? "Save changes" : "Add supplier"}
+            </Button>
+          </>
+      )}>
       {(requestClose) => (
-        <form onSubmit={handleSubmit}>
+        <form id="supplier-form-modal-form" onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
@@ -105,15 +115,6 @@ export default function SupplierFormModal({
             </div>
           </div>
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-
-          <div className="sticky bottom-0 mt-5 flex justify-end gap-2 bg-surface pb-6 dark:bg-zinc-900">
-            <Button type="button" variant="secondary" onClick={requestClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-              {saving ? "Saving…" : supplier ? "Save changes" : "Add supplier"}
-            </Button>
-          </div>
         </form>
       )}
     </Modal>

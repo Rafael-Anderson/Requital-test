@@ -70,9 +70,24 @@ export default function BrandFormModal({
       onClose={onClose}
       size="sm"
       title={brand ? `Edit "${brand.name}"` : "New brand"}
-    >
+    
+      footer={(requestClose) => (
+        <>
+            <Button type="button" variant="secondary" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button
+              type="submit" form="brand-form-modal-form"
+              variant="primary"
+              disabled={saving}
+              loading={saving}
+            >
+              {brand ? "Save changes" : "Create brand"}
+            </Button>
+          </>
+      )}>
       {(requestClose) => (
-        <form onSubmit={handleSubmit}>
+        <form id="brand-form-modal-form" onSubmit={handleSubmit}>
           <div className="space-y-3.5">
             <Input
               label="Brand name"
@@ -85,20 +100,6 @@ export default function BrandFormModal({
               preview={imagePreview}
               onFileSelected={handleFileSelected}
             />
-          </div>
-
-          <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-            <Button type="button" variant="secondary" onClick={requestClose}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={saving}
-              loading={saving}
-            >
-              {brand ? "Save changes" : "Create brand"}
-            </Button>
           </div>
         </form>
       )}

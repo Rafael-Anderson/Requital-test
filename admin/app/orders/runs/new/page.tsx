@@ -12,7 +12,6 @@ import {
 } from "@/lib/types";
 import { useOutletFilter } from "@/lib/outlet-context";
 import { useAuth } from "@/lib/auth-context";
-import { formatMoney } from "@/lib/money";
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
 import Input from "@/components/ui/Input";
@@ -23,6 +22,7 @@ import BackButton from "@/components/ui/BackButton";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 import { useToast } from "@/components/ui/Toast";
+import Money from "@/components/Money";
 
 function addressOf(o: ReadyOrder) {
   return [o.customerAddress, o.area, o.regionName].filter(Boolean).join(", ");
@@ -185,7 +185,7 @@ export default function NewDeliveryRunPage() {
                     </div>
                     <div className="truncate text-xs text-text-muted">{addressOf(o)}</div>
                     <div className="text-xs text-text-faint">
-                      {formatMoney(o.total, o.currency)}
+                      <Money amount={o.total} currency={o.currency} />
                       {o.paymentMethod === "cash_on_delivery" && " (cash on delivery)"}
                     </div>
                   </div>

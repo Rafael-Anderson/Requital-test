@@ -7,7 +7,6 @@ import { listPurchaseOrders } from "@/lib/api";
 import { PURCHASE_ORDER_STATUS_LABELS, type PurchaseOrderListItem, type PurchaseOrderStatus } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { useOutletFilter } from "@/lib/outlet-context";
-import { formatMoney } from "@/lib/money";
 import BackButton from "@/components/ui/BackButton";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
@@ -21,6 +20,7 @@ import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import BranchBar from "@/components/BranchBar";
 import InventoryTabs from "@/components/InventoryTabs";
 import PurchaseOrderStatusBadge from "@/components/PurchaseOrderStatusBadge";
+import Money from "@/components/Money";
 
 const PAGE_SIZE = 20;
 
@@ -116,7 +116,7 @@ export default function PurchaseOrdersPage() {
                 {po.supplierName} · {po.outletName}
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
-                <span className="font-bold text-text-primary dark:text-zinc-100">{formatMoney(po.total, po.currency)}</span>
+                <span className="font-bold text-text-primary dark:text-zinc-100"><Money amount={po.total} currency={po.currency} /></span>
                 <span className="text-text-muted">
                   {po.unitsReceived} / {po.unitsOrdered} received
                 </span>
@@ -153,7 +153,7 @@ export default function PurchaseOrdersPage() {
                 <TD className="text-end">
                   {po.unitsReceived} / {po.unitsOrdered}
                 </TD>
-                <TD className="text-end">{formatMoney(po.total, po.currency)}</TD>
+                <TD className="text-end"><Money amount={po.total} currency={po.currency} /></TD>
                 <TD>{po.expectedAt ?? <span className="text-text-muted">Not set</span>}</TD>
               </TR>
             ))}

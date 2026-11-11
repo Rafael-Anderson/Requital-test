@@ -93,9 +93,23 @@ export default function BranchUserFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title="New staff account">
+    <Modal
+      onClose={onClose}
+      size="sm"
+      title="New staff account"
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="branch-user-form" variant="primary" disabled={saving || (needsOutlet && outlets.length === 0)} loading={saving}>
+            {saving ? "Saving…" : setPasswordDirectly ? "Create account" : "Send invite"}
+          </Button>
+        </>
+      )}
+    >
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="branch-user-form" onSubmit={handleSubmit}>
         <p className="text-sm text-text-muted -mt-2 mb-4">
           A real, separate login for this staff member. The role picked below decides what they can
           see and do.
@@ -156,15 +170,6 @@ export default function BranchUserFormModal({
               An invite link will be emailed to this address so they can set their own password.
             </p>
           )}
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving || (needsOutlet && outlets.length === 0)} loading={saving}>
-            {saving ? "Saving…" : setPasswordDirectly ? "Create account" : "Send invite"}
-          </Button>
         </div>
       </form>
       )}

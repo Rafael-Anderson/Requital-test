@@ -13,7 +13,7 @@ import { CardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import DraftOrderBuilder from "@/components/DraftOrderBuilder";
 import PageShell from "@/components/ui/PageShell";
-import { formatMoney } from "@/lib/money";
+import Money from "@/components/Money";
 
 export default function DraftOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -143,10 +143,7 @@ export default function DraftOrderDetailPage() {
                       {item.variantLabel ? ` · ${item.variantLabel}` : ""} × {item.quantity}
                     </span>
                     <span>
-                      {formatMoney(
-                        Number(item.price) * item.quantity,
-                        draft.currency,
-                      )}
+                      <Money amount={Number(item.price) * item.quantity} currency={draft.currency} />
                     </span>
                   </div>
                 ))}
@@ -154,12 +151,12 @@ export default function DraftOrderDetailPage() {
               {draft.discount && (
                 <p className="text-sm text-green-600 dark:text-green-400">
                   Discount ({draft.discount.code}): -
-                  {formatMoney(draft.discountAmount, draft.currency)}
+                  <Money amount={draft.discountAmount} currency={draft.currency} />
                 </p>
               )}
               <div className="flex items-center justify-between pt-2 border-t border-black/5 dark:border-white/10 font-medium">
                 <span>Total</span>
-                <span>{formatMoney(draft.total, draft.currency)}</span>
+                <span><Money amount={draft.total} currency={draft.currency} /></span>
               </div>
             </Card>
 

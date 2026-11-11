@@ -58,9 +58,21 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title="Change password">
+    <Modal onClose={onClose} size="sm" title="Change password"
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            {user && !user.emailVerified ? "Close" : "Cancel"}
+          </Button>
+          {(!user || user.emailVerified) && (
+            <Button type="submit" form="change-password-modal-form" variant="primary" disabled={saving} loading={saving}>
+              {saving ? "Saving…" : "Change password"}
+            </Button>
+          )}
+        </>
+      )}>
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="change-password-modal-form" onSubmit={handleSubmit}>
         {user && !user.emailVerified ? (
           <div className="space-y-3">
             <p className="text-sm text-text-secondary dark:text-zinc-400">
@@ -112,17 +124,6 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
             </div>
           </>
         )}
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            {user && !user.emailVerified ? "Close" : "Cancel"}
-          </Button>
-          {(!user || user.emailVerified) && (
-            <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-              {saving ? "Saving…" : "Change password"}
-            </Button>
-          )}
-        </div>
       </form>
       )}
     </Modal>

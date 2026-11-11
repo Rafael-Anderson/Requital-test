@@ -45,7 +45,7 @@ export default function PolicyPage() {
   }
 
   return (
-    <StorefrontPageShell variant="medium">
+    <StorefrontPageShell variant="wide">
       <h1 className="text-2xl font-bold mb-6">{POLICY_PAGE_LABELS[type]}</h1>
       {/* Same rendering treatment as ProductDetailClient's product.description
           — sanitized against the same fixed allowlist (see lib/sanitize-html.ts,

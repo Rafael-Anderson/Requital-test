@@ -11,8 +11,8 @@ import Button from "@/components/ui/Button";
 import DeliveryZoneFormModal from "@/components/DeliveryZoneFormModal";
 import ZoneRegionsModal from "@/components/ZoneRegionsModal";
 import { useToast } from "@/components/ui/Toast";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }) {
   const currency = useShopCurrency();
@@ -152,9 +152,9 @@ export default function OutletDeliveryAreaTab({ outletId }: { outletId: number }
                     </span>
                   )}
                 </TD>
-                <TD className="text-text-muted">{formatMoney(z.fee, currency)}</TD>
+                <TD className="text-text-muted"><Money amount={z.fee} currency={currency} /></TD>
                 <TD className="text-text-muted">
-                  {formatMoney(z.minOrderAmount, currency)}
+                  <Money amount={z.minOrderAmount} currency={currency} />
                 </TD>
                 <TD>
                   {!z.mappingConfirmedAt && regions.length > 0 && (

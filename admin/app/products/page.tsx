@@ -50,8 +50,8 @@ import BranchBar from "@/components/BranchBar";
 import ProductsTabs from "@/components/ProductsTabs";
 import PageShell from "@/components/ui/PageShell";
 import Tooltip from "@/components/ui/Tooltip";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 export default function InventoryPage() {
   return (
@@ -562,7 +562,7 @@ function InventoryPageContent() {
                       )}
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
-                      <span className="font-bold text-text-primary dark:text-zinc-100">{formatMoney(p.price, currency)}</span>
+                      <span className="font-bold text-text-primary dark:text-zinc-100"><Money amount={p.price} currency={currency} /></span>
                       {p.trackInventory && p.stockQuantity !== null ? (
                         <span className={lowStock ? "font-bold text-danger-text" : "text-text-muted"}>
                           {p.stockQuantity} in stock{lowStock ? " (low)" : ""}
@@ -639,7 +639,7 @@ function InventoryPageContent() {
                       )}
                     </div>
                   </TD>
-                  <TD className="text-[13.5px]">{formatMoney(p.price, currency)}</TD>
+                  <TD className="text-[13.5px]"><Money amount={p.price} currency={currency} /></TD>
                   <TD className="text-text-muted">{p.sku}</TD>
                   <TD className="text-text-muted">{p.totalSold} sold</TD>
                   <TD className="text-xs text-text-muted">

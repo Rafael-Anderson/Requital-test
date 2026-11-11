@@ -26,7 +26,7 @@ import OrderNotesSection from "@/components/OrderNotesSection";
 import OrderReturnsSection from "@/components/OrderReturnsSection";
 import EditOrderItemsModal from "@/components/EditOrderItemsModal";
 import SliderDeliveryPanel from "@/components/SliderDeliveryPanel";
-import { formatMoney } from "@/lib/money";
+import Money from "@/components/Money";
 
 // Matches backend EDITABLE_ORDER_STATUSES — items can only be changed before
 // staff start physically preparing the order.
@@ -230,7 +230,7 @@ export default function OrderDetailPage() {
                   {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                 </td>
                 <td className="py-2 text-text-muted">× {item.quantity}</td>
-                <td className="py-2 text-end">{formatMoney(item.priceAtPurchase, order.currency)}</td>
+                <td className="py-2 text-end"><Money amount={item.priceAtPurchase} currency={order.currency} /></td>
               </tr>
             ))}
           </tbody>
@@ -239,7 +239,7 @@ export default function OrderDetailPage() {
               <td className="py-2" colSpan={2}>
                 Total
               </td>
-              <td className="py-2 text-end">{formatMoney(order.total, order.currency)}</td>
+              <td className="py-2 text-end"><Money amount={order.total} currency={order.currency} /></td>
             </tr>
             {Number(order.storeCreditAmount ?? 0) > 0 && (
               <>
@@ -247,17 +247,14 @@ export default function OrderDetailPage() {
                   <td className="py-1 text-text-muted" colSpan={2}>
                     Paid with store credit
                   </td>
-                  <td className="py-1 text-end">-{formatMoney(order.storeCreditAmount!, order.currency)}</td>
+                  <td className="py-1 text-end">-<Money amount={order.storeCreditAmount!} currency={order.currency} /></td>
                 </tr>
                 <tr className="font-medium">
                   <td className="py-1" colSpan={2}>
                     Left to pay
                   </td>
                   <td className="py-1 text-end">
-                    {formatMoney(
-                      Math.max(0, Number(order.total) - Number(order.storeCreditAmount) - Number(order.giftCardAmount ?? 0)),
-                      order.currency,
-                    )}
+                    <Money amount={Math.max(0, Number(order.total) - Number(order.storeCreditAmount) - Number(order.giftCardAmount ?? 0))} currency={order.currency} />
                   </td>
                 </tr>
               </>

@@ -307,17 +307,14 @@ body {
   font-family: var(--theme-body-font, var(--font-sans)), Arial, Helvetica, sans-serif;
 }
 
-/* Announcement bar's scrolling/marquee mode — pure CSS animation (translateX
-   loop over a doubled track), not JS-driven, per the feature's own
-   performance requirement. The track renders its content twice back-to-back
-   (see components/AnnouncementBar.tsx) so the -50% translate seamlessly
-   loops with no visible seam/jump.
-   NOT named animate-marquee: Tailwind v4 treats any `animate-*` class name
-   as a request to resolve a `--animate-*` theme token — since no
-   `--animate-marquee` token exists, it silently produced no animation at
-   all (confirmed via computed style: animation-name came back "none" even
-   though this exact rule was present in globals.css) instead of falling
-   back to this hand-written rule. marquee-track avoids the collision. */
+/* Announcement bar's scrolling/marquee mode: a pure CSS translateX loop (components/MarqueeTrack.tsx).
+   The track is TWO identical halves; each half repeats the message enough times to be at least as
+   wide as the bar (lib/marquee.ts), so translating by exactly -50% (one half) loops with no seam
+   and the bar is never left half empty, on any screen width. In RTL the track starts at the right
+   edge and travels the other way (+50%).
+   NOT named animate-marquee: Tailwind v4 treats any `animate-*` class name as a request to
+   resolve a `--animate-*` theme token; no such token exists, so it silently produced no
+   animation at all. marquee-track avoids the collision. */
 @keyframes marquee-scroll {
   from {
     transform: translateX(0);
@@ -326,12 +323,57 @@ body {
     transform: translateX(-50%);
   }
 }
+@keyframes marquee-scroll-rtl {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(50%);
+  }
+}
 
 .marquee-track {
-  /* Phase A — duration from the motion token (18s fallback = today). Stays
-     `linear` (a ticker should not ease). Reduced-motion is the blanket rule
-     near the top of this file. */
+  /* Phase A: duration from the motion token (18s fallback = today). Stays `linear` (a ticker
+     should not ease). */
   animation: marquee-scroll var(--motion-marquee-duration, 18s) linear infinite;
+  will-change: transform;
+}
+[dir="rtl"] .marquee-track {
+  animation-name: marquee-scroll-rtl;
+}
+
+/* Reduced motion: no scrolling. One copy of the message, static and centred. */
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+    transform: none;
+    width: 100%;
+    justify-content: center;
+  }
+  .marquee-track > [aria-hidden="true"] {
+    display: none;
+  }
+  .marquee-half > .marquee-item ~ .marquee-item {
+    display: none;
+  }
+}
+
+/* The desktop "Add" button on a product card eases in on hover-capable devices only
+   (opacity + a few px of travel, 180ms). Touch devices keep exactly the behaviour they had
+   (no transition, no transform), and reduced motion gets no animation at all. Opacity and
+   transform never change layout. The reveal itself (group-hover / group-focus-within
+   opacity) is on the element's own utility classes. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .theme-quick-add-anim {
+    transform: translateY(4px);
+    transition:
+      opacity 180ms ease-out,
+      transform 180ms ease-out;
+  }
+  .group:hover .theme-quick-add-anim,
+  .group:focus-within .theme-quick-add-anim {
+    transform: translateY(0);
+  }
 }
 
 /* Theme builder's per-element NAV editing (ElementSettingsPanel's "Hover
@@ -1117,4 +1159,15 @@ body {
   .theme-banner-minh {
     min-height: var(--theme-banner-h, 300px);
   }
+}
+
+/* The site container: the same width and side margins as the header and the product grid
+   (--theme-max-width, set from Theme settings > Page layout), centred on the page and
+   left-aligned inside (logical, so it mirrors in RTL). Long text blocks (rich text, page
+   content) use this one class instead of a per-block max-w-* + mx-auto narrow column.
+   Mobile keeps the section's own .theme-gutter-x side margins. */
+.theme-container {
+  margin-inline: auto;
+  max-width: var(--theme-max-width, 80rem);
+  width: 100%;
 }

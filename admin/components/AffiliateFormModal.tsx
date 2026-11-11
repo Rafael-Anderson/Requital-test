@@ -46,9 +46,19 @@ export default function AffiliateFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={affiliate ? `Edit "${affiliate.name}"` : "Add User"}>
+    <Modal onClose={onClose} size="sm" title={affiliate ? `Edit "${affiliate.name}"` : "Add User"}
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="affiliate-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+            {affiliate ? "Save changes" : "Add"}
+          </Button>
+        </>
+      )}>
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="affiliate-form-modal-form" onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
           <Input label="Mobile" value={mobile} onChange={(e) => setMobile(e.target.value)} required />
@@ -60,15 +70,6 @@ export default function AffiliateFormModal({
               options={AFFILIATE_STATUSES.map((s) => ({ value: s, label: s[0].toUpperCase() + s.slice(1) }))}
             />
           )}
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-            {affiliate ? "Save changes" : "Add"}
-          </Button>
         </div>
       </form>
       )}

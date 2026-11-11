@@ -13,8 +13,8 @@ import VariantEditModal from "@/components/VariantEditModal";
 import ProductFeatureSection from "@/components/ProductFeatureSection";
 import type { GalleryImage } from "@/components/ProductMediaGallery";
 import Tooltip from "@/components/ui/Tooltip";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 interface OptionDraft {
   name: string;
@@ -253,7 +253,7 @@ export default function VariantsSection({
                       <span className="font-medium">{v.label}</span>
                     </div>
                   </TD>
-                  <TD>{formatMoney(v.price ?? product.price, currency)}</TD>
+                  <TD><Money amount={v.price ?? product.price} currency={currency} /></TD>
                   <TD className="text-text-muted">{v.stockQuantity ?? "-"}</TD>
                   <TD>
                     <Tooltip label={`Edit ${v.label}`} align="end">

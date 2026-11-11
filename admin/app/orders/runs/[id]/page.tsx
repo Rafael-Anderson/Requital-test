@@ -21,7 +21,6 @@ import {
   type DeliveryRunDetail,
   type DeliveryRunStop,
 } from "@/lib/types";
-import { formatMoney } from "@/lib/money";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadFailed from "@/components/ui/LoadFailed";
@@ -29,6 +28,7 @@ import BackButton from "@/components/ui/BackButton";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 import { useToast } from "@/components/ui/Toast";
+import Money from "@/components/Money";
 
 const STOP_LABEL: Record<DeliveryRunStop["status"], string> = {
   pending: "Pending",
@@ -278,13 +278,13 @@ export default function DeliveryRunDetailPage() {
           <ul className="space-y-1 text-sm">
             {run.cash.map((c) => (
               <li key={c.currency} className="flex flex-wrap gap-x-4">
-                <span>Expected {formatMoney(c.expected, c.currency)}</span>
-                <span>Collected {formatMoney(c.collected, c.currency)}</span>
+                <span>Expected <Money amount={c.expected} currency={c.currency} /></span>
+                <span>Collected <Money amount={c.collected} currency={c.currency} /></span>
                 <span className={c.discrepancies > 0 ? "font-medium text-red-600 dark:text-red-400" : "text-text-muted"}>
-                  Difference {formatMoney(c.difference, c.currency)}
+                  Difference <Money amount={c.difference} currency={c.currency} />
                   {c.discrepancies > 0 && ` (${c.discrepancies} mismatch${c.discrepancies === 1 ? "" : "es"})`}
                 </span>
-                {Number(c.pending) > 0 && <span className="text-text-muted">Still to collect {formatMoney(c.pending, c.currency)}</span>}
+                {Number(c.pending) > 0 && <span className="text-text-muted">Still to collect <Money amount={c.pending} currency={c.currency} /></span>}
               </li>
             ))}
           </ul>
@@ -316,10 +316,10 @@ export default function DeliveryRunDetailPage() {
                 )}
                 {s.cod && (
                   <div className="text-xs">
-                    Cash on delivery {formatMoney(s.codExpected ?? s.order.total, s.cashCurrency ?? s.order.currency)}
+                    Cash on delivery <Money amount={s.codExpected ?? s.order.total} currency={s.cashCurrency ?? s.order.currency} />
                     {s.status === "delivered" && s.cashCollectedAmount && (
                       <span className={s.cashDiscrepancy ? "ms-2 font-medium text-red-600 dark:text-red-400" : "ms-2 text-green-600 dark:text-green-400"}>
-                        collected {formatMoney(s.cashCollectedAmount, s.cashCurrency ?? s.order.currency)}
+                        collected <Money amount={s.cashCollectedAmount} currency={s.cashCurrency ?? s.order.currency} />
                         {s.cashDiscrepancy && " (does not match)"}
                       </span>
                     )}

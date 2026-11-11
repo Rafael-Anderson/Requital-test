@@ -108,9 +108,19 @@ export default function ConnectionFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="md" title={editing ? `Edit ${providerLabel(provider, providers)} connection` : "Add a sales channel"}>
+    <Modal onClose={onClose} size="md" title={editing ? `Edit ${providerLabel(provider, providers)} connection` : "Add a sales channel"}
+      footer={(requestClose) => (
+        <>
+            <Button type="button" variant="secondary" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button type="submit" form="connection-form-modal-form" variant="primary" loading={saving} disabled={locked}>
+              {editing ? "Save changes" : "Add connection"}
+            </Button>
+          </>
+      )}>
       {(requestClose) => (
-        <form onSubmit={(e) => submit(e, requestClose)} className="space-y-5" noValidate>
+        <form id="connection-form-modal-form" onSubmit={(e) => submit(e, requestClose)} className="space-y-5" noValidate>
           {locked && (
             <p className="rounded-xl bg-warning-bg p-3 text-[13px] text-warning-text dark:bg-amber-500/10 dark:text-amber-300">
               This connection is live, so its location, credentials and webhook secret cannot be changed. Turn it off first,
@@ -198,15 +208,6 @@ export default function ConnectionFormModal({
           </fieldset>
 
           {error && <InlineErrorMessage>{error}</InlineErrorMessage>}
-
-          <div className="sticky bottom-0 flex justify-end gap-2 bg-surface pt-3 dark:bg-zinc-900">
-            <Button type="button" variant="secondary" onClick={requestClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" loading={saving} disabled={locked}>
-              {editing ? "Save changes" : "Add connection"}
-            </Button>
-          </div>
         </form>
       )}
     </Modal>

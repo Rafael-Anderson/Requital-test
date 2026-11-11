@@ -13,7 +13,7 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatusBadge from "@/components/StatusBadge";
 import ReportsFilterBar from "@/components/ReportsFilterBar";
 import PageShell from "@/components/ui/PageShell";
-import { formatMoney } from "@/lib/money";
+import Money from "@/components/Money";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -154,7 +154,7 @@ export default function ExternalDeliveryReportPage() {
                 <TD>{row.carrier}</TD>
                 <TD className="text-text-muted">{row.vehicleType ?? "-"}</TD>
                 <TD className="text-text-muted">{row.destination}</TD>
-                <TD>{formatMoney(row.price, row.currency)}</TD>
+                <TD><Money amount={row.price} currency={row.currency} /></TD>
                 <TD>
                   <StatusBadge status={row.status} />
                 </TD>

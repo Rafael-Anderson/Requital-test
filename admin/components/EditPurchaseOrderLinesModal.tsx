@@ -47,19 +47,21 @@ export default function EditPurchaseOrderLinesModal({
   }
 
   return (
-    <Modal onClose={onClose} size="lg" title={`Edit lines on ${po.poNumber}`}>
-      {(requestClose) => (
-        <form onSubmit={handleSubmit}>
-          <PurchaseOrderLinesEditor value={lines} onChange={setLines} currency={po.currency} options={options} />
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-          <div className="sticky bottom-0 mt-5 flex justify-end gap-2 bg-surface pb-6 dark:bg-zinc-900">
+    <Modal onClose={onClose} size="lg" title={`Edit lines on ${po.poNumber}`}
+      footer={(requestClose) => (
+        <>
             <Button type="button" variant="secondary" onClick={requestClose}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={saving} loading={saving}>
+            <Button type="submit" form="edit-purchase-order-lines-modal-form" variant="primary" disabled={saving} loading={saving}>
               {saving ? "Saving…" : "Save lines"}
             </Button>
-          </div>
+          </>
+      )}>
+      {(requestClose) => (
+        <form id="edit-purchase-order-lines-modal-form" onSubmit={handleSubmit}>
+          <PurchaseOrderLinesEditor value={lines} onChange={setLines} currency={po.currency} options={options} />
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         </form>
       )}
     </Modal>

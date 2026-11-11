@@ -18,7 +18,7 @@ import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
-import { formatMoney } from "@/lib/money";
+import Money from "@/components/Money";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -129,7 +129,7 @@ export default function ExternalDeliveryOrdersTabPage() {
                 {row.driverName ? ` · ${row.driverName}` : ""}
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
-                <span className="font-bold text-text-primary dark:text-zinc-100">{formatMoney(row.price, row.currency)}</span>
+                <span className="font-bold text-text-primary dark:text-zinc-100"><Money amount={row.price} currency={row.currency} /></span>
                 <span className="text-xs text-text-muted">{new Date(row.createdAt).toLocaleString()}</span>
                 {row.trackingUrl && (
                   <a
@@ -218,7 +218,7 @@ export default function ExternalDeliveryOrdersTabPage() {
                   <StatusBadge status={row.status} />
                 </TD>
                 <TD className="text-xs text-text-muted">{new Date(row.createdAt).toLocaleString()}</TD>
-                <TD>{formatMoney(row.price, row.currency)}</TD>
+                <TD><Money amount={row.price} currency={row.currency} /></TD>
               </TR>
             ))
           )}

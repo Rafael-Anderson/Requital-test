@@ -226,6 +226,8 @@ export interface CollectionDetail {
   image: string | null;
   description: string | null;
   parentCollectionId: number | null;
+  // The order the page opens in when the URL has no ?sort= (null = Newest).
+  defaultSort?: string | null;
   products: Product[];
 }
 

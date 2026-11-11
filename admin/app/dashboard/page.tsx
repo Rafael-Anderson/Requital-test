@@ -22,6 +22,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import LoadFailed from "@/components/ui/LoadFailed";
 import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 const STAGES: { key: keyof DashboardSummary["ordersByStage"]; label: string }[] = [
   { key: "placed", label: "Placed" },
@@ -351,7 +352,7 @@ export default function DashboardPage() {
                     <div className="text-sm font-medium truncate">{p.name}</div>
                     <div className="text-xs text-text-muted">{p.unitsSold} sold</div>
                   </div>
-                  <div className="text-sm font-medium shrink-0">{formatMoney(p.revenue, currency)}</div>
+                  <div className="text-sm font-medium shrink-0"><Money amount={p.revenue} currency={currency} /></div>
                 </div>
               ))}
             </div>

@@ -43,6 +43,7 @@ export default function Modal({
   footer,
   bodyClassName = "",
   panelClassName = "",
+  tall = false,
 }: {
   onClose: () => void;
   size?: ModalSize;
@@ -51,6 +52,9 @@ export default function Modal({
   footer?: ReactNode | ((requestClose: () => void) => ReactNode);
   bodyClassName?: string;
   panelClassName?: string;
+  // A long form: the panel takes ~90% of the viewport height instead of hugging its content,
+  // so the body scrolls inside it and the footer stays in its own row.
+  tall?: boolean;
 }) {
   const [closing, setClosing] = useState(false);
   const titleId = useId();
@@ -87,7 +91,7 @@ export default function Modal({
         aria-modal="true"
         aria-labelledby={title !== undefined ? titleId : undefined}
         onClick={(e) => e.stopPropagation()}
-        className={`flex w-full flex-col rounded-2xl bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 max-h-[90vh] ${
+        className={`flex w-full flex-col rounded-2xl bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 max-h-[90vh] ${tall ? "h-[90vh]" : ""} ${
           closing ? "modal-out" : "modal-in"
         } ${SIZE_CLASS[size]} ${panelClassName}`}
       >

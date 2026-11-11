@@ -26,11 +26,11 @@ import BackButton from "@/components/ui/BackButton";
 import PageShell from "@/components/ui/PageShell";
 import CustomersTabs from "@/components/CustomersTabs";
 import { CustomerImportButton } from "@/components/ListImportButtons";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
 import { TagChip } from "@/components/customers/CustomerTagsCard";
 import CustomerTagBulkControls from "@/components/customers/CustomerTagBulkControls";
 import ManageTagsModal from "@/components/customers/ManageTagsModal";
+import Money from "@/components/Money";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -334,7 +334,7 @@ export default function CustomersPage() {
                 </div>
               )}
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
-                <span className="font-bold text-text-primary dark:text-zinc-100">{formatMoney(c.lifetimeValue, currency)}</span>
+                <span className="font-bold text-text-primary dark:text-zinc-100"><Money amount={c.lifetimeValue} currency={currency} /></span>
                 <span className="text-text-muted">
                   {c.orderCount} order{c.orderCount === 1 ? "" : "s"}
                 </span>
@@ -413,7 +413,7 @@ export default function CustomersPage() {
                 </TD>
                 <TD className="text-text-muted text-[13.5px]">{c.phone}</TD>
                 <TD className="text-[13.5px]">{c.orderCount}</TD>
-                <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">{formatMoney(c.lifetimeValue, currency)}</TD>
+                <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100"><Money amount={c.lifetimeValue} currency={currency} /></TD>
                 <TD className="text-xs text-text-faint">
                   {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : "-"}
                 </TD>

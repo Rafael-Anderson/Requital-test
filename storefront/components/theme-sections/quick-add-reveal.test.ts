@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { QUICK_ADD_DEFAULT_CLASS, QUICK_ADD_SLIDE_CLASS } from "./ProductGridSection";
 
@@ -17,4 +19,25 @@ describe("quick-add reveal (keyboard)", () => {
       expect(cls).toContain("group-hover:opacity-100");
     });
   }
+});
+
+describe("quick-add hover animation", () => {
+  const css = fs.readFileSync(path.join(__dirname, "../../app/globals.css"), "utf8");
+
+  it("the default desktop quick-add carries the animation hook; the slide variant keeps its own transition", () => {
+    expect(QUICK_ADD_DEFAULT_CLASS).toContain("theme-quick-add-anim");
+    expect(QUICK_ADD_SLIDE_CLASS).not.toContain("theme-quick-add-anim");
+  });
+
+  it("only on hover-capable devices and only without reduced motion, opacity + a few px, about 180ms", () => {
+    const m = css.match(/@media \(hover: hover\) and \(prefers-reduced-motion: no-preference\) \{([\s\S]*?)\n\}\n/);
+    expect(m).not.toBeNull();
+    const body = m![1];
+    expect(body).toContain(".theme-quick-add-anim");
+    expect(body).toMatch(/translateY\(4px\)/);
+    expect(body).toMatch(/opacity 180ms/);
+    expect(body).toMatch(/transform 180ms/);
+    // never outside that media query: no bare rule for the class
+    expect(css.replace(m![0], "")).not.toMatch(/\.theme-quick-add-anim\s*\{/);
+  });
 });

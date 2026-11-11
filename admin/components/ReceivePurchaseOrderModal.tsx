@@ -63,9 +63,19 @@ export default function ReceivePurchaseOrderModal({
   }
 
   return (
-    <Modal onClose={onClose} size="md" title={`Receive ${po.poNumber}`}>
+    <Modal onClose={onClose} size="md" title={`Receive ${po.poNumber}`}
+      footer={(requestClose) => (
+        <>
+            <Button type="button" variant="secondary" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button type="submit" form="receive-purchase-order-modal-form" variant="primary" disabled={saving || drafts.length === 0} loading={saving}>
+              {saving ? "Receiving…" : "Receive into stock"}
+            </Button>
+          </>
+      )}>
       {(requestClose) => (
-        <form onSubmit={handleSubmit}>
+        <form id="receive-purchase-order-modal-form" onSubmit={handleSubmit}>
           <div className="space-y-3">
             {drafts.map((d) => {
               const line = po.lines.find((l) => l.id === d.lineId)!;
@@ -106,14 +116,6 @@ export default function ReceivePurchaseOrderModal({
             <Input label="Note" value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-          <div className="sticky bottom-0 mt-5 flex justify-end gap-2 bg-surface pb-6 dark:bg-zinc-900">
-            <Button type="button" variant="secondary" onClick={requestClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={saving || drafts.length === 0} loading={saving}>
-              {saving ? "Receiving…" : "Receive into stock"}
-            </Button>
-          </div>
         </form>
       )}
     </Modal>

@@ -51,9 +51,19 @@ export default function UrlRedirectFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={redirect ? "Edit redirect" : "New redirect"}>
+    <Modal onClose={onClose} size="sm" title={redirect ? "Edit redirect" : "New redirect"}
+      footer={(requestClose) => (
+        <>
+            <Button type="button" variant="secondary" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button type="submit" form="url-redirect-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+              {redirect ? "Save changes" : "Create redirect"}
+            </Button>
+          </>
+      )}>
       {(requestClose) => (
-        <form onSubmit={handleSubmit}>
+        <form id="url-redirect-form-modal-form" onSubmit={handleSubmit}>
           <div className="space-y-3.5">
             <Input
               label="Old URL path"
@@ -85,14 +95,6 @@ export default function UrlRedirectFormModal({
               <span className="text-[13px] font-medium text-text-secondary dark:text-zinc-400">Active</span>
             </div>
             {error && <InlineErrorMessage>{error}</InlineErrorMessage>}
-          </div>
-          <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-            <Button type="button" variant="secondary" onClick={requestClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-              {redirect ? "Save changes" : "Create redirect"}
-            </Button>
           </div>
         </form>
       )}

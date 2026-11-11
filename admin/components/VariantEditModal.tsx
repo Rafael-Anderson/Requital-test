@@ -177,9 +177,23 @@ export default function VariantEditModal({
   // fine as a plain inline div — this is the only one ever mounted inside
   // a page that's itself a <form>.
   return createPortal(
-    <Modal onClose={onClose} size="sm" title={variant.label ?? "Variant"}>
+    <Modal
+      onClose={onClose}
+      size="sm"
+      title={variant.label ?? "Variant"}
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="variant-edit-form" variant="primary" disabled={saving} loading={saving}>
+            Save changes
+          </Button>
+        </>
+      )}
+    >
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="variant-edit-form" onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <div className="relative">
             <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">Image</label>
@@ -350,15 +364,6 @@ export default function VariantEditModal({
           </div>
 
           <MetafieldsSection editor={metafields} />
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-            Save changes
-          </Button>
         </div>
       </form>
       )}

@@ -96,7 +96,7 @@ describe("ManageDeliveryModal", () => {
 
     expect(getSliderQuote).toHaveBeenCalledTimes(1);
     expect(getSliderQuote).toHaveBeenCalledWith(42);
-    expect(screen.getAllByText("12.50 AED").length).toBeGreaterThan(0); // bike, the default vehicle
+    expect(screen.getAllByText("12.50").length).toBeGreaterThan(0); // bike, the default vehicle
     expect(screen.getByText("Customer & Order Details")).toBeInTheDocument();
     expect(screen.getByText("Delivery Information")).toBeInTheDocument();
     expect(screen.getByText("Card (Paid Online)")).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe("ManageDeliveryModal", () => {
 
     await user.selectOptions(screen.getByLabelText("Vehicle Type"), "car");
 
-    expect(screen.getAllByText("20.00 AED").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("20.00").length).toBeGreaterThan(0);
     expect(getSliderQuote).toHaveBeenCalledTimes(1);
   });
 
@@ -154,7 +154,7 @@ describe("ManageDeliveryModal", () => {
     await waitFor(() => expect(screen.getByText("Distance exceeds bike cap")).toBeInTheDocument());
     expect(onClose).not.toHaveBeenCalled();
     expect(onChanged).not.toHaveBeenCalled();
-    expect(screen.getAllByText("12.50 AED").length).toBeGreaterThan(0); // quote/selection still intact
+    expect(screen.getAllByText("12.50").length).toBeGreaterThan(0); // quote/selection still intact
   });
 });
 

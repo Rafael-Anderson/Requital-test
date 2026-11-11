@@ -36,10 +36,10 @@ import EditOrderItemsModal from "@/components/EditOrderItemsModal";
 import Modal from "@/components/ui/Modal";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Tooltip from "@/components/ui/Tooltip";
-import { formatMoney } from "@/lib/money";
 import Link from "next/link";
 import { isMarketplaceChannel } from "@/lib/channels";
 import { ChannelSourceBadge } from "@/components/channels/ChannelBadges";
+import Money from "@/components/Money";
 
 const EXTERNAL_DELIVERY_STATUSES: ExternalDelivery["status"][] = ["pending", "picked_up", "delivered", "failed"];
 // Mirrors the backend's own @Roles on the Slider dispatch/cancel routes —
@@ -348,14 +348,14 @@ export default function OrderDetailModal({
                             {item.variantLabel ? ` · ${item.variantLabel}` : ""}
                           </div>
                           <div className="text-xs text-text-muted">
-                            {item.quantity} × {formatMoney(item.priceAtPurchase, order.currency)}
+                            {item.quantity} × <Money amount={item.priceAtPurchase} currency={order.currency} />
                           </div>
                           {item.note && (
                             <div className="text-xs italic text-text-muted mt-0.5">Customer: {item.note}</div>
                           )}
                         </div>
                         <div className="text-sm font-medium">
-                          {formatMoney(Number(item.priceAtPurchase) * item.quantity, order.currency)}
+                          <Money amount={Number(item.priceAtPurchase) * item.quantity} currency={order.currency} />
                         </div>
                       </div>
                     ))}
@@ -378,7 +378,7 @@ export default function OrderDetailModal({
                       <>
                         <div className="flex justify-between text-sm">
                           <span className="text-text-muted">Subtotal</span>
-                          <span>{formatMoney(subtotal, order.currency)}</span>
+                          <span><Money amount={subtotal} currency={order.currency} /></span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                           <span className="text-text-muted">Delivery fee</span>
@@ -409,7 +409,7 @@ export default function OrderDetailModal({
                             </div>
                           ) : (
                             <span className="flex items-center gap-1.5">
-                              {formatMoney(deliveryFee, order.currency)}
+                              <Money amount={deliveryFee} currency={order.currency} />
                               {canEditFee && (
                                 <Tooltip label="Override the delivery fee for this order">
                                   <button
@@ -429,21 +429,18 @@ export default function OrderDetailModal({
                         </div>
                         <div className="flex justify-between text-sm font-medium border-t border-gray-200 dark:border-white/10 mt-2 pt-2">
                           <span>Total</span>
-                          <span>{formatMoney(order.total, order.currency)}</span>
+                          <span><Money amount={order.total} currency={order.currency} /></span>
                         </div>
                         {Number(order.storeCreditAmount ?? 0) > 0 && (
                           <>
                             <div className="flex justify-between text-sm mt-1">
                               <span className="text-text-muted">Paid with store credit</span>
-                              <span>-{formatMoney(order.storeCreditAmount!, order.currency)}</span>
+                              <span>-<Money amount={order.storeCreditAmount!} currency={order.currency} /></span>
                             </div>
                             <div className="flex justify-between text-sm font-medium mt-1">
                               <span>Left to pay</span>
                               <span>
-                                {formatMoney(
-                                  Math.max(0, Number(order.total) - Number(order.storeCreditAmount) - Number(order.giftCardAmount ?? 0)),
-                                  order.currency,
-                                )}
+                                <Money amount={Math.max(0, Number(order.total) - Number(order.storeCreditAmount) - Number(order.giftCardAmount ?? 0))} currency={order.currency} />
                               </span>
                             </div>
                           </>
@@ -626,10 +623,7 @@ export default function OrderDetailModal({
                       <div className="flex justify-between text-sm">
                         <span className="text-text-muted">Paid to carrier</span>
                         <span>
-                          {formatMoney(
-                            order.externaldelivery.price,
-                            order.externaldelivery.currency,
-                          )}
+                          <Money amount={order.externaldelivery.price} currency={order.externaldelivery.currency} />
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-sm">

@@ -1647,6 +1647,8 @@ export interface CollectionInput {
   collectionType?: "manual" | "automated";
   matchMode?: "all" | "any";
   rules?: CollectionRule[];
+  // null clears it (back to Newest).
+  defaultSort?: string | null;
 }
 
 export function getCollection(id: number) {

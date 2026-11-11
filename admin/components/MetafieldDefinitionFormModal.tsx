@@ -154,9 +154,19 @@ export default function MetafieldDefinitionFormModal({
       onClose={onClose}
       size="sm"
       title={definition ? `Edit "${definition.name}"` : "New custom field"}
-    >
+    
+      footer={(requestClose) => (
+        <>
+            <Button type="button" variant="secondary" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button type="submit" form="metafield-definition-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+              {definition ? "Save changes" : "Create field"}
+            </Button>
+          </>
+      )}>
       {(requestClose) => (
-        <form onSubmit={handleSubmit}>
+        <form id="metafield-definition-form-modal-form" onSubmit={handleSubmit}>
           <div className="space-y-3.5">
             <Select
               label="Applies to"
@@ -304,15 +314,6 @@ export default function MetafieldDefinitionFormModal({
                 and are never shown on the storefront.
               </p>
             )}
-          </div>
-
-          <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-            <Button type="button" variant="secondary" onClick={requestClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-              {definition ? "Save changes" : "Create field"}
-            </Button>
           </div>
         </form>
       )}

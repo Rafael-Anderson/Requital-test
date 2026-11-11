@@ -145,7 +145,7 @@ function QuickAddButton({
 // never focus; the slide variant could take focus but stayed at opacity-0 while focused (an invisible,
 // focused button). Both now fade in with the card's hover or with focus anywhere inside the card.
 export const QUICK_ADD_DEFAULT_CLASS =
-  "hidden sm:flex absolute bottom-2 end-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto";
+  "theme-quick-add-anim hidden sm:flex absolute bottom-2 end-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto";
 export const QUICK_ADD_SLIDE_CLASS =
   "hidden sm:flex absolute bottom-2 end-2 items-center justify-center px-3 h-8 text-xs font-medium rounded-full shadow opacity-0 translate-y-2 pointer-events-none transition-all group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:translate-y-0 group-focus-within:pointer-events-auto";
 
