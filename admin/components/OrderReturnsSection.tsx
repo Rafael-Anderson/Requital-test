@@ -8,7 +8,8 @@ import Checkbox from "@/components/ui/Checkbox";
 import Combobox from "@/components/ui/Combobox";
 import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
-import { formatAmount, formatMoney } from "@/lib/money";
+import { formatAmount } from "@/lib/money";
+import Money from "@/components/Money";
 
 const RETURN_REASONS: { value: OrderReturn["reason"]; label: string }[] = [
   { value: "damaged", label: "Damaged" },
@@ -123,7 +124,7 @@ export default function OrderReturnsSection({
             <div key={r.id} className="text-sm border border-border rounded-md p-2.5 dark:border-white/10">
               <div className="flex justify-between">
                 <span className="font-medium">
-                  {formatMoney(r.refundAmount, order.currency)} refunded
+                  <Money amount={r.refundAmount} currency={order.currency} /> refunded
                 </span>
                 <span className="text-xs text-text-muted">{new Date(r.createdAt).toLocaleDateString()}</span>
               </div>

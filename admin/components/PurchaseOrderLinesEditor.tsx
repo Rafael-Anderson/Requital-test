@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import Combobox, { type ComboboxOption } from "@/components/ui/Combobox";
 import Input from "@/components/ui/Input";
 import Tooltip from "@/components/ui/Tooltip";
+import Money from "@/components/Money";
 
 // Everything a line can point at: ingredients, plus plain (non-recipe) products
 // and their variants, which the server resolves to their own stock ingredient.
@@ -133,7 +134,7 @@ export default function PurchaseOrderLinesEditor({
         </Button>
         {estimate !== null && currency && (
           <div className="text-sm text-text-secondary dark:text-zinc-300">
-            Estimated total <span className="font-bold text-text-primary dark:text-zinc-50">{formatMoney(estimate, currency)}</span>
+            Estimated total <span className="font-bold text-text-primary dark:text-zinc-50"><Money amount={estimate} currency={currency} /></span>
           </div>
         )}
       </div>

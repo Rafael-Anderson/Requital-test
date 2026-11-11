@@ -52,9 +52,24 @@ export default function AssignBranchRoleModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title="Assign branch role">
+    <Modal onClose={onClose} size="sm" title="Assign branch role"
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit" form="assign-branch-role-modal-form"
+            variant="primary"
+            disabled={saving || !users.length || !outlets.length || !branchRoles.length}
+            loading={saving}
+          >
+            {saving ? "Saving…" : "Assign"}
+          </Button>
+        </>
+      )}>
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="assign-branch-role-modal-form" onSubmit={handleSubmit}>
         <p className="text-sm text-text-muted -mt-2 mb-4">
           Overrides this staff member&apos;s access at one specific outlet only. Their access at every
           other outlet is unaffected.
@@ -87,20 +102,6 @@ export default function AssignBranchRoleModal({
               </option>
             ))}
           </Select>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={saving || !users.length || !outlets.length || !branchRoles.length}
-            loading={saving}
-          >
-            {saving ? "Saving…" : "Assign"}
-          </Button>
         </div>
       </form>
       )}

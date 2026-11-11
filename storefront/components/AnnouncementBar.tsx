@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { parseNotificationMessages } from "@/lib/notification-text";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
+import MarqueeTrack from "@/components/MarqueeTrack";
 import { announcementDismissKey, useAnnouncementRotation } from "@/lib/announcement-rotation";
 import type { AnnouncementBarConfig } from "@/lib/theme-config-types";
 
@@ -33,12 +34,7 @@ export default function AnnouncementBar() {
   if (shop.announcementBarScrolling) {
     return (
       <div className="overflow-hidden whitespace-nowrap bg-accent text-accent-foreground text-xs py-1.5">
-        <div className="inline-block marquee-track">
-          <span className="px-4">{text}</span>
-          <span className="px-4" aria-hidden="true">
-            {text}
-          </span>
-        </div>
+        <MarqueeTrack plainText={text} renderItem={() => text} />
       </div>
     );
   }
@@ -116,10 +112,10 @@ function ThemedAnnouncementBar({
         className={`relative overflow-hidden whitespace-nowrap text-xs py-1.5 ${useAccentFallback ? "bg-accent text-accent-foreground" : ""}`}
         style={style}
       >
-        <div className="inline-block marquee-track">
-          <span className="px-4" dangerouslySetInnerHTML={displayHtml} />
-          <span className="px-4" aria-hidden="true" dangerouslySetInnerHTML={displayHtml} />
-        </div>
+        <MarqueeTrack
+          plainText={displayText.replace(/<[^>]*>/g, "")}
+          renderItem={() => <span dangerouslySetInnerHTML={displayHtml} />}
+        />
         {dismissBtn}
       </div>
     );

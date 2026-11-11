@@ -1,5 +1,6 @@
 "use client";
 
+import MarqueeTrack from "@/components/MarqueeTrack";
 import { type CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { editableAttrs } from "@/lib/editable-attrs";
@@ -66,10 +67,10 @@ export default function AnnouncementBarSectionThemed({ sectionId, settings, bloc
   if (settings.scrolling) {
     return (
       <div className={`overflow-hidden whitespace-nowrap text-accent-foreground text-xs py-1.5 ${bgClass}`}>
-        <div className="inline-block marquee-track">
-          <span className="px-4" {...tagProps} style={textStyle} dangerouslySetInnerHTML={displayHtml} />
-          <span className="px-4" aria-hidden="true" style={textStyle} dangerouslySetInnerHTML={displayHtml} />
-        </div>
+        <MarqueeTrack
+          plainText={displayText.replace(/<[^>]*>/g, "")}
+          renderItem={() => <span {...tagProps} style={textStyle} dangerouslySetInnerHTML={displayHtml} />}
+        />
       </div>
     );
   }

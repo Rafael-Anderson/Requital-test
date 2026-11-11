@@ -7,7 +7,6 @@ import { createReorderDrafts, listReorderLowStock, listReorderSuggestions } from
 import type { ReorderLowStockRow, ReorderNoSupplierReason, ReorderSuggestions } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { useOutletFilter } from "@/lib/outlet-context";
-import { formatMoney } from "@/lib/money";
 import BackButton from "@/components/ui/BackButton";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -24,6 +23,7 @@ import { useToast } from "@/components/ui/Toast";
 import BranchBar from "@/components/BranchBar";
 import InventoryTabs from "@/components/InventoryTabs";
 import ReorderPointModal, { type ReorderPointTarget } from "@/components/ReorderPointModal";
+import Money from "@/components/Money";
 
 const NO_SUPPLIER_TEXT: Record<ReorderNoSupplierReason, string> = {
   no_supplier: "No supplier sells this item yet",
@@ -225,7 +225,7 @@ export default function ReorderPage() {
                       <div className="truncate text-sm font-bold text-text-primary dark:text-zinc-100">{g.supplierName}</div>
                       <div className="text-xs text-text-muted">
                         {showOutlet ? `${outletName(g.outletId)} · ` : ""}
-                        {g.lines.length} item{g.lines.length === 1 ? "" : "s"} · {formatMoney(g.subtotal, g.currency)}
+                        {g.lines.length} item{g.lines.length === 1 ? "" : "s"} · <Money amount={g.subtotal} currency={g.currency} />
                       </div>
                       {g.belowMinimumOrderAmount && <div className="text-xs text-amber-700 dark:text-amber-400">Below this supplier&apos;s minimum order amount</div>}
                     </div>
@@ -254,8 +254,8 @@ export default function ReorderPage() {
                             <td className="p-2 text-end">{l.stock}</td>
                             <td className="p-2 text-end">{l.onOrder}</td>
                             <td className="p-2 text-end">{l.quantity}</td>
-                            <td className="p-2 text-end">{formatMoney(l.unitCost, g.currency)}</td>
-                            <td className="p-2 text-end">{formatMoney(l.lineTotal, g.currency)}</td>
+                            <td className="p-2 text-end"><Money amount={l.unitCost} currency={g.currency} /></td>
+                            <td className="p-2 text-end"><Money amount={l.lineTotal} currency={g.currency} /></td>
                           </tr>
                         ))}
                       </tbody>

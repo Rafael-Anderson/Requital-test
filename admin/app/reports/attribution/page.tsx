@@ -15,7 +15,7 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
 import { useToast } from "@/components/ui/Toast";
 import { reportsFilterInputClass } from "@/components/ReportsFilterBar";
-import { formatMoney } from "@/lib/money";
+import Money from "@/components/Money";
 
 const MODELS: { value: AttributionModel; label: string }[] = [
   { value: "last", label: "Last touch" },
@@ -194,7 +194,7 @@ export default function AttributionReportPage() {
                 <TD className="text-[13.5px]">{r.campaign}</TD>
                 <TD className="text-[13.5px]">{r.orders}</TD>
                 <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">
-                  {formatMoney(r.revenue, r.currency)}
+                  <Money amount={r.revenue} currency={r.currency} />
                 </TD>
               </TR>
             ))

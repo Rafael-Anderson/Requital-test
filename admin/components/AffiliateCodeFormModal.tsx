@@ -85,9 +85,19 @@ export default function AffiliateCodeFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={affiliateCode ? `Edit "${affiliateCode.code}"` : "Add Referral"}>
+    <Modal onClose={onClose} size="sm" title={affiliateCode ? `Edit "${affiliateCode.code}"` : "Add Referral"}
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="affiliate-code-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+            {affiliateCode ? "Save changes" : "Create"}
+          </Button>
+        </>
+      )}>
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="affiliate-code-form-modal-form" onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           {!affiliateCode && (
             <Select
@@ -152,15 +162,6 @@ export default function AffiliateCodeFormModal({
               ))}
             </Select>
           )}
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-            {affiliateCode ? "Save changes" : "Create"}
-          </Button>
         </div>
       </form>
       )}

@@ -60,9 +60,19 @@ export default function BranchRoleFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={role ? "Edit branch role" : "New branch role"}>
+    <Modal onClose={onClose} size="sm" title={role ? "Edit branch role" : "New branch role"}
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="branch-role-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+            {saving ? "Saving…" : role ? "Save changes" : "Create branch role"}
+          </Button>
+        </>
+      )}>
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="branch-role-form-modal-form" onSubmit={handleSubmit}>
         <p className="text-sm text-text-muted -mt-2 mb-4">
           A reusable permission bundle you can assign to a staff member at a specific outlet.
         </p>
@@ -90,15 +100,6 @@ export default function BranchRoleFormModal({
               upgrade.
             </p>
           </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-            {saving ? "Saving…" : role ? "Save changes" : "Create branch role"}
-          </Button>
         </div>
       </form>
       )}

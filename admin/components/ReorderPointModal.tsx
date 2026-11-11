@@ -84,9 +84,19 @@ export default function ReorderPointModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={target ? `Reorder point: ${target.name}` : "Set a reorder point"}>
+    <Modal onClose={onClose} size="sm" title={target ? `Reorder point: ${target.name}` : "Set a reorder point"}
+      footer={(requestClose) => (
+        <>
+            <Button type="button" variant="secondary" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button type="submit" form="reorder-point-modal-form" variant="primary" disabled={saving} loading={saving}>
+              Save
+            </Button>
+          </>
+      )}>
       {(requestClose) => (
-        <form onSubmit={handleSubmit}>
+        <form id="reorder-point-modal-form" onSubmit={handleSubmit}>
           <div className="space-y-3">
             {!target && (
               <Select label="Item" value={ingredientId} onChange={(e) => setIngredientId(e.target.value)} disabled={ingredients === null}>
@@ -112,14 +122,6 @@ export default function ReorderPointModal({
             <p className="text-xs text-text-muted">Leave both blank to stop suggesting this item. Stock already on open orders counts towards the point.</p>
           </div>
           {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
-          <div className="sticky bottom-0 mt-5 flex justify-end gap-2 bg-surface pb-6 dark:bg-zinc-900">
-            <Button type="button" variant="secondary" onClick={requestClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-              Save
-            </Button>
-          </div>
         </form>
       )}
     </Modal>

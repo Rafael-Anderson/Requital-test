@@ -509,6 +509,8 @@ export interface CollectionRow {
   // 'manual' (hand-picked via productcollection) or 'automated' (rules).
   collectionType: string;
   matchMode: string;
+  // One of collections/collection-sort.ts's keys, or NULL (= Newest).
+  defaultSort: string | null;
   createdAt: Date;
 }
 

@@ -25,6 +25,8 @@ import Textarea from "@/components/ui/Textarea";
 import Toggle from "@/components/ui/Toggle";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import Modal from "@/components/ui/Modal";
+import Select from "@/components/ui/Select";
+import { COLLECTION_SORT_OPTIONS } from "@/lib/collection-sort";
 import Combobox from "@/components/ui/Combobox";
 import { useToast } from "@/components/ui/Toast";
 import { useMetafieldEditor } from "@/lib/useMetafieldEditor";
@@ -56,6 +58,7 @@ export default function CollectionFormModal({
     collection?.parentCollectionId != null ? String(collection.parentCollectionId) : "",
   );
   const [description, setDescription] = useState(collection?.description ?? "");
+  const [defaultSort, setDefaultSort] = useState<string>(collection?.defaultSort ?? "");
   const [displayOrder, setDisplayOrder] = useState(String(collection?.displayOrder ?? 0));
   const [isFeatured, setIsFeatured] = useState(collection?.isFeatured ?? false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -149,6 +152,7 @@ export default function CollectionFormModal({
           displayOrder: order,
           isFeatured,
           description,
+          defaultSort: defaultSort === "" ? null : defaultSort,
           parentCollectionId: parentCollectionId === "" ? null : Number(parentCollectionId),
           collectionType,
           ...(collectionType === "automated" && { matchMode, rules }),
@@ -165,6 +169,7 @@ export default function CollectionFormModal({
           isFeatured,
           description,
           image,
+          defaultSort: defaultSort === "" ? null : defaultSort,
           collectionType,
           ...(collectionType === "automated" && { matchMode, rules }),
         };
@@ -185,9 +190,20 @@ export default function CollectionFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size={collectionType === "automated" ? "lg" : "sm"} title={collection ? `Edit "${collection.name}"` : "New collection"}>
+    <Modal onClose={onClose} size={collectionType === "automated" ? "lg" : "md"}
+      tall title={collection ? `Edit "${collection.name}"` : "New collection"}
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="collection-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+            {collection ? "Save changes" : "Create collection"}
+          </Button>
+        </>
+      )}>
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="collection-form-modal-form" onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
 
@@ -222,6 +238,20 @@ export default function CollectionFormModal({
             placeholder="Shown on this collection's own storefront page"
             rows={3}
           />
+
+          <Select
+            label="Default sort"
+            value={defaultSort}
+            onChange={(e) => setDefaultSort(e.target.value)}
+            tooltip="The order shoppers see when they open this collection. They can still change it, and a sort in the page link always wins."
+          >
+            <option value="">Newest (default)</option>
+            {COLLECTION_SORT_OPTIONS.filter((o) => o.value !== "newest").map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
 
           <Input
             label="Display order"
@@ -278,15 +308,6 @@ export default function CollectionFormModal({
             ))}
 
           <MetafieldsSection editor={metafields} />
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-            {collection ? "Save changes" : "Create collection"}
-          </Button>
         </div>
       </form>
       )}

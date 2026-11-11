@@ -33,13 +33,16 @@ function typographyStyle(typography: SectionSettings["typography"]): CSSProperti
 // document order alongside it — this used to only ever look for the single
 // text block; now it walks every visible block like HeroSection does.
 // contentWidth (Atelier sets "narrow" for its manifesto strip; free-form
-// SectionSettings key). "narrow" is a centred, tighter column — an opening
-// statement, not a paragraph block. Absent ⇒ today's exact max-w-3xl,
-// left-aligned (byte-identical for every existing rich_text section).
+// SectionSettings key). "narrow" is a deliberate, centred, tighter column — an
+// opening statement, not a paragraph block — and stays opt-in. Absent (or
+// "medium" / "wide") now uses the SAME container as the header and the product
+// grid (.theme-container: --theme-max-width, the page's own side gutters) and
+// is left-aligned to the grid edge, instead of the old narrow centred column
+// (max-w-3xl + mx-auto) that stopped well short of the page margins.
 const CONTENT_WIDTH: Record<string, { maxW: string; center: boolean }> = {
-  narrow: { maxW: "max-w-2xl", center: true },
-  medium: { maxW: "max-w-3xl", center: false },
-  wide: { maxW: "max-w-5xl", center: false },
+  narrow: { maxW: "max-w-2xl mx-auto", center: true },
+  medium: { maxW: "theme-container", center: false },
+  wide: { maxW: "theme-container", center: false },
 };
 
 export default function RichTextSection({ sectionId, settings, blocks }: { sectionId: string; settings: SectionSettings; blocks: ThemeBlock[] }) {
@@ -80,6 +83,6 @@ export default function RichTextSection({ sectionId, settings, blocks }: { secti
   }
 
   return (
-    <div className={`theme-gutter-x ${vPad} ${width.maxW} mx-auto space-y-4`}>{visible.map(renderBlock)}</div>
+    <div className={`theme-gutter-x ${vPad} ${width.maxW} space-y-4`}>{visible.map(renderBlock)}</div>
   );
 }

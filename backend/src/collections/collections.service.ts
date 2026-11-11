@@ -70,8 +70,8 @@ export class CollectionsService {
     try {
       const insertId = await this.db.transaction(async (conn) => {
         const [result] = await conn.query<ResultSetHeader>(
-          `INSERT INTO collection (shopId, name, slug, parentCollectionId, displayOrder, image, isFeatured, description, collectionType, matchMode)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO collection (shopId, name, slug, parentCollectionId, displayOrder, image, isFeatured, description, collectionType, matchMode, defaultSort)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             ctx.shopId,
             dto.name,
@@ -83,6 +83,7 @@ export class CollectionsService {
             dto.description ?? null,
             automated ? 'automated' : 'manual',
             dto.matchMode ?? 'all',
+            dto.defaultSort ?? null,
           ],
         );
         await this.rulesService.replace(conn, ctx.shopId, result.insertId, rules);
@@ -123,6 +124,7 @@ export class CollectionsService {
         description: dto.description,
         collectionType: dto.collectionType,
         matchMode: dto.matchMode,
+        defaultSort: dto.defaultSort,
       });
       await this.db.transaction(async (conn) => {
         if (set) {

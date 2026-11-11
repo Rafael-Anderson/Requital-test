@@ -10,6 +10,8 @@ afterEach(() => {
 vi.mock("next/navigation", () => ({
   useParams: () => ({ shop: "test-shop", slug: "roses" }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/collections/roses",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 let mockThemeConfig: unknown = null;

@@ -30,6 +30,7 @@ import StoreCreditCard from "@/components/customers/StoreCreditCard";
 import LoyaltyCard from "@/components/customers/LoyaltyCard";
 import MergeCustomersModal from "@/components/customers/MergeCustomersModal";
 import MergeHistoryCard from "@/components/customers/MergeHistoryCard";
+import Money from "@/components/Money";
 
 // Admin-only, same as the list page — see app/customers/page.tsx.
 export default function CustomerDetailPage() {
@@ -211,7 +212,7 @@ export default function CustomerDetailPage() {
                         <StatusBadge status={order.status} />
                       </TD>
                       <TD className="capitalize text-text-muted">{order.orderType ?? "-"}</TD>
-                      <TD>{formatMoney(order.total, order.currency)}</TD>
+                      <TD><Money amount={order.total} currency={order.currency} /></TD>
                       <TD className="text-xs text-text-muted">{new Date(order.createdAt).toLocaleString()}</TD>
                     </TR>
                   ))

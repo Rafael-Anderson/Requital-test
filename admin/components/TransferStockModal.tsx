@@ -82,9 +82,23 @@ export default function TransferStockModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title="Transfer stock">
+    <Modal
+      onClose={onClose}
+      size="sm"
+      title="Transfer stock"
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="transfer-stock-form" variant="primary" disabled={saving} loading={saving}>
+            {saving ? "Transferring…" : "Transfer"}
+          </Button>
+        </>
+      )}
+    >
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="transfer-stock-form" onSubmit={handleSubmit}>
         <p className="text-sm text-text-muted -mt-2 mb-4">{name}</p>
 
         <div className="space-y-3.5">
@@ -127,15 +141,6 @@ export default function TransferStockModal({
           />
 
           <Textarea label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-            {saving ? "Transferring…" : "Transfer"}
-          </Button>
         </div>
       </form>
       )}

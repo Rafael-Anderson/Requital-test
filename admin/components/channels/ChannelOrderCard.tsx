@@ -5,9 +5,9 @@ import { AlertTriangle } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { ChannelSourceBadge, ChannelStateBadge, AcceptDeadline } from "@/components/channels/ChannelBadges";
 import { CHANNEL_STATE_HINTS, externalStatusLabel } from "@/lib/channels";
-import { formatMoney } from "@/lib/money";
 import { relativeTime } from "@/lib/format";
 import type { ChannelOrder } from "@/lib/types";
+import Money from "@/components/Money";
 
 // One marketplace order on the desk. A waiting order is loud (amber edge, the
 // marketplace's deadline, Accept / Reject); the rest are quiet records. The API
@@ -66,10 +66,10 @@ export default function ChannelOrderCard({
 
       <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
         {order.total !== null && (
-          <span className="font-bold text-text-primary dark:text-zinc-50">{formatMoney(order.total, order.currency)}</span>
+          <span className="font-bold text-text-primary dark:text-zinc-50"><Money amount={order.total} currency={order.currency} /></span>
         )}
         {isAdmin && order.commissionAmount !== null && (
-          <span className="text-text-muted">Marketplace commission {formatMoney(order.commissionAmount, order.currency)}</span>
+          <span className="text-text-muted">Marketplace commission <Money amount={order.commissionAmount} currency={order.currency} /></span>
         )}
         {outletName && <span className="text-text-muted">{outletName}</span>}
         <span className="text-text-faint">Received {relativeTime(order.receivedAt)}</span>

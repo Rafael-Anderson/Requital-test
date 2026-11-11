@@ -16,7 +16,7 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import PageShell from "@/components/ui/PageShell";
-import { formatMoney } from "@/lib/money";
+import Money from "@/components/Money";
 
 const STATUS_CLASS: Record<DraftOrderStatus, string> = {
   OPEN: "text-text-secondary dark:text-zinc-400",
@@ -85,7 +85,7 @@ export default function DraftOrdersPage() {
               <div className="truncate text-sm font-semibold text-text-primary dark:text-zinc-100">{d.customerName}</div>
               <div className="truncate text-xs text-text-muted">{d.customerPhone}</div>
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
-                <span className="font-bold text-text-primary dark:text-zinc-100">{formatMoney(d.total, d.currency)}</span>
+                <span className="font-bold text-text-primary dark:text-zinc-100"><Money amount={d.total} currency={d.currency} /></span>
                 <span className="text-text-muted">
                   {d.items.length} item{d.items.length === 1 ? "" : "s"}
                 </span>
@@ -127,7 +127,7 @@ export default function DraftOrdersPage() {
                   <div className="text-xs text-text-muted">{d.customerPhone}</div>
                 </TD>
                 <TD className="text-text-muted">{d.items.length} item{d.items.length === 1 ? "" : "s"}</TD>
-                <TD>{formatMoney(d.total, d.currency)}</TD>
+                <TD><Money amount={d.total} currency={d.currency} /></TD>
                 <TD className={`font-medium ${STATUS_CLASS[d.status]}`}>{DRAFT_ORDER_STATUS_LABELS[d.status]}</TD>
                 <TD className="text-xs text-text-muted">{new Date(d.createdAt).toLocaleDateString()}</TD>
               </TR>

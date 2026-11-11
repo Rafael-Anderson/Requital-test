@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Check, ChevronDown, Search as SearchIcon } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
@@ -17,6 +17,7 @@ import PriceRangeSlider from "@/components/PriceRangeSlider";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import StorefrontLoadingSkeleton from "@/components/StorefrontLoadingSkeleton";
 import StorefrontErrorState from "@/components/StorefrontErrorState";
+import { resolveCollectionSort } from "@/lib/collection-sort";
 import { bannerHeightVars } from "@/lib/banner-height";
 
 const SORT_OPTIONS = [
@@ -198,7 +199,7 @@ function CollectionTitle({
         {collection.name}
       </h1>
       {collection.description && (
-        <p className={`mt-1 text-[15px] max-w-2xl ${light ? "text-white/85" : "text-zinc-600"}`}>{collection.description}</p>
+        <p className={`mt-1 text-[15px] ${light ? "text-white/85" : "text-zinc-600"}`}>{collection.description}</p>
       )}
     </>
   );
@@ -242,7 +243,24 @@ export default function CollectionPage() {
   }, [shopSlug, previewToken]);
 
   // --- filter/sort/search bar state (storefront-v2 Phase 2B) ---
-  const [sort, setSort] = useState<SortOption>("newest");
+  // The order: what the customer picked in this visit, else ?sort= in the link, else the
+  // collection's own default, else Newest (lib/collection-sort.ts). Derived, not set from an effect,
+  // so the very first painted list is already in the right order (no flash of Newest first).
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [pickedSort, setPickedSort] = useState<{ slug: string; value: SortOption } | null>(null);
+  const sort = resolveCollectionSort({
+    picked: pickedSort?.slug === params.slug ? pickedSort.value : null,
+    urlSort: searchParams.get("sort"),
+    defaultSort: collection?.defaultSort,
+  }) as SortOption;
+  function setSort(value: SortOption) {
+    setPickedSort({ slug: params.slug, value });
+    // keep the choice in the link so it can be shared and survives a reload
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("sort", value);
+    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+  }
   const [search, setSearch] = useState("");
   const [selectedBrandIds, setSelectedBrandIds] = useState<Set<number>>(new Set());
   const [showAllBrands, setShowAllBrands] = useState(false);

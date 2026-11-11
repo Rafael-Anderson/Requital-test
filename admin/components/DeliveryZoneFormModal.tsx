@@ -75,9 +75,19 @@ export default function DeliveryZoneFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="md" title={zone ? `Edit "${zone.name}"` : "New zone"}>
+    <Modal onClose={onClose} size="md" title={zone ? `Edit "${zone.name}"` : "New zone"}
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="delivery-zone-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+            {zone ? "Save changes" : "Create zone"}
+          </Button>
+        </>
+      )}>
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="delivery-zone-form-modal-form" onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <Input
             label="Name"
@@ -147,15 +157,6 @@ export default function DeliveryZoneFormModal({
               />
             </div>
           </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-            {zone ? "Save changes" : "Create zone"}
-          </Button>
         </div>
       </form>
       )}

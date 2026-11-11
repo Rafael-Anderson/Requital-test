@@ -53,9 +53,19 @@ export default function SupplierContactFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={contact ? "Edit contact" : "New contact"}>
+    <Modal onClose={onClose} size="sm" title={contact ? "Edit contact" : "New contact"}
+      footer={(requestClose) => (
+        <>
+            <Button type="button" variant="secondary" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button type="submit" form="supplier-contact-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+              {saving ? "Saving…" : "Save contact"}
+            </Button>
+          </>
+      )}>
       {(requestClose) => (
-        <form onSubmit={handleSubmit}>
+        <form id="supplier-contact-form-modal-form" onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 gap-4">
             <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
             <Input label="Role" value={role} onChange={(e) => setRole(e.target.value)} />
@@ -65,14 +75,6 @@ export default function SupplierContactFormModal({
               <Toggle checked={isPrimary} onChange={setIsPrimary} />
               <span className="text-sm text-text-secondary dark:text-zinc-300">Primary contact</span>
             </div>
-          </div>
-          <div className="sticky bottom-0 mt-5 flex justify-end gap-2 bg-surface pb-6 dark:bg-zinc-900">
-            <Button type="button" variant="secondary" onClick={requestClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-              {saving ? "Saving…" : "Save contact"}
-            </Button>
           </div>
         </form>
       )}

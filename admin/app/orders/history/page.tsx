@@ -25,9 +25,9 @@ import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
-import { formatMoney } from "@/lib/money";
 import { isMarketplaceChannel } from "@/lib/channels";
 import { ChannelSourceBadge } from "@/components/channels/ChannelBadges";
+import Money from "@/components/Money";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -228,7 +228,7 @@ export default function OrderHistoryPage() {
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
                 <span className="font-bold text-text-primary dark:text-zinc-100">
-                  {formatMoney(order.total, order.currency)}
+                  <Money amount={order.total} currency={order.currency} />
                 </span>
                 <span className="capitalize text-text-muted">{order.paymentStatus.replace(/_/g, " ")}</span>
               </div>
@@ -298,7 +298,7 @@ export default function OrderHistoryPage() {
                       </div>
                     )}
                   </TD>
-                  <TD>{formatMoney(order.total, order.currency)}</TD>
+                  <TD><Money amount={order.total} currency={order.currency} /></TD>
                   <TD className="text-text-muted">
                     {isMarketplaceChannel(order.channel) ? <ChannelSourceBadge channel={order.channel!} /> : (order.channel ?? "-")}
                   </TD>

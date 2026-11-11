@@ -119,22 +119,12 @@ export default function CollectionsPage() {
             description="Create collections to organize your product catalog."
           />
         ) : (
-          // Vertical guide-line technique adapted from Origin UI's
-          // "basic-tree-with-vertical-lines" on 21st.dev
-          // (https://21st.dev/@originui/components/tree/basic-tree-with-vertical-lines),
-          // same as CollectionCheckboxTree — kept consistent between the two
-          // collection-tree views in the app. Pseudo-element width is capped to
-          // the deepest nesting present, since the gradient tiles infinitely
-          // otherwise and would draw guide lines across the full row width.
-          <div
-            className="relative divide-y divide-black/5 dark:divide-white/10 before:absolute before:top-0 before:bottom-0 before:start-0 before:-ms-1 before:w-(--tree-guide-width) before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),rgba(0,0,0,0.08)_calc(var(--tree-indent)-1px),rgba(0,0,0,0.08)_calc(var(--tree-indent)))] dark:before:bg-[repeating-linear-gradient(to_right,transparent_0,transparent_calc(var(--tree-indent)-1px),rgba(255,255,255,0.12)_calc(var(--tree-indent)-1px),rgba(255,255,255,0.12)_calc(var(--tree-indent)))]"
-            style={
-              {
-                "--tree-indent": "20px",
-                "--tree-guide-width": `${(Math.max(...rows.map((r) => r.depth)) + 1) * 20}px`,
-              } as React.CSSProperties
-            }
-          >
+          // Nesting guides live in each row's OWN gutter: one fixed-width cell per level,
+          // before the drag handle, with a logical start border (so it mirrors in RTL).
+          // They are siblings of the handle and the text, never drawn behind them, so a
+          // guide cannot cross either one, and the cells stretch the full row height so the
+          // line is continuous from row to row.
+          <div className="divide-y divide-black/5 dark:divide-white/10">
             {rows.map((c) => (
               <div
                 key={c.id}
@@ -142,18 +132,31 @@ export default function CollectionsPage() {
                 onDragStart={() => setDraggedId(c.id)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => handleDrop(c.id)}
-                className={`relative z-10 flex items-center justify-between px-4 py-2.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors ${
+                data-testid="collection-row"
+                className={`flex items-stretch justify-between ps-4 pe-4 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors ${
                   draggedId === c.id ? "opacity-40" : ""
                 }`}
               >
-                <div style={{ paddingInlineStart: `${c.depth * 20 + 8}px` }} className="flex items-center gap-2 text-sm">
-                  <span className="cursor-grab active:cursor-grabbing text-text-faint shrink-0" aria-hidden>
-                    <GripVertical className="size-4" />
-                  </span>
-                  <span className="font-medium">{c.name}</span>
-                  <span className="text-text-faint ms-2 text-xs">{c.slug}</span>
+                <div className="flex min-w-0 flex-1 items-stretch">
+                  {c.depth > 0 && (
+                    <div className="flex shrink-0 items-stretch" data-testid="tree-gutter" aria-hidden>
+                      {Array.from({ length: c.depth }, (_, level) => (
+                        <span key={level} className="w-5 shrink-0 border-s border-black/10 dark:border-white/15" />
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex min-w-0 items-center gap-2 py-2.5 ps-2 text-sm">
+                    <span className="cursor-grab active:cursor-grabbing text-text-faint shrink-0" aria-hidden>
+                      <GripVertical className="size-4" />
+                    </span>
+                    <span className="font-medium">{c.name}</span>
+                    <span className="text-text-faint ms-2 text-xs">{c.slug}</span>
+                    {c.collectionType === "automated" && (
+                      <span className="ms-2 rounded-md bg-black/5 px-1.5 py-0.5 text-[11px] font-medium text-text-muted dark:bg-white/10">Automated</span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1 self-center">
                   <Tooltip label={`Edit ${c.name}`}>
                     <button
                       onClick={() => setEditing(c)}

@@ -58,9 +58,19 @@ export default function ZoneRegionsModal({
   }
 
   return (
-    <Modal onClose={onClose} size="md" title={`Review "${zone.name}"`}>
+    <Modal onClose={onClose} size="md" title={`Review "${zone.name}"`}
+      footer={(requestClose) => (
+        <>
+            <Button type="button" variant="secondary" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button type="submit" form="zone-regions-modal-form" variant="primary" disabled={saving || !canConfirm} loading={saving}>
+              Confirm {label}s
+            </Button>
+          </>
+      )}>
       {(requestClose) => (
-        <form onSubmit={handleSubmit}>
+        <form id="zone-regions-modal-form" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
               <p className="text-sm font-medium mb-1">How it works today</p>
@@ -91,15 +101,6 @@ export default function ZoneRegionsModal({
                 Choose at least one {label}. Without one, and without a placed map circle, this zone would match no customer.
               </p>
             )}
-          </div>
-
-          <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-            <Button type="button" variant="secondary" onClick={requestClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" disabled={saving || !canConfirm} loading={saving}>
-              Confirm {label}s
-            </Button>
           </div>
         </form>
       )}

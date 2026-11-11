@@ -45,19 +45,20 @@ export default function IngredientCategoryFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={category ? "Edit ingredient category" : "New ingredient category"}>
-      {(requestClose) => (
-      <form onSubmit={handleSubmit}>
-        <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
+    <Modal onClose={onClose} size="sm" title={category ? "Edit ingredient category" : "New ingredient category"}
+      footer={(requestClose) => (
+        <>
           <Button type="button" variant="secondary" onClick={requestClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
+          <Button type="submit" form="ingredient-category-form-modal-form" variant="primary" disabled={saving} loading={saving}>
             {saving ? "Saving…" : category ? "Save changes" : "Add category"}
           </Button>
-        </div>
+        </>
+      )}>
+      {(requestClose) => (
+      <form id="ingredient-category-form-modal-form" onSubmit={handleSubmit}>
+        <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
       </form>
       )}
     </Modal>

@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -11,6 +12,7 @@ import {
   Min,
 } from 'class-validator';
 
+import { COLLECTION_SORT_KEYS } from '../collection-sort';
 import { CollectionRulesFieldsDto } from './collection-rule.dto';
 
 export class CreateCollectionDto extends CollectionRulesFieldsDto {
@@ -54,4 +56,11 @@ export class CreateCollectionDto extends CollectionRulesFieldsDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  // The order the storefront collection page opens in when the customer has not picked
+  // one (?sort= always wins). Must be a key the page already offers; NULL (explicit null
+  // on update clears it) = Newest, the page's own default.
+  @IsOptional()
+  @IsIn(COLLECTION_SORT_KEYS)
+  defaultSort?: string | null;
 }

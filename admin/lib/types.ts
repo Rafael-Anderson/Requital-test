@@ -516,6 +516,8 @@ export interface Collection {
   // Absent on an older API response: treat as manual.
   collectionType?: "manual" | "automated";
   matchMode?: "all" | "any";
+  // Storefront opens the collection in this order (NULL = Newest). See lib/collection-sort.ts.
+  defaultSort?: string | null;
 }
 
 export type CollectionRuleField =

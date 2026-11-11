@@ -12,8 +12,8 @@ import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import ReportsFilterBar from "@/components/ReportsFilterBar";
 import PageShell from "@/components/ui/PageShell";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -183,10 +183,10 @@ export default function ProductSaleReportPage() {
                     <span className="font-medium">{row.name}</span>
                   </div>
                 </TD>
-                <TD>{formatMoney(row.currentPrice, currency)}</TD>
+                <TD><Money amount={row.currentPrice} currency={currency} /></TD>
                 <TD>{row.orderCount}</TD>
                 <TD>{row.totalQuantity}</TD>
-                <TD>{formatMoney(row.totalSalePrice, currency)}</TD>
+                <TD><Money amount={row.totalSalePrice} currency={currency} /></TD>
                 <TD className="text-text-muted">{row.deliveryFee.toFixed(2)}</TD>
               </TR>
             ))

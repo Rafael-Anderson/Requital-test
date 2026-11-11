@@ -676,6 +676,8 @@ export class PublicService {
       image: collection.image,
       description: collection.description,
       parentCollectionId: collection.parentCollectionId,
+      // NULL = the page's own default (Newest); see collections/collection-sort.ts
+      defaultSort: collection.defaultSort ?? null,
       products: productIds
         .map((id) => products.get(id))
         .filter((p): p is NonNullable<typeof p> => !!p)

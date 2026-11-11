@@ -33,23 +33,24 @@ export default function OutletFormModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title="New outlet">
+    <Modal onClose={onClose} size="sm" title="New outlet"
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="outlet-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+            Create & continue
+          </Button>
+        </>
+      )}>
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="outlet-form-modal-form" onSubmit={handleSubmit}>
         <p className="text-sm text-text-muted -mt-2 mb-4">
           Give it a name. You&apos;ll set hours, address, delivery, and pickup next.
         </p>
 
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-            Create & continue
-          </Button>
-        </div>
       </form>
       )}
     </Modal>

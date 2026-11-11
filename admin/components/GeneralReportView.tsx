@@ -13,6 +13,7 @@ import StatCard from "@/components/ui/StatCard";
 import StatusBadge from "@/components/StatusBadge";
 import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 function formatPaymentMode(method: string | null): string {
   if (!method) return "-";
@@ -170,7 +171,7 @@ export default function GeneralReportView({
                 </TD>
                 <TD className="capitalize text-text-muted text-[13.5px]">{order.orderType ?? "-"}</TD>
                 <TD className="text-text-muted text-[13.5px]">{formatPaymentMode(order.paymentMethod)}</TD>
-                <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100">{formatMoney(order.total, currency)}</TD>
+                <TD className="text-[13.5px] font-semibold text-text-primary dark:text-zinc-100"><Money amount={order.total} currency={currency} /></TD>
                 <TD className="text-text-muted text-[13.5px]">{order.channel ?? "-"}</TD>
                 <TD className="text-xs text-text-faint">{new Date(order.createdAt).toLocaleString()}</TD>
               </TR>

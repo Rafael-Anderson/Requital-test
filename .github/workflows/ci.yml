@@ -248,6 +248,11 @@ jobs:
           node tools/check-no-em-dash.js --self-test
           node tools/check-no-em-dash.js
 
+      - name: Dirham-symbol guardrail (no D-with-a-bar look-alike letters; one SVG source of truth)
+        run: |
+          node tools/check-dirham-glyph.js --self-test
+          node tools/check-dirham-glyph.js
+
       # Deploy pipeline tooling (tools/deploy, .github/workflows/deploy.yml).
       # Added as steps INSIDE this already-required job: the job name above is a
       # pinned branch-protection context and is not renamed.

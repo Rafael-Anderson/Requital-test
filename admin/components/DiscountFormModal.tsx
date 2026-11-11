@@ -128,9 +128,19 @@ export default function DiscountFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title={discount ? `Edit "${discount.code ?? "Auto discount"}"` : "New discount"}>
+    <Modal onClose={onClose} size="sm" title={discount ? `Edit "${discount.code ?? "Auto discount"}"` : "New discount"}
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="discount-form-modal-form" variant="primary" disabled={saving} loading={saving}>
+            {discount ? "Save changes" : "Create discount"}
+          </Button>
+        </>
+      )}>
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="discount-form-modal-form" onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <div className="flex items-center gap-2">
             <Toggle checked={requiresCode} onChange={handleRequiresCodeChange} />
@@ -261,15 +271,6 @@ export default function DiscountFormModal({
             <Toggle checked={active} onChange={setActive} />
             <span className="text-sm">Active</span>
           </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving} loading={saving}>
-            {discount ? "Save changes" : "Create discount"}
-          </Button>
         </div>
       </form>
       )}

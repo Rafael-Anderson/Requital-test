@@ -20,6 +20,7 @@ import PurchaseOrderStatusBadge from "@/components/PurchaseOrderStatusBadge";
 import ReceivePurchaseOrderModal from "@/components/ReceivePurchaseOrderModal";
 import ScanReceiveModal from "@/components/ScanReceiveModal";
 import EditPurchaseOrderLinesModal from "@/components/EditPurchaseOrderLinesModal";
+import Money from "@/components/Money";
 
 export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -170,8 +171,8 @@ export default function PurchaseOrderDetailPage() {
                       <td className="p-2">{l.supplierSku ?? <span className="text-text-muted">Not set</span>}</td>
                       <td className="p-2 text-end">{l.quantityOrdered}</td>
                       <td className="p-2 text-end">{l.quantityReceived}</td>
-                      <td className="p-2 text-end">{formatMoney(l.unitCost, l.currency)}</td>
-                      <td className="p-2 text-end">{formatMoney(l.lineTotal, l.currency)}</td>
+                      <td className="p-2 text-end"><Money amount={l.unitCost} currency={l.currency} /></td>
+                      <td className="p-2 text-end"><Money amount={l.lineTotal} currency={l.currency} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -192,14 +193,14 @@ export default function PurchaseOrderDetailPage() {
                         {new Date(r.receivedAt).toLocaleString()}
                         {r.deliveryNoteRef && <span className="ms-2 font-normal text-text-muted">Delivery note {r.deliveryNoteRef}</span>}
                       </span>
-                      <span>{formatMoney(r.total, r.currency)}</span>
+                      <span><Money amount={r.total} currency={r.currency} /></span>
                     </div>
                     <ul className="mt-2 text-text-secondary dark:text-zinc-300">
                       {r.lines.map((rl) => {
                         const line = po.lines.find((l) => l.id === rl.poLineId);
                         return (
                           <li key={rl.id}>
-                            {rl.quantity} x {line?.description ?? "Item"} at {formatMoney(rl.unitCost, r.currency)}
+                            {rl.quantity} x {line?.description ?? "Item"} at <Money amount={rl.unitCost} currency={r.currency} />
                           </li>
                         );
                       })}

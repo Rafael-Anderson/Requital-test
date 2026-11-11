@@ -19,10 +19,10 @@ import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
 import ScrollFade from "@/components/ui/ScrollFade";
-import { formatMoney } from "@/lib/money";
 import { isMarketplaceChannel } from "@/lib/channels";
 import { ChannelSourceBadge } from "@/components/channels/ChannelBadges";
 import Link from "next/link";
+import Money from "@/components/Money";
 
 const POLL_INTERVAL_MS = 20_000;
 
@@ -215,7 +215,7 @@ function OrdersPageContent() {
                           </div>
                         )}
                         <div className="text-[13.5px] text-text-secondary dark:text-zinc-300">{order.customerName}</div>
-                        <div className="text-sm font-bold text-text-primary dark:text-zinc-50">{formatMoney(order.total, order.currency)}</div>
+                        <div className="text-sm font-bold text-text-primary dark:text-zinc-50"><Money amount={order.total} currency={order.currency} /></div>
                         {order.deliveryDate && (
                           <div className="text-xs text-text-muted mt-1">
                             {new Date(order.deliveryDate).toLocaleDateString()}

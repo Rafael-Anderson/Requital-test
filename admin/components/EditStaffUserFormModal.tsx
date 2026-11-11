@@ -57,9 +57,19 @@ export default function EditStaffUserFormModal({
   }
 
   return (
-    <Modal onClose={onClose} size="sm" title="Edit staff account">
+    <Modal onClose={onClose} size="sm" title="Edit staff account"
+      footer={(requestClose) => (
+        <>
+          <Button type="button" variant="secondary" onClick={requestClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="edit-staff-user-form-modal-form" variant="primary" disabled={saving || (needsOutlet && outlets.length === 0)} loading={saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </>
+      )}>
       {(requestClose) => (
-      <form onSubmit={handleSubmit}>
+      <form id="edit-staff-user-form-modal-form" onSubmit={handleSubmit}>
         <div className="space-y-3.5">
           <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
           <p className="text-xs text-text-faint -mt-2">{user.email}</p>
@@ -80,15 +90,6 @@ export default function EditStaffUserFormModal({
               options={outlets.map((o) => ({ value: String(o.id), label: o.name }))}
             />
           )}
-        </div>
-
-        <div className="flex justify-end gap-2 mt-5 pb-6 sticky bottom-0 bg-surface dark:bg-zinc-900">
-          <Button type="button" variant="secondary" onClick={requestClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={saving || (needsOutlet && outlets.length === 0)} loading={saving}>
-            {saving ? "Saving…" : "Save changes"}
-          </Button>
         </div>
       </form>
       )}

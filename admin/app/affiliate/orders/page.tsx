@@ -12,7 +12,7 @@ import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
-import { formatMoney } from "@/lib/money";
+import Money from "@/components/Money";
 
 const PAGE_SIZE = 20;
 
@@ -100,7 +100,7 @@ export default function AffiliateOrdersPage() {
                 {o.affiliateName} ({o.code})
               </div>
               <div className="mt-0.5 text-xs text-text-muted">
-                Order {formatMoney(o.orderTotal, o.currency)} · commission {formatMoney(o.commissionAmount, o.currency)}
+                Order <Money amount={o.orderTotal} currency={o.currency} /> · commission <Money amount={o.commissionAmount} currency={o.currency} />
               </div>
             </CardListItem>
           ))}
@@ -151,8 +151,8 @@ export default function AffiliateOrdersPage() {
                 <TD className="text-text-muted">
                   {o.affiliateName} <span className="text-xs">({o.code})</span>
                 </TD>
-                <TD>{formatMoney(o.orderTotal, o.currency)}</TD>
-                <TD className="font-medium">{formatMoney(o.commissionAmount, o.currency)}</TD>
+                <TD><Money amount={o.orderTotal} currency={o.currency} /></TD>
+                <TD className="font-medium"><Money amount={o.commissionAmount} currency={o.currency} /></TD>
                 <TD className={`capitalize font-medium ${STATUS_CLASS[o.status] ?? ""}`}>{o.status}</TD>
                 <TD>
                   {o.status === "pending" ? (

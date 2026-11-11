@@ -23,6 +23,7 @@ import Combobox from "@/components/ui/Combobox";
 import Tooltip from "@/components/ui/Tooltip";
 import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 interface WorkingItem {
   productId: number;
@@ -236,7 +237,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
                   {item.quantity} × {item.productName}
                 </span>
                 <span className="shrink-0">
-                  {formatMoney(Number(item.price) * item.quantity, currency)}
+                  <Money amount={Number(item.price) * item.quantity} currency={currency} />
                 </span>
               </li>
             ))}
@@ -247,17 +248,17 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
       <div className="border-t border-black/5 dark:border-white/10 pt-3 space-y-1">
         <div className="flex items-center justify-between text-sm">
           <span className="text-text-muted">Subtotal</span>
-          <span>{formatMoney(subtotal, currency)}</span>
+          <span><Money amount={subtotal} currency={currency} /></span>
         </div>
         {discountAmount > 0 && (
           <div className="flex items-center justify-between text-sm text-green-600 dark:text-green-400">
             <span>Discount</span>
-            <span>-{formatMoney(discountAmount, currency)}</span>
+            <span>-<Money amount={discountAmount} currency={currency} /></span>
           </div>
         )}
         <div className="flex items-center justify-between text-sm font-medium pt-1">
           <span>Total</span>
-          <span>{formatMoney(total, currency)}</span>
+          <span><Money amount={total} currency={currency} /></span>
         </div>
       </div>
     </Card>
