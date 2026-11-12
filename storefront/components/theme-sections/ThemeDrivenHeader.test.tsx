@@ -211,7 +211,7 @@ describe("ThemeDrivenHeader — mobile menu trigger and zone columns (N4)", () =
   it("the zone grid gives the side zones equal room and the middle what it needs (not three equal thirds)", () => {
     const { container } = renderHeader(CLASSIC_HEADER);
     const grid = container.querySelector(".grid.items-center.gap-4")!;
-    expect(grid.className).toContain("grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)]");
+    expect(grid.className).toContain("grid-cols-[minmax(max-content,1fr)_minmax(0,auto)_minmax(max-content,1fr)]");
     expect(grid.className).not.toContain("grid-cols-3");
   });
 
@@ -263,4 +263,28 @@ describe("ThemeDrivenHeader — logo (regression: logo vanished once a nav sat i
     const r = render(<ThemeDrivenHeader shopSlug="test" shop={shop} customer={null} count={0} config={rows} />);
     expect(r.container.querySelector(".grid.items-center.gap-4")!.className).toContain("minmax(max-content,1fr)");
   });
+
+  it("the logo never shrinks (shrink-0) but is bounded by a share of the phone width, so it can neither vanish nor widen the page", () => {
+    themed("/uploads/theme-logo.png");
+    const { container } = withLogo(null);
+    const cls = container.querySelector("img.theme-logo-img")!.className;
+    expect(cls).toContain("shrink-0");
+    expect(cls).not.toContain("min-w-0");
+    expect(cls).toContain("max-w-[36vw]");
+    expect(cls).toContain("sm:max-w-40");
+  });
+
+  it("the business-name text is bounded the same way: truncate does not shrink max-content, and an unbounded name made the header 528px wide on a 390px phone", () => {
+    themed(undefined);
+    const { container } = withLogo(null);
+    const name = Array.from(container.querySelectorAll("span")).find((el) => el.textContent === "Test Shop")!;
+    expect(name.className).toContain("truncate");
+    expect(name.className).toContain("max-w-[36vw]");
+  });
+
+  it("the middle track can shrink to nothing, so a wide nav gives way before the logo or the icons", () => {
+    const { container } = render(<ThemeDrivenHeader shopSlug="test" shop={shop} customer={null} count={0} config={CLASSIC_HEADER} />);
+    expect(container.querySelector(".grid.items-center.gap-4")!.className).toContain("_minmax(0,auto)_");
+  });
 });
+

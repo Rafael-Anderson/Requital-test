@@ -79,3 +79,25 @@ describe("CollectionShowcase — configurable grid settings", () => {
     expect(await findByText("Collection 1")).toBeInTheDocument();
   });
 });
+
+describe("CollectionShowcase: thumbnails use the Icon", () => {
+  it("shows the Icon, not the banner, and falls back to the banner when there is no Icon", async () => {
+    mockShop = null;
+    listCollections.mockResolvedValue([
+      collection(1, { image: "/banner-1.jpg", icon: "/icon-1.png" }),
+      collection(2, { image: "/banner-2.jpg", icon: null }),
+    ]);
+    const { container, findAllByRole } = render(<CollectionShowcase />);
+    await findAllByRole("link");
+    expect(Array.from(container.querySelectorAll("img")).map((i) => i.getAttribute("src"))).toEqual(["/icon-1.png", "/banner-2.jpg"]);
+  });
+
+  it("with neither image shows the plain tile, no img", async () => {
+    mockShop = null;
+    listCollections.mockResolvedValue([collection(1, { image: null, icon: null })]);
+    const { container, findByText } = render(<CollectionShowcase />);
+    await findByText("Collection 1");
+    expect(container.querySelector("img")).toBeNull();
+  });
+});
+

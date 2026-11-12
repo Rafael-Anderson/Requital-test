@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useShop } from "@/lib/shop-context";
 import { bioLinkClickUrl, getBioLinks, getBioPageConfig, resolveImageUrl } from "@/lib/api";
+import { collectionTileImage } from "@/lib/collection-thumb";
 import { resolveBioPageDisplay } from "@/lib/bio-page";
 import { SOCIAL_ICONS } from "@/lib/social-icons";
 import type { BioLink, BioPageConfig } from "@/lib/types";
@@ -98,7 +99,7 @@ export default function BioPage() {
               link.type === "PRODUCT"
                 ? link.product?.thumbnail
                 : link.type === "COLLECTION"
-                  ? link.collection?.image
+                  ? collectionTileImage(link.collection)
                   : link.type === "TEMPLATE"
                     ? link.template?.image
                     : null;

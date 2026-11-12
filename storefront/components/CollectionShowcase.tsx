@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useShop } from "@/lib/shop-context";
 import { listCollections, resolveImageUrl } from "@/lib/api";
+import { collectionTileImage } from "@/lib/collection-thumb";
 import type { Collection, CollectionsGridAspectRatio, CollectionsGridColumns, CollectionsGridGap } from "@/lib/types";
 
 // Literal Tailwind class lookups, not string interpolation — Tailwind's
@@ -58,11 +59,11 @@ export default function CollectionShowcase() {
             href={`${shopBasePath}/collections/${c.slug}`}
             className={`group relative shrink-0 w-40 sm:w-auto ${aspectClass} rounded-xl overflow-hidden snap-start`}
           >
-            {c.image ? (
+            {collectionTileImage(c) ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={resolveImageUrl(c.image) ?? undefined}
+                  src={resolveImageUrl(collectionTileImage(c)) ?? undefined}
                   alt=""
                   className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />

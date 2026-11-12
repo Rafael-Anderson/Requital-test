@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { useShop } from "@/lib/shop-context";
 import { listCollections, resolveImageUrl } from "@/lib/api";
+import { collectionCircleImage, collectionTileImage } from "@/lib/collection-thumb";
 import { editableAttrs } from "@/lib/editable-attrs";
 import { sanitizeDescriptionHtml } from "@/lib/sanitize-html";
 import {
@@ -123,9 +124,9 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
               <div className="size-16 rounded-full overflow-hidden bg-black/5">
                 {/* The circle shows the collection's ICON only. The banner (c.image) belongs to
                     the collection's own page; with no icon the first letter shows, never the banner. */}
-                {c.icon ? (
+                {collectionCircleImage(c) ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={resolveImageUrl(c.icon) ?? undefined} alt="" className="w-full h-full object-cover theme-hover-zoom" />
+                  <img src={resolveImageUrl(collectionCircleImage(c)) ?? undefined} alt="" className="w-full h-full object-cover theme-hover-zoom" />
                 ) : (
                   <span
                     className="w-full h-full flex items-center justify-center text-lg font-semibold uppercase"
@@ -159,10 +160,10 @@ export default function FeaturedCollectionsSection({ sectionId, settings, blocks
                 each tile 300-850px tall. object-cover keeps the crop; only
                 extreme configs are clamped. */}
             <div className={`relative ${aspect} max-h-[360px] bg-black/5 overflow-hidden`}>
-              {c.image ? (
+              {collectionTileImage(c) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={resolveImageUrl(c.image) ?? undefined}
+                  src={resolveImageUrl(collectionTileImage(c)) ?? undefined}
                   alt=""
                   className="w-full h-full object-cover theme-hover-zoom"
                 />

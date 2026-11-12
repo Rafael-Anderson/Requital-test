@@ -216,6 +216,20 @@ describe("FeaturedCollectionsSection", () => {
   });
 });
 
+describe("FeaturedCollectionsSection: rectangular tiles use the Icon", () => {
+  it("shows the Icon, not the banner, and falls back to the banner when there is no Icon", async () => {
+    listCollections.mockResolvedValue([
+      { ...collection(1), image: "/banner-1.jpg", icon: "/icon-1.png" },
+      { ...collection(2), image: "/banner-2.jpg", icon: null },
+    ]);
+    const { container, findAllByRole } = render(
+      <FeaturedCollectionsSection sectionId="s" settings={{} as unknown as SectionSettings} blocks={[]} />,
+    );
+    await findAllByRole("link");
+    expect(Array.from(container.querySelectorAll("img")).map((i) => i.getAttribute("src"))).toEqual(["/icon-1.png", "/banner-2.jpg"]);
+  });
+});
+
 describe("FeaturedCollectionsSection header wrapping (N4)", () => {
   it("lets the heading and an outline View all button wrap instead of overflowing a narrow row", async () => {
     listCollections.mockResolvedValue([collection(1)]);

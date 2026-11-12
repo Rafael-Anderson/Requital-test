@@ -166,4 +166,25 @@ describe('Collection icon + banner (e2e)', () => {
       .send({ name: 'Y', icon: 'a'.repeat(300) })
       .expect(400);
   });
+
+  it('the public bio page carries both images of a linked collection', async () => {
+    const { token, slug } = await setupShop('ic-bio');
+    const created = await request(http())
+      .post('/collections')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Bio coll', image: '/uploads/collections/bb.jpg', icon: '/uploads/collections/bi.png' })
+      .expect(201);
+    const c = body<CollectionBody>(created);
+    await request(http())
+      .post('/shop/bio-links')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ type: 'COLLECTION', label: 'Shop it', collectionId: c.id })
+      .expect(201);
+    const pub = await request(http()).get(`/public/${slug}/bio-links`).expect(200);
+    const links = body<Array<{ type: string; collection?: { image: string | null; icon: string | null } | null }>>(pub);
+    const link = links.find((l) => l.type === 'COLLECTION');
+    expect(link?.collection?.image).toBe('/uploads/collections/bb.jpg');
+    expect(link?.collection?.icon).toBe('/uploads/collections/bi.png');
+  });
 });
+
