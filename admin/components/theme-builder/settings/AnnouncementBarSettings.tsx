@@ -7,7 +7,6 @@ import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundCon
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
 import MarqueeSpeedControl from "./shared/MarqueeSpeedControl";
 import VisibilityControl from "./shared/VisibilityControl";
-import LegacyAnnouncementSettings from "../LegacyAnnouncementSettings";
 import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
 
 const SPEED_OPTIONS = [
@@ -75,8 +74,6 @@ export default function AnnouncementBarSettings({
         value={settings.visibility as SectionVisibility}
         onChange={(v) => onUpdate("visibility", v)}
       />
-
-      <LegacyAnnouncementSettings />
     </div>
   );
 }

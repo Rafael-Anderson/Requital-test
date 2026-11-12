@@ -23,6 +23,7 @@ function fixtureEditor(overrides: Partial<ThemeEditorState> = {}): ThemeEditorSt
     legacyTheme: fixtureLegacyTheme(),
     updateLegacyTheme: vi.fn(),
     applyHomepagePreset: vi.fn(),
+    builderContext: { sectionsMode: false, sectionTypesPresent: new Set() },
     ...overrides,
   } as ThemeEditorState;
 }
@@ -79,13 +80,16 @@ describe("HomeTabSetting — Collections grid mode", () => {
     expect(editor.updateLegacyTheme).toHaveBeenCalledWith({ collectionsGridShowTitle: false });
   });
 
-  it("grays the controls out once the shop has a published sections theme, same as the mode toggle above it", () => {
+  it("in Sections mode shows only the preset picker: no legacy toggle, grid controls or blurred notice", () => {
     const editor = fixtureEditor({
-      theme: { id: 1, isPublished: true } as ThemeEditorState["theme"],
+      builderContext: { sectionsMode: true, sectionTypesPresent: new Set() },
       legacyTheme: fixtureLegacyTheme({ homeTabMode: "collections" }),
     });
     render(<HomeTabSetting editor={editor} />);
 
-    expect(screen.getAllByText(/manage your homepage layout in the Sections tab/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Minimal")).toBeInTheDocument();
+    expect(screen.queryByText("Columns")).not.toBeInTheDocument();
+    expect(screen.queryByText("Show collection title")).not.toBeInTheDocument();
+    expect(screen.queryByText(/uses the Sections builder/i)).not.toBeInTheDocument();
   });
 });

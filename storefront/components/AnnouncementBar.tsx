@@ -23,8 +23,15 @@ export default function AnnouncementBar() {
   const { shop, shopSlug, themeConfig } = useShop();
 
   const raw = (themeConfig?.header.settings as { announcementBar?: unknown } | undefined)?.announcementBar;
+  // A config saved by the Sections tab's "Announcement bar" (marked `managed`) is the single
+  // authority: Off means no bar at all, with no fallback to the legacy notification bar.
+  // A config from before that panel existed (no `managed`) keeps the old behaviour exactly:
+  // disabled falls through to the legacy bar.
+  const managed = !!raw && typeof raw === "object" && (raw as AnnouncementBarConfig).managed === true;
+  if (managed && !(raw as AnnouncementBarConfig).enabled) return null;
   const cfg = normalizeConfig(raw);
   if (cfg) return <ThemedAnnouncementBar cfg={cfg} shopSlug={shopSlug} />;
+  if (managed) return null; // on, but no message to show
 
   // --- Legacy path (unchanged) ---
   const messages = parseNotificationMessages(shop?.notificationText);

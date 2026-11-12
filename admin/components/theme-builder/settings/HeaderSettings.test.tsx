@@ -135,3 +135,11 @@ describe("HeaderSettings — scroll behavior (§8.7 item 2)", () => {
     expect(screen.getByText("Transparent over hero")).toBeInTheDocument();
   });
 });
+
+describe("HeaderSettings — announcement bar moved to the Sections tab", () => {
+  it("no longer carries any announcement bar control (they live in the Announcement bar row)", () => {
+    render(<HeaderSettings settings={{}} blocks={BLOCKS} onUpdate={vi.fn()} onApplyPreset={vi.fn()} />);
+    expect(screen.queryByText(/announcement/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Scrolling (marquee)")).not.toBeInTheDocument();
+  });
+});

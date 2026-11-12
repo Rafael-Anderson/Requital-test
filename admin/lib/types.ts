@@ -1502,7 +1502,9 @@ export const SECTION_TYPES: ThemeSectionType[] = [
 ];
 
 export const SECTION_TYPE_LABELS: Record<ThemeSectionType, string> = {
-  announcement_bar: "Announcement Bar",
+  // NOT "Announcement bar": that name belongs to the one persistent bar above the header, which has
+  // its own row at the top of the Sections tab. This section is a strip placed in the homepage body.
+  announcement_bar: "Announcement strip",
   hero: "Hero",
   featured_collections: "Featured Collections",
   product_grid: "Product Grid",
@@ -1643,6 +1645,8 @@ export interface AnnouncementBarConfig {
   speed?: "fast" | "medium" | "slow"; // rotation interval of a non-marquee bar
   // Marquee scroll speed in px/second (10..200). null / absent = 40.
   marqueeSpeed?: number | null;
+  // Set by the Sections tab's Announcement bar panel: authoritative, Off = no bar at all.
+  managed?: boolean;
   dismissible?: boolean;
   background?: string;
   textColor?: string;

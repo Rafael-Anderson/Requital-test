@@ -336,3 +336,19 @@ body {
 .dark .scroll-fade[data-sticky-first="1"] :is(th, td):first-child {
   background: #18181b;
 }
+
+/* The field a theme-builder settings search result points at: a short highlight after the panel
+   scrolls to it (components/theme-builder/SettingsPanel.tsx). Respects reduced motion by being a
+   plain colour fade, no movement. */
+@keyframes theme-search-highlight-fade {
+  from {
+    background-color: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.theme-search-highlight {
+  border-radius: 0.5rem;
+  animation: theme-search-highlight-fade 1.8s ease-out;
+}

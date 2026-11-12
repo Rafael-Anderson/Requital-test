@@ -27,6 +27,7 @@ import CustomCssSettings from "./theme-settings/CustomCssSettings";
 import CollectionPageSettings from "./theme-settings/CollectionPageSettings";
 import ProductPageSettings from "./theme-settings/ProductPageSettings";
 import FloatingElementsSettings from "./theme-settings/FloatingElementsSettings";
+import AnnouncementBarChromeSettings from "./settings/AnnouncementBarChromeSettings";
 import HeaderSettings from "./settings/HeaderSettings";
 import FooterSettings from "./settings/FooterSettings";
 import HeroSettings from "./settings/HeroSettings";
@@ -55,10 +56,10 @@ import {
   ButtonShapeSetting,
   ButtonFillSetting,
 } from "./LayoutSettings";
-import { SECTION_TYPE_LABELS, type ThemeSectionType } from "@/lib/types";
+import { SECTION_TYPE_LABELS, type AnnouncementBarConfig, type ThemeSectionType } from "@/lib/types";
+import { resolveLayoutEntry, type LayoutEntryId } from "@/lib/theme-builder-registry";
 import { schemeColorPresets } from "@/lib/scheme-color-presets";
 import { THEME_SETTINGS_CATEGORY_LABELS } from "@/lib/theme-settings-categories";
-import { THEME_LAYOUT_CATEGORY_LABELS } from "@/lib/theme-layout-categories";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
 
 type SectionSettingsProps = {
@@ -127,7 +128,7 @@ const THEME_SETTINGS_COMPONENTS: Record<
 // theme.config. Menu/Home tab don't take an editor prop (self-contained via
 // their own API calls), so this map is prop-less rather than reusing
 // THEME_SETTINGS_COMPONENTS' `{ editor }` shape.
-const LAYOUT_COMPONENTS: Record<(typeof THEME_LAYOUT_CATEGORY_LABELS)[number], ComponentType<{ editor: ThemeEditorState }>> = {
+const LAYOUT_COMPONENTS: Record<LayoutEntryId, ComponentType<{ editor: ThemeEditorState }>> = {
   "Home tab": HomeTabSetting,
   Menu: MenuSetting,
   "Homepage layout": HomepageLayoutSetting,
@@ -143,56 +144,41 @@ const LAYOUT_COMPONENTS: Record<(typeof THEME_LAYOUT_CATEGORY_LABELS)[number], C
   "Button fill": ButtonFillSetting,
 };
 
-// Purely client-side DOM filtering (storefront-v2 Phase 4A) — no data
-// changes, no per-field wiring across the ~30 differently-authored
-// settings components this panel dispatches to. Every one of them already
-// follows the same flat convention (a `space-y-4` root whose direct
-// children are each one field/divider/sub-group — confirmed by reading
-// ProductCardsSettings/CollectionPageSettings/AnimationsSettings/
-// HeaderSettings/etc.), so filtering by each direct child's own
-// textContent against the query is a real generalization, not a hack tied
-// to one form's markup. A divider (<hr>, no text of its own) always hides
-// while a query is active — a lone floating rule with nothing left under it
-// reads as more broken than briefly hidden. A header nested together with
-// its own fields in one wrapper div (e.g. Product Cards' "Media" group)
-// naturally stays visible whenever any of its children's label text
-// matches, since textContent concatenates the whole subtree — no separate
-// header/divider-matching logic needed for that shape.
-function useSettingsSearchFilter(containerRef: React.RefObject<HTMLDivElement | null>, query: string, contentKey: unknown) {
+// Scrolls to and briefly highlights the field a global search result pointed at. The result
+// carries the field's label; the panel's direct field children (each settings component renders a
+// flat list of fields under one root) are matched on their text, so no per-field wiring is needed.
+// Runs after the panel for the new selection has rendered. A missing label just leaves the panel
+// at its top.
+const HIGHLIGHT_CLASS = "theme-search-highlight";
+function useScrollToSetting(containerRef: React.RefObject<HTMLDivElement | null>, editor: ThemeEditorState, contentKey: unknown) {
+  const { scrollRequest, setScrollRequest } = editor;
   useEffect(() => {
+    if (!scrollRequest) return;
     const root = containerRef.current;
     if (!root) return;
-    // Every settings component in this family renders its fields as the
-    // direct children of its own single root wrapper div (`space-y-4`),
-    // which is itself the one child of the ref'd container here — so the
-    // real field list to filter is one level down, not root.children
-    // itself (that's just [Component's root div]).
+    const label = scrollRequest.label?.trim().toLowerCase();
     const fieldContainer = root.children.length === 1 ? root.children[0] : root;
-    const q = query.trim().toLowerCase();
-    for (const child of Array.from(fieldContainer.children)) {
-      const el = child as HTMLElement;
-      if (!q) {
-        el.style.display = "";
-        continue;
+    let target: HTMLElement | null = null;
+    if (label) {
+      for (const child of Array.from(fieldContainer.children)) {
+        const el = child as HTMLElement;
+        if ((el.textContent ?? "").toLowerCase().includes(label)) {
+          target = el;
+          break;
+        }
       }
-      if (el.tagName === "HR") {
-        el.style.display = "none";
-        continue;
-      }
-      const text = (el.textContent ?? "").toLowerCase();
-      el.style.display = text.includes(q) ? "" : "none";
     }
-    // contentKey (whichever category/section/block is currently rendered)
-    // forces a re-filter when the panel's content swaps out but the query
-    // string itself hasn't changed.
+    setScrollRequest(null);
+    if (!target) return;
+    target.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    target.classList.add(HIGHLIGHT_CLASS);
+    const t = setTimeout(() => target?.classList.remove(HIGHLIGHT_CLASS), 1800);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, contentKey]);
+  }, [scrollRequest, contentKey]);
 }
 
-// Wraps every SettingsPanel branch's body in one shared filtered container —
-// the search input itself lives in PreviewFrame.tsx's toolbar now, next to
-// the Preview page selector; editor.settingsSearchQuery is the shared state
-// connecting that input to this filter.
+// Wraps every SettingsPanel branch's body, so a search result can scroll to its field.
 function FilterableSettingsBody({
   editor,
   contentKey,
@@ -204,18 +190,8 @@ function FilterableSettingsBody({
   heading: ReactNode;
   children: ReactNode;
 }) {
-  const { settingsSearchQuery: query, setSettingsSearchQuery: setQuery } = editor;
   const bodyRef = useRef<HTMLDivElement>(null);
-  useSettingsSearchFilter(bodyRef, query, contentKey);
-  // Reset the search whenever the merchant selects something new — a stale
-  // query silently hiding fields on a freshly-opened form would be
-  // confusing, not convenient.
-  useEffect(() => {
-    setQuery("");
-    // Resets on contentKey change only — setQuery is a stable setState
-    // setter and doesn't need to be in the deps array.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contentKey]);
+  useScrollToSetting(bodyRef, editor, contentKey);
   return (
     <div className="p-4">
       {heading}
@@ -254,15 +230,17 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
   }
 
   if (editor.editorMode === "layout") {
-    const category = editor.layoutCategory;
+    // A saved or deep-linked entry that does not apply to this shop's mode falls back to the first
+    // one that does, never to a dead pane.
+    const category = resolveLayoutEntry(editor.layoutCategory, editor.builderContext);
     if (!category) {
       return (
         <div className="flex h-full items-center justify-center">
-          <EmptyState title="No category selected" description="Select a category on the left to edit it." />
+          <EmptyState title="Nothing to configure here" description="No layout settings apply to your storefront." />
         </div>
       );
     }
-    const Component = LAYOUT_COMPONENTS[category as (typeof THEME_LAYOUT_CATEGORY_LABELS)[number]];
+    const Component = LAYOUT_COMPONENTS[category];
     return (
       <FilterableSettingsBody editor={editor} contentKey={`layout:${category}`} heading={<h2 className="mb-4 text-sm font-semibold">{category}</h2>}>
         <Component editor={editor} />
@@ -275,6 +253,20 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
       <div className="flex h-full items-center justify-center">
         <EmptyState title="No selection" description="Select a section or block on the left to edit it." />
       </div>
+    );
+  }
+
+  if (selection.kind === "announcement") {
+    return (
+      <FilterableSettingsBody editor={editor} contentKey="announcement" heading={<h2 className="mb-4 text-sm font-semibold">Announcement bar</h2>}>
+        <AnnouncementBarChromeSettings
+          value={config.header.settings.announcementBar as AnnouncementBarConfig | undefined}
+          onChange={editor.updateAnnouncementBar}
+          colorPresets={schemeColorPresets(config.globalSettings.colorSchemes)}
+          position={config.header.settings.announcementPosition as string | undefined}
+          onPositionChange={(v) => editor.updateHeaderSetting("announcementPosition", v)}
+        />
+      </FilterableSettingsBody>
     );
   }
 

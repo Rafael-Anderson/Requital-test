@@ -304,3 +304,43 @@ describe("HeroSection banner height", () => {
     expect(hero.className).not.toContain("theme-banner-minh");
   });
 });
+
+// "Content position" (the admin's 3x3 grid) is exposed by the Hero section ONLY (audit of every
+// section and block panel in admin/components/theme-builder). It stays because it visibly changes
+// the render: each of the nine cells puts the content block in a different corner of the hero,
+// through real flex alignment on the hero's own box.
+describe("HeroSection content position (the one 3x3 grid in the builder)", () => {
+  const CELLS: Array<[string, string, string]> = [
+    ["top-left", "items-start", "justify-start"],
+    ["top-center", "items-start", "justify-center"],
+    ["top-right", "items-start", "justify-end"],
+    ["center-left", "items-center", "justify-start"],
+    ["center-center", "items-center", "justify-center"],
+    ["center-right", "items-center", "justify-end"],
+    ["bottom-left", "items-end", "justify-start"],
+    ["bottom-center", "items-end", "justify-center"],
+    ["bottom-right", "items-end", "justify-end"],
+  ];
+
+  it.each(CELLS)("%s aligns the content %s / %s", (position, vertical, horizontal) => {
+    const { container } = renderHero({ contentPosition: position, bannerImages: [{ url: IMG_A }] });
+    const hero = container.querySelector("[data-theme-hero]") as HTMLElement;
+    expect(hero.className).toContain(vertical);
+    expect(hero.className).toContain(horizontal);
+    // the content wrapper is narrower than the hero, so the alignment has room to show
+    expect(hero.lastElementChild?.className).toContain("max-w-2xl");
+  });
+
+  it("nine cells produce nine distinct renders, and an unknown value falls back to centre", () => {
+    const seen = new Set<string>();
+    for (const [position] of CELLS) {
+      const { container, unmount } = renderHero({ contentPosition: position });
+      const hero = container.querySelector("[data-theme-hero]") as HTMLElement;
+      seen.add(hero.className.split(" ").filter((c) => /^(items|justify)-/.test(c)).join(" "));
+      unmount();
+    }
+    expect(seen.size).toBe(9);
+    const { container } = renderHero({ contentPosition: "nonsense" });
+    expect((container.querySelector("[data-theme-hero]") as HTMLElement).className).toContain("items-center justify-center");
+  });
+});

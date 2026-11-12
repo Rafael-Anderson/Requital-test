@@ -6,6 +6,7 @@ import { STOREFRONT_URL, storefrontUrlFor, getThemePreviewToken, listCollections
 import SelectionActionBar from "./SelectionActionBar";
 import DropdownMenu from "@/components/ui/DropdownMenu";
 import type { Shop, Collection, Product } from "@/lib/types";
+import BuilderSettingsSearch from "./BuilderSettingsSearch";
 import {
   HEADER_CHROME_ID,
   FOOTER_CHROME_ID,
@@ -134,46 +135,16 @@ function resolvePreviewUrl(
 // page to preview — a full per-item picker is more than a page switcher
 // needs; a merchant with zero collections/products yet just doesn't get
 // those two options (rather than linking to a slug that 404s).
-// Moved here from SettingsPanel.tsx's left/right detail column (storefront-v2
-// UX pass) so it sits next to the Preview page selector in one toolbar row
-// instead of floating at the top of the settings sidebar — the query itself
-// still lives in useThemeEditor.ts (settingsSearchQuery) since the actual
-// filtering happens over in SettingsPanel.tsx, a sibling panel.
-function SettingsSearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="relative ms-auto w-56">
-      <Search className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-400" />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Search settings..."
-        className="h-8 w-full rounded-lg border border-black/10 bg-surface ps-8 pe-8 text-sm outline-none focus:border-accent focus:ring-[3px] focus:ring-accent/20 dark:border-white/15 dark:bg-zinc-900"
-      />
-      {value && (
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          aria-label="Clear search"
-          className="absolute end-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer"
-        >
-          <X className="size-3.5" />
-        </button>
-      )}
-    </div>
-  );
-}
+// The settings search lives in BuilderSettingsSearch.tsx (it searches the whole builder).
 
 function PageSwitcher({
   previewPath,
   setPreviewPath,
-  searchQuery,
-  setSearchQuery,
+  editor,
 }: {
   previewPath: string;
   setPreviewPath: (path: string) => void;
-  searchQuery: string;
-  setSearchQuery: (q: string) => void;
+  editor: ThemeEditorState;
 }) {
   // Bug 4's ask: show the actual collection/product being previewed by
   // name, with a picker when more than one exists - fetch the full lists
@@ -275,7 +246,7 @@ function PageSwitcher({
           </>
         )}
       </DropdownMenu>
-      <SettingsSearchBox value={searchQuery} onChange={setSearchQuery} />
+      <BuilderSettingsSearch editor={editor} />
     </div>
   );
 }
@@ -301,7 +272,7 @@ export default function PreviewFrame({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const legacyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, reorderSections, publishVersion, isDragging, previewPath, setPreviewPath, settingsSearchQuery, setSettingsSearchQuery } = editor;
+  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, reorderSections, publishVersion, isDragging, previewPath, setPreviewPath } = editor;
   // The reverse-channel listener below reads this instead of closing over
   // `config` directly, so that effect doesn't need `config` in its
   // dependency array — without this, the listener would tear down and
@@ -650,8 +621,7 @@ export default function PreviewFrame({
       <PageSwitcher
         previewPath={previewPath}
         setPreviewPath={setPreviewPath}
-        searchQuery={settingsSearchQuery}
-        setSearchQuery={setSettingsSearchQuery}
+        editor={editor}
       />
       <div className="flex flex-1 items-start justify-center overflow-auto p-4">
         {src ? (

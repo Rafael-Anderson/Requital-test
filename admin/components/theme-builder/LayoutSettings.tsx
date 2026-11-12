@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import PresetPicker from "@/components/PresetPicker";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Toggle from "@/components/ui/Toggle";
@@ -52,31 +51,6 @@ import { HOMEPAGE_PRESETS, type ThemeEditorState } from "@/lib/useThemeEditor";
 
 type LayoutSettingProps = { editor: ThemeEditorState };
 
-// Homepage arrangement/layout (Home tab, Homepage layout, Top bar layout)
-// is decided by the new Sections builder the instant a shop has a
-// published theme.config — storefront/app/[shop]/page.tsx and TopBar.tsx
-// both check themeConfig first and never fall through to these legacy
-// themesettings fields once it exists. Editing them here is then a dead
-// control: it saves, but nothing on the live storefront reads it anymore.
-// Gray the control out and explain where the real control moved, rather
-// than let a merchant think they changed something. `editor.theme.isPublished`
-// is the same "does this shop have a live new-system theme" signal the
-// storefront's own dispatch is keyed on.
-function DeadOnceSectionsPublished({ editor, children }: { editor: LayoutSettingProps["editor"]; children: ReactNode }) {
-  const disabled = editor.theme?.isPublished ?? false;
-  if (!disabled) return <>{children}</>;
-  return (
-    <div className="relative">
-      <div className="pointer-events-none opacity-40">{children}</div>
-      <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/70 p-4 text-center dark:bg-zinc-900/70">
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-          Your storefront uses the Sections builder. Manage your homepage layout in the Sections tab.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // SegmentedToggle is string-valued only — columns are converted to/from a
 // number at the call site below rather than widening a shared component's
 // generic constraint for one caller.
@@ -97,63 +71,66 @@ const COLLECTIONS_GRID_ASPECT_RATIO_OPTIONS = [
 ];
 
 export function HomeTabSetting({ editor }: LayoutSettingProps) {
-  const { legacyTheme, updateLegacyTheme, applyHomepagePreset } = editor;
+  const { legacyTheme, updateLegacyTheme, applyHomepagePreset, builderContext } = editor;
   if (!legacyTheme) return null;
+  // In Sections mode only the preset picker does anything: it rewrites theme.config.sections. The
+  // Templates / Collections toggle and the collections grid are read only by the legacy homepage,
+  // so they are not shown there (lib/theme-builder-registry.ts, "Home tab").
+  const presets = (
+    <div>
+      <p className="mb-2 text-xs text-zinc-500">
+        Start from a preset section arrangement; edit it further in the Sections tab afterward.
+      </p>
+      <PresetPicker
+        singleColumn
+        options={HOMEPAGE_PRESETS.map((p) => ({ key: p.key, label: p.label }))}
+        value=""
+        onChange={(key) => applyHomepagePreset(key)}
+        renderThumbnail={(key) => <HomepagePresetThumbnail preset={key as (typeof HOMEPAGE_PRESETS)[number]["key"]} />}
+      />
+    </div>
+  );
+  if (builderContext.sectionsMode) return <div className="space-y-4">{presets}</div>;
   return (
     <div className="space-y-4">
-      <DeadOnceSectionsPublished editor={editor}>
-        <SegmentedToggle value={legacyTheme.homeTabMode} options={HOME_TAB_MODE_OPTIONS} onChange={(v) => void updateLegacyTheme({ homeTabMode: v })} />
-      </DeadOnceSectionsPublished>
+      <SegmentedToggle value={legacyTheme.homeTabMode} options={HOME_TAB_MODE_OPTIONS} onChange={(v) => void updateLegacyTheme({ homeTabMode: v })} />
 
       {legacyTheme.homeTabMode === "templates" ? (
-        <div>
-          <p className="mb-2 text-xs text-zinc-500">
-            Start from a preset section arrangement; edit it further in the Sections tab afterward.
-          </p>
-          <PresetPicker
-            singleColumn
-            options={HOMEPAGE_PRESETS.map((p) => ({ key: p.key, label: p.label }))}
-            value=""
-            onChange={(key) => applyHomepagePreset(key)}
-            renderThumbnail={(key) => <HomepagePresetThumbnail preset={key as (typeof HOMEPAGE_PRESETS)[number]["key"]} />}
-          />
-        </div>
+        presets
       ) : (
-        <DeadOnceSectionsPublished editor={editor}>
-          <div className="space-y-4">
-            <div>
-              <span className="mb-1.5 block text-xs font-medium text-zinc-500">Columns</span>
-              <SegmentedToggle
-                value={String(legacyTheme.collectionsGridColumns)}
-                options={COLLECTIONS_GRID_COLUMN_OPTIONS}
-                onChange={(v) => void updateLegacyTheme({ collectionsGridColumns: Number(v) })}
-              />
-            </div>
-            <div>
-              <span className="mb-1.5 block text-xs font-medium text-zinc-500">Gap</span>
-              <SegmentedToggle
-                value={legacyTheme.collectionsGridGap}
-                options={COLLECTIONS_GRID_GAP_OPTIONS}
-                onChange={(v) => void updateLegacyTheme({ collectionsGridGap: v })}
-              />
-            </div>
-            <div>
-              <span className="mb-1.5 block text-xs font-medium text-zinc-500">Image aspect ratio</span>
-              <SegmentedToggle
-                value={legacyTheme.collectionsGridImageAspectRatio}
-                options={COLLECTIONS_GRID_ASPECT_RATIO_OPTIONS}
-                onChange={(v) => void updateLegacyTheme({ collectionsGridImageAspectRatio: v })}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Show collection title</span>
-              <Toggle
-                checked={legacyTheme.collectionsGridShowTitle}
-                onChange={(v) => void updateLegacyTheme({ collectionsGridShowTitle: v })}
-              />
-            </div>
+        <div className="space-y-4">
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-zinc-500">Columns</span>
+            <SegmentedToggle
+              value={String(legacyTheme.collectionsGridColumns)}
+              options={COLLECTIONS_GRID_COLUMN_OPTIONS}
+              onChange={(v) => void updateLegacyTheme({ collectionsGridColumns: Number(v) })}
+            />
           </div>
-        </DeadOnceSectionsPublished>
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-zinc-500">Gap</span>
+            <SegmentedToggle
+              value={legacyTheme.collectionsGridGap}
+              options={COLLECTIONS_GRID_GAP_OPTIONS}
+              onChange={(v) => void updateLegacyTheme({ collectionsGridGap: v })}
+            />
+          </div>
+          <div>
+            <span className="mb-1.5 block text-xs font-medium text-zinc-500">Image aspect ratio</span>
+            <SegmentedToggle
+              value={legacyTheme.collectionsGridImageAspectRatio}
+              options={COLLECTIONS_GRID_ASPECT_RATIO_OPTIONS}
+              onChange={(v) => void updateLegacyTheme({ collectionsGridImageAspectRatio: v })}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Show collection title</span>
+            <Toggle
+              checked={legacyTheme.collectionsGridShowTitle}
+              onChange={(v) => void updateLegacyTheme({ collectionsGridShowTitle: v })}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -162,7 +139,7 @@ export function HomeTabSetting({ editor }: LayoutSettingProps) {
 // Self-contained via its own API calls (own menu-item CRUD, not the
 // legacy `themesettings` row) — takes the same { editor } prop as every
 // other Layout category component for a uniform call site in
-// SettingsPanel.tsx, but doesn't use it. Not gated by DeadOnceSectionsPublished:
+// SettingsPanel.tsx, but does not use it. Applies in both modes (see the registry):
 // the menu-item CRUD it drives (backend menu/ module) powers MenuBar.tsx on
 // the storefront regardless of which homepage system is active — it's a
 // genuinely separate, still-live feature, not a dead legacy control.
@@ -174,15 +151,13 @@ export function HomepageLayoutSetting({ editor }: LayoutSettingProps) {
   const { legacyTheme, updateLegacyTheme } = editor;
   if (!legacyTheme) return null;
   return (
-    <DeadOnceSectionsPublished editor={editor}>
-      <PresetPicker
-        singleColumn
-        options={HOMEPAGE_LAYOUT_OPTIONS}
-        value={legacyTheme.homepageLayout}
-        onChange={(key) => void updateLegacyTheme({ homepageLayout: key })}
-        renderThumbnail={(key) => <HomepageLayoutThumbnail layout={key} />}
-      />
-    </DeadOnceSectionsPublished>
+    <PresetPicker
+      singleColumn
+      options={HOMEPAGE_LAYOUT_OPTIONS}
+      value={legacyTheme.homepageLayout}
+      onChange={(key) => void updateLegacyTheme({ homepageLayout: key })}
+      renderThumbnail={(key) => <HomepageLayoutThumbnail layout={key} />}
+    />
   );
 }
 
@@ -190,15 +165,13 @@ export function TopBarLayoutSetting({ editor }: LayoutSettingProps) {
   const { legacyTheme, updateLegacyTheme } = editor;
   if (!legacyTheme) return null;
   return (
-    <DeadOnceSectionsPublished editor={editor}>
-      <PresetPicker
-        singleColumn
-        options={TOP_BAR_LAYOUT_OPTIONS}
-        value={legacyTheme.topBarLayout}
-        onChange={(key) => void updateLegacyTheme({ topBarLayout: key })}
-        renderThumbnail={(key) => <TopBarLayoutThumbnail layout={key} />}
-      />
-    </DeadOnceSectionsPublished>
+    <PresetPicker
+      singleColumn
+      options={TOP_BAR_LAYOUT_OPTIONS}
+      value={legacyTheme.topBarLayout}
+      onChange={(key) => void updateLegacyTheme({ topBarLayout: key })}
+      renderThumbnail={(key) => <TopBarLayoutThumbnail layout={key} />}
+    />
   );
 }
 
