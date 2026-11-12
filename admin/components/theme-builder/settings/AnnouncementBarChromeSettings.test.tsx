@@ -60,4 +60,47 @@ describe("AnnouncementBarChromeSettings", () => {
     );
     expect(screen.queryByText("Speed")).not.toBeInTheDocument();
   });
+
+  it("order is On/Off, then the text, then Speed directly under the text", () => {
+    render(
+      <AnnouncementBarChromeSettings
+        value={{ enabled: true, messages: ["Free delivery"], scrolling: true }}
+        onChange={vi.fn()}
+      />,
+    );
+    const html = document.body.innerHTML;
+    const onOff = html.indexOf("Announcement bar</span>");
+    const text = html.indexOf('aria-label="Message 1"');
+    const addMessage = html.indexOf("Add message");
+    const speed = html.indexOf(">Speed<");
+    const dismiss = html.indexOf("Dismissible");
+    expect(onOff).toBeGreaterThan(-1);
+    expect(onOff).toBeLessThan(text);
+    expect(text).toBeLessThan(speed);
+    expect(addMessage).toBeLessThan(speed);
+    // nothing but the text (and its Add message button) sits between the text and Speed
+    expect(speed).toBeLessThan(dismiss);
+  });
+
+  it("Off hides every other control and says the bar is not shown at all", () => {
+    render(<AnnouncementBarChromeSettings value={{ enabled: false, messages: ["x"], managed: true }} onChange={vi.fn()} />);
+    expect(screen.getByText(/not shown on your storefront at all/i)).toBeInTheDocument();
+    expect(screen.queryByText("Speed")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add message/i })).toBeNull();
+  });
+
+  it("the Above/Below position control lives here, not in the Header panel", async () => {
+    const user = userEvent.setup();
+    const onPositionChange = vi.fn();
+    render(
+      <AnnouncementBarChromeSettings
+        value={{ enabled: true, messages: ["x"] }}
+        onChange={vi.fn()}
+        position="above"
+        onPositionChange={onPositionChange}
+      />,
+    );
+    await user.selectOptions(screen.getByLabelText("Announcement bar position"), "below");
+    expect(onPositionChange).toHaveBeenCalledWith("below");
+  });
 });

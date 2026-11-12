@@ -9,10 +9,9 @@ import PresetPicker from "@/components/PresetPicker";
 import { HeaderPresetThumbnail } from "@/components/PresetThumbnails";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
-import AnnouncementBarChromeSettings from "./AnnouncementBarChromeSettings";
 import LegacyHeaderSettings from "../LegacyHeaderSettings";
 import { HEADER_PRESETS } from "@/lib/header-footer-presets";
-import { BLOCK_TYPE_LABELS, type AnnouncementBarConfig, type HeaderRow, type MobileNavMode, type ThemeBlock } from "@/lib/types";
+import { BLOCK_TYPE_LABELS, type HeaderRow, type MobileNavMode, type ThemeBlock } from "@/lib/types";
 
 // Header is global chrome (pinned to every page, not part of the
 // reorderable sections list). Its logo/menu/search/cart/account blocks are
@@ -138,14 +137,6 @@ export default function HeaderSettings({
           <option value="shadow">Shadow</option>
           <option value="none">None</option>
         </Select>
-        <Select
-          label="Announcement bar position"
-          value={(settings.announcementPosition as string) ?? "above"}
-          onChange={(e) => onUpdate("announcementPosition", e.target.value)}
-        >
-          <option value="above">Above header</option>
-          <option value="below">Below header</option>
-        </Select>
       </div>
 
       <Select
@@ -244,13 +235,6 @@ export default function HeaderSettings({
         )}
       </div>
 
-      <hr className="border-black/10 dark:border-white/10" />
-
-      <AnnouncementBarChromeSettings
-        value={settings.announcementBar as AnnouncementBarConfig | undefined}
-        onChange={(v) => onUpdate("announcementBar", v)}
-        colorPresets={colorPresets}
-      />
 
       <hr className="border-black/10 dark:border-white/10" />
 

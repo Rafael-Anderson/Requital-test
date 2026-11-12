@@ -9,19 +9,24 @@ import RichTextBlockEditor from "../RichTextBlockEditor";
 import MarqueeSpeedControl from "./shared/MarqueeSpeedControl";
 import type { AnnouncementBarConfig } from "@/lib/types";
 
-// The PERSISTENT chrome announcement bar (theme-builder-expansion Phase 5,
-// TBE3) — lives on header.settings.announcementBar, edited from within
-// HeaderSettings. Distinct from the homepage-body `announcement_bar` section
-// (AnnouncementBarSettings.tsx). Disabled / no messages ⇒ the storefront
-// falls back to the legacy notification bar.
+// The Sections tab's "Announcement bar": the ONE place the persistent bar above the header is
+// edited (it used to be split across the Header panel, a homepage "Announcement Bar" section's
+// classic sub-panel and the old Site Settings page). Stored at header.settings.announcementBar;
+// the editor marks it `managed`, which makes Off mean no bar at all on the storefront.
+// Order is deliberate: On/Off, the text, then Speed directly under the text.
 export default function AnnouncementBarChromeSettings({
   value,
   onChange,
   colorPresets,
+  position,
+  onPositionChange,
 }: {
   value: AnnouncementBarConfig | undefined;
   onChange: (next: AnnouncementBarConfig) => void;
   colorPresets?: { label: string; value: string }[];
+  // header.settings.announcementPosition ("above" | "below"); omitted = control not shown.
+  position?: string;
+  onPositionChange?: (next: string) => void;
 }) {
   const cfg: AnnouncementBarConfig = value ?? { enabled: false, messages: [] };
   const messages = Array.isArray(cfg.messages) ? cfg.messages : [];
@@ -29,18 +34,22 @@ export default function AnnouncementBarChromeSettings({
   const setMessages = (next: string[]) => patch({ messages: next });
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Announcement bar</span>
         <Toggle checked={!!cfg.enabled} onChange={(v) => patch({ enabled: v })} />
       </div>
       <p className="text-xs text-zinc-500">
-        A slim bar on every page, above the header. Off ⇒ the legacy notification bar (Business Information) still
-        shows if it was set.
+        A slim bar on every page, above the header. Off means the bar is not shown on your storefront at all.
       </p>
 
       {cfg.enabled && (
         <>
+          <div className="flex items-center justify-between">
+            <span className="text-sm">Scrolling (marquee)</span>
+            <Toggle checked={!!cfg.scrolling} onChange={(v) => patch({ scrolling: v })} />
+          </div>
+
           <div className="space-y-2">
             {messages.map((m, i) => (
               <div key={i} className="flex items-start gap-1.5">
@@ -64,21 +73,24 @@ export default function AnnouncementBarChromeSettings({
                 </button>
               </div>
             ))}
+            <Button variant="secondary" size="sm" onClick={() => setMessages([...messages, ""])}>
+              <Plus className="me-1 size-3.5" /> Add message
+            </Button>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => setMessages([...messages, ""])}>
-            <Plus className="me-1 size-3.5" /> Add message
-          </Button>
 
-          <div className="flex items-center justify-between">
-            <span className="text-sm">Scrolling (marquee)</span>
-            <Toggle checked={!!cfg.scrolling} onChange={(v) => patch({ scrolling: v })} />
-          </div>
           {cfg.scrolling && <MarqueeSpeedControl value={cfg.marqueeSpeed} onChange={(v) => patch({ marqueeSpeed: v })} />}
           {!cfg.scrolling && messages.length > 1 && (
             <Select label="Rotation speed" value={cfg.speed ?? "medium"} onChange={(e) => patch({ speed: e.target.value as AnnouncementBarConfig["speed"] })}>
               <option value="fast">Fast</option>
               <option value="medium">Medium</option>
               <option value="slow">Slow</option>
+            </Select>
+          )}
+
+          {onPositionChange && (
+            <Select label="Announcement bar position" value={position ?? "above"} onChange={(e) => onPositionChange(e.target.value)}>
+              <option value="above">Above header</option>
+              <option value="below">Below header</option>
             </Select>
           )}
           <div className="flex items-center justify-between">

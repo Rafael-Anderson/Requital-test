@@ -176,6 +176,8 @@ export interface AnnouncementBarConfig {
   speed?: 'fast' | 'medium' | 'slow'; // how often a ROTATING (non-marquee) bar changes message
   // Marquee scroll speed in pixels per second (MARQUEE_SPEED_MIN..MAX). null / absent = 40.
   marqueeSpeed?: number | null;
+  // Set by the admin Announcement bar panel: authoritative, Off = no bar at all (no legacy fallback).
+  managed?: boolean;
   dismissible?: boolean;
   background?: string;
   textColor?: string;

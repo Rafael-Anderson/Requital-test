@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { API_URL, getStaffCsrfToken, getTheme, getThemeBuilder, publishTheme, updateTheme, updateThemeDraft } from "@/lib/api";
+import { API_URL, getStaffCsrfToken, getTheme, getThemeBuilder, listThemes, publishTheme, updateTheme, updateThemeDraft } from "@/lib/api";
 import {
   findNodeInTree,
   insertNodeInTree,
@@ -23,6 +23,9 @@ import type {
 } from "@/lib/types";
 import { useToast } from "@/components/ui/Toast";
 import { HEADER_PRESETS, FOOTER_PRESETS } from "@/lib/header-footer-presets";
+import type { BuilderContext, SearchTarget } from "@/lib/theme-builder-registry";
+import { adoptLegacyAnnouncement } from "@/lib/announcement-adopt";
+import type { AnnouncementBarConfig } from "@/lib/types";
 
 export type DevicePreview = "desktop" | "tablet" | "mobile";
 export type EditorMode = "sections" | "theme_settings" | "layout";
@@ -32,6 +35,8 @@ export type EditorMode = "sections" | "theme_settings" | "layout";
 // they can't collide with a real section's `sec-...` id.
 export const HEADER_CHROME_ID = "__header__";
 export const FOOTER_CHROME_ID = "__footer__";
+// The persistent announcement bar above the header: a fixed chrome row of the Sections tab.
+export const ANNOUNCEMENT_CHROME_ID = "__announcement__";
 
 const AUTOSAVE_INTERVAL_MS = 30_000;
 
@@ -139,6 +144,7 @@ export type BlockContainerRef =
   | { kind: "section"; sectionId: string; sectionType: ThemeSectionType };
 
 export type Selection =
+  | { kind: "announcement" }
   | { kind: "header" }
   | { kind: "footer" }
   | { kind: "section"; section: ThemeSection }
@@ -161,6 +167,7 @@ function setContainerBlocks(config: ThemeConfig, ref: BlockContainerRef, blocks:
 
 function resolveSelection(config: ThemeConfig, selectedId: string | null): Selection | null {
   if (!selectedId) return null;
+  if (selectedId === ANNOUNCEMENT_CHROME_ID) return { kind: "announcement" };
   if (selectedId === HEADER_CHROME_ID) return { kind: "header" };
   if (selectedId === FOOTER_CHROME_ID) return { kind: "footer" };
 
@@ -235,6 +242,13 @@ export function useThemeEditor(themeId: number) {
   // casing needed between "the page switcher navigated" and "an in-preview
   // link navigated".
   const [previewPath, setPreviewPath] = useState("");
+  // True when the shop has a PUBLISHED Sections theme: the storefront is then in Sections mode and
+  // the legacy Layout entries that only the old chrome reads do nothing (lib/theme-builder-registry).
+  const [shopHasPublishedTheme, setShopHasPublishedTheme] = useState(false);
+  // "Take me to this setting": set by the global settings search, consumed by SettingsPanel, which
+  // scrolls to and briefly highlights the field. `nonce` makes a repeat request for the same field
+  // fire again.
+  const [scrollRequest, setScrollRequest] = useState<{ label?: string; nonce: number } | null>(null);
   // Settings-panel search query — lives here rather than local state inside
   // SettingsPanel.tsx because the input itself renders in PreviewFrame.tsx's
   // toolbar (next to the Preview page selector) while the filtering it
@@ -293,6 +307,14 @@ export function useThemeEditor(themeId: number) {
     try {
       const t = await getThemeBuilder(themeId);
       setTheme(t);
+      // Best effort: whether ANY theme is published decides which storefront mode we are in.
+      // Falls back to this theme's own flag when the list cannot be read.
+      try {
+        const all = await listThemes();
+        setShopHasPublishedTheme(all.some((x) => x.isPublished) || t.isPublished);
+      } catch {
+        setShopHasPublishedTheme(t.isPublished);
+      }
       setConfig(t.config);
       setDirty(false);
       setSelectedId(null);
@@ -339,6 +361,23 @@ export function useThemeEditor(themeId: number) {
     if (legacyHeroText) updateSectionSetting(hero.id, "heroText", legacyHeroText);
     // updateSectionSetting is a stable local fn; config/legacyTheme are the
     // real triggers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, legacyTheme]);
+
+  // One-shot adoption of the legacy announcement bar. The classic notification bar
+  // (themesettings.announcementBarEnabled / notificationText / announcementBarScrolling, edited on the
+  // old Site Settings page) and the old chrome bar toggle in the Header panel are now ONE "Announcement
+  // bar" in the Sections tab (header.settings.announcementBar, marked `managed`). The first time the
+  // builder opens, an existing legacy bar is copied across so nothing is lost and nothing changes on
+  // the storefront; an older config with no `managed` flag is adopted as it stands. Marks the draft
+  // dirty only when something actually changed. Never runs twice per mount.
+  const announcementSeedDoneRef = useRef(false);
+  useEffect(() => {
+    if (announcementSeedDoneRef.current || !config || !legacyTheme) return;
+    announcementSeedDoneRef.current = true;
+    const next = adoptLegacyAnnouncement(config.header.settings.announcementBar as AnnouncementBarConfig | undefined, legacyTheme);
+    if (next) updateHeaderSetting("announcementBar", next);
+    // updateHeaderSetting is a stable local fn; config/legacyTheme are the real triggers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, legacyTheme]);
 
@@ -575,6 +614,12 @@ export function useThemeEditor(themeId: number) {
     }));
   }
 
+  // The Sections tab's Announcement bar. Every save marks the config `managed`, which makes it the
+  // single authority on the storefront (Off = no bar at all, no legacy fallback).
+  function updateAnnouncementBar(next: AnnouncementBarConfig) {
+    updateHeaderSetting("announcementBar", { ...next, managed: true });
+  }
+
   function updateFooterSetting(key: string, value: unknown) {
     updateConfig((prev) => ({
       ...prev,
@@ -774,7 +819,38 @@ export function useThemeEditor(themeId: number) {
 
   const selection = config ? resolveSelection(config, selectedId) : null;
 
+  const builderContext: BuilderContext = {
+    sectionsMode: shopHasPublishedTheme,
+    sectionTypesPresent: new Set(config?.sections.map((sec) => sec.type) ?? []),
+  };
+
+  // Open the panel a search result points at, then ask SettingsPanel to scroll to the field.
+  function goToSetting(target: SearchTarget, settingLabel?: string) {
+    setEditorMode(target.mode);
+    if (target.mode === "theme_settings") {
+      setThemeSettingsCategory(target.category);
+    } else if (target.mode === "layout") {
+      setLayoutCategory(target.category);
+    } else if (target.kind === "announcement") {
+      setSelectedId(ANNOUNCEMENT_CHROME_ID);
+    } else if (target.kind === "header") {
+      setSelectedId(HEADER_CHROME_ID);
+    } else if (target.kind === "footer") {
+      setSelectedId(FOOTER_CHROME_ID);
+    } else {
+      const section = config?.sections.find((sec) => sec.type === target.sectionType);
+      if (section) setSelectedId(section.id);
+    }
+    setScrollRequest((prev) => ({ label: settingLabel, nonce: (prev?.nonce ?? 0) + 1 }));
+  }
+
   return {
+    builderContext,
+    shopHasPublishedTheme,
+    scrollRequest,
+    setScrollRequest,
+    goToSetting,
+    updateAnnouncementBar,
     router,
     theme,
     config,

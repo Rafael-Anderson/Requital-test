@@ -46,7 +46,22 @@ describe("AnnouncementBar — legacy fallback (unchanged)", () => {
     expect(container.querySelector(".bg-accent")).not.toBeNull();
   });
 
-  it("legacy bar is not shown once a themed config with enabled:false exists (still falls through)", () => {
+  it("a managed config that is Off renders nothing at all, even with the legacy bar enabled", () => {
+    shopValue = { announcementBarEnabled: true, notificationText: JSON.stringify(["Legacy line"]) };
+    withAnnouncementBar({ enabled: false, managed: true, messages: ["Hi"] });
+    const { container } = render(<AnnouncementBar />);
+    expect(container.textContent).toBe("");
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("a managed config that is On but empty renders nothing (no legacy fallback either)", () => {
+    shopValue = { announcementBarEnabled: true, notificationText: JSON.stringify(["Legacy line"]) };
+    withAnnouncementBar({ enabled: true, managed: true, messages: [] });
+    const { container } = render(<AnnouncementBar />);
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("an older config with enabled:false (no managed flag) still falls through to the legacy bar", () => {
     shopValue = { announcementBarEnabled: true, notificationText: JSON.stringify(["Legacy line"]) };
     withAnnouncementBar({ enabled: false, messages: ["ignored"] });
     const { container } = render(<AnnouncementBar />);

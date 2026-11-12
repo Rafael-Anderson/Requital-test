@@ -7,12 +7,10 @@ import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import Checkbox from "@/components/ui/Checkbox";
-import Toggle from "@/components/ui/Toggle";
 import Button from "@/components/ui/Button";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import BannerImageGallery from "@/components/BannerImageGallery";
 import HeaderFooterPreview from "@/components/HeaderFooterPreview";
-import TagInput from "@/components/ui/TagInput";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 import { useToast } from "@/components/ui/Toast";
@@ -188,15 +186,15 @@ export default function ThemeSiteSettingsPage() {
       <Card>
         <h3 className="text-sm font-semibold mb-1">Header &amp; Footer Preview</h3>
         <p className="text-xs text-text-faint mb-4">
-          Reflects your logo, announcement bar, and footer content as you edit below. Colors and layout come from
+          Reflects your logo and footer content as you edit below. Colors and layout come from
           Appearance Color and Theme &gt; Advanced.
         </p>
         <HeaderFooterPreview
           logoPreview={logoPreview}
           shopName={siteTitle || shop.name}
-          notificationText={notificationText}
-          announcementBarEnabled={announcementBarEnabled}
-          announcementBarScrolling={announcementBarScrolling}
+          notificationText={[]}
+          announcementBarEnabled={false}
+          announcementBarScrolling={false}
           footerDescription={footerDescription}
           footerLogoPreview={footerLogoPreview}
           colors={theme.colors ?? {}}
@@ -221,28 +219,10 @@ export default function ThemeSiteSettingsPage() {
             onChange={(e) => setSiteDescription(e.target.value)}
             rows={4}
           />
-          <div>
-            <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
-              Site Header Notification Text
-            </label>
-            <TagInput tags={notificationText} onChange={setNotificationText} />
-            <p className="mt-1.5 text-xs text-text-faint">Shown as an announcement bar above the storefront header.</p>
-            <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-              <div className="flex items-center gap-2">
-                <Toggle checked={announcementBarEnabled} onChange={setAnnouncementBarEnabled} />
-                <span className="text-sm">Show announcement bar</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Toggle checked={announcementBarScrolling} onChange={setAnnouncementBarScrolling} />
-                <span className="text-sm">Scroll continuously (marquee)</span>
-              </div>
-            </div>
-            {announcementBarEnabled && notificationText.length === 0 && (
-              <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
-                Add at least one message above. An empty bar never shows even when this is on.
-              </p>
-            )}
-          </div>
+          <p className="text-xs text-text-faint">
+            The announcement bar above the header is now edited in the theme builder, under Sections &gt; Announcement bar.
+            Anything you set here before was carried over automatically.
+          </p>
           <div>
             <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">Contact Number</label>
             <div className="space-y-2">

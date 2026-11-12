@@ -17,16 +17,16 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronRight, GripVertical, Layout, PanelBottom, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, GripVertical, Layout, Megaphone, PanelBottom, Plus, Trash2 } from "lucide-react";
 import Toggle from "@/components/ui/Toggle";
 import TreeNode from "./TreeNode";
 import AddSectionModal from "./AddSectionModal";
 import AddBlockModal from "./AddBlockModal";
 import { findNodeInTree } from "@/lib/theme-tree";
 import { SECTION_TYPE_LABELS, type ThemeSection } from "@/lib/types";
-import { HEADER_CHROME_ID, FOOTER_CHROME_ID, type BlockContainerRef, type ThemeEditorState } from "@/lib/useThemeEditor";
+import { ANNOUNCEMENT_CHROME_ID, HEADER_CHROME_ID, FOOTER_CHROME_ID, type BlockContainerRef, type ThemeEditorState } from "@/lib/useThemeEditor";
 
-export { HEADER_CHROME_ID, FOOTER_CHROME_ID };
+export { ANNOUNCEMENT_CHROME_ID, HEADER_CHROME_ID, FOOTER_CHROME_ID };
 
 interface AddBlockRequest {
   container: BlockContainerRef;
@@ -41,6 +41,7 @@ function ChromeRow({
   expanded,
   onSelect,
   onToggleExpand,
+  hideExpander,
 }: {
   label: string;
   Icon: typeof Layout;
@@ -48,6 +49,8 @@ function ChromeRow({
   expanded: boolean;
   onSelect: () => void;
   onToggleExpand: () => void;
+  // A row with no child blocks to expand (the announcement bar) shows no chevron.
+  hideExpander?: boolean;
 }) {
   return (
     <div
@@ -55,9 +58,13 @@ function ChromeRow({
         selected ? "border-accent bg-accent/5" : "border-transparent hover:bg-black/5 dark:hover:bg-white/10"
       }`}
     >
-      <button type="button" onClick={onToggleExpand} aria-label={expanded ? "Collapse" : "Expand"} className="shrink-0 text-zinc-400">
-        <ChevronRight className={`size-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
-      </button>
+      {hideExpander ? (
+        <span className="size-3.5 shrink-0" aria-hidden />
+      ) : (
+        <button type="button" onClick={onToggleExpand} aria-label={expanded ? "Collapse" : "Expand"} className="shrink-0 text-zinc-400">
+          <ChevronRight className={`size-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        </button>
+      )}
       <button type="button" onClick={onSelect} className="flex flex-1 items-center gap-2 truncate text-start text-sm font-medium">
         <Icon className="size-4 text-zinc-400" />
         {label}
@@ -202,6 +209,18 @@ export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
 
   return (
     <div ref={containerRef} className="flex h-full flex-col gap-3 p-3">
+      <div data-section-row={ANNOUNCEMENT_CHROME_ID}>
+        <ChromeRow
+          label="Announcement bar"
+          Icon={Megaphone}
+          selected={selectedId === ANNOUNCEMENT_CHROME_ID}
+          expanded={false}
+          onSelect={() => selectNode(ANNOUNCEMENT_CHROME_ID)}
+          onToggleExpand={() => selectNode(ANNOUNCEMENT_CHROME_ID)}
+          hideExpander
+        />
+      </div>
+
       <div data-section-row={HEADER_CHROME_ID}>
         <ChromeRow
           label="Header"

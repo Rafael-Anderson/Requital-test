@@ -153,6 +153,9 @@ export interface AnnouncementBarConfig {
   speed?: "fast" | "medium" | "slow"; // rotation interval of a non-marquee bar
   // Marquee scroll speed in px/second (10..200). null / absent = 40.
   marqueeSpeed?: number | null;
+  // Set by the Sections tab's Announcement bar panel: this config is then authoritative, so
+  // Off hides the bar entirely instead of falling back to the legacy notification bar.
+  managed?: boolean;
   dismissible?: boolean;
   background?: string;
   textColor?: string;
