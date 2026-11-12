@@ -25,7 +25,7 @@ vi.mock("@/lib/useMetafieldEditor", () => ({
   useMetafieldEditor: () => ({ validate: () => null, save: async () => {} }),
 }));
 vi.mock("@/components/MetafieldsFields", () => ({ MetafieldsSection: () => null }));
-import { createCollection, updateCollection } from "@/lib/api";
+import { createCollection, updateCollection, uploadCollectionImage } from "@/lib/api";
 
 const base: Collection = {
   id: 4, name: "Roses", slug: "roses", displayOrder: 0, image: null, isFeatured: false,
@@ -132,5 +132,46 @@ describe("CollectionFormModal: default sort", () => {
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(updateCollection).toHaveBeenCalled());
     expect(vi.mocked(updateCollection).mock.calls.at(-1)![1].defaultSort).toBeNull();
+  });
+});
+
+describe("CollectionFormModal: Icon and Banner are two separate, labelled images", () => {
+  it("shows two upload fields with their purpose spelled out", () => {
+    open(base);
+    expect(screen.getByText("Icon")).toBeInTheDocument();
+    expect(screen.getByText("Banner")).toBeInTheDocument();
+    expect(screen.getByText(/Shown in Featured Collections/)).toBeInTheDocument();
+    expect(screen.getByText(/Shown on the collection page/)).toBeInTheDocument();
+  });
+
+  it("uploading only an icon sends icon and leaves the banner (image) out of the payload", async () => {
+    const user = userEvent.setup();
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    vi.mocked(uploadCollectionImage).mockResolvedValue({ url: "/uploads/collections/icon.png" } as never);
+    vi.mocked(updateCollection).mockResolvedValue({} as never);
+    open({ ...base, image: "/uploads/collections/banner.jpg" });
+    const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    expect(inputs).toHaveLength(2); // [icon, banner]
+    await user.upload(inputs[0], new File(["x"], "icon.png", { type: "image/png" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(updateCollection).toHaveBeenCalled());
+    const payload = vi.mocked(updateCollection).mock.calls.at(-1)![1];
+    expect(payload.icon).toBe("/uploads/collections/icon.png");
+    expect("image" in payload).toBe(false);
+  });
+
+  it("uploading only a banner sends image and leaves the icon out", async () => {
+    const user = userEvent.setup();
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    vi.mocked(uploadCollectionImage).mockResolvedValue({ url: "/uploads/collections/banner2.jpg" } as never);
+    vi.mocked(updateCollection).mockResolvedValue({} as never);
+    open(base);
+    const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    await user.upload(inputs[1], new File(["x"], "b.jpg", { type: "image/jpeg" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(updateCollection).toHaveBeenCalled());
+    const payload = vi.mocked(updateCollection).mock.calls.at(-1)![1];
+    expect(payload.image).toBe("/uploads/collections/banner2.jpg");
+    expect("icon" in payload).toBe(false);
   });
 });

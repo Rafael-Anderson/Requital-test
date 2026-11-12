@@ -134,3 +134,55 @@ test('storefront home fits a 390px phone on every starter template', async ({ pa
     await expectHomeFits(page, `storefront home, ${template}, after scrolling`);
   }
 });
+
+// The header on a phone with the two things that used to break it: a wide navigation (many long
+// collection names) and an unusually wide logo or long business name. Two failures live here:
+//  - a side track allowed to shrink to 0 collapsed the logo to 0px behind a wide nav (the logo vanished);
+//  - a side track floored at max-content with an unbounded name made the header 528px wide in a 390px
+//    viewport (the whole page dragged sideways).
+// Both must hold at once: the logo stays visible AND the document never exceeds the viewport.
+test('a wide nav, a long business name and a wide logo keep the logo visible and the page inside 390px', async ({ page }) => {
+  test.setTimeout(300_000);
+  const login = await loginAdmin(page, seed.adminEmail, seed.adminPassword);
+  const csrf = { 'X-CSRF-Token': login.headers()['x-csrf-token'] ?? '' };
+  await page.request.patch(`${API_URL}/shop`, { data: { displayName: 'Dubai Fresh Flowers and Gifts Boutique' }, headers: csrf });
+  for (let i = 1; i <= 14; i++) {
+    await page.request.post(`${API_URL}/collections`, { data: { name: `Collection with a long name ${i}` }, headers: csrf });
+  }
+  const wideLogo =
+    'data:image/svg+xml;utf8,' +
+    encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="60"><rect width="400" height="60" fill="#c0392b"/></svg>');
+
+  for (const withLogo of [false, true]) {
+    for (const template of TEMPLATES) {
+      const created = await page.request.post(`${API_URL}/themes`, { data: { name: `Header ${template} ${withLogo}`, fromTemplate: template }, headers: csrf });
+      expect(created.ok(), `create ${template} theme: ${created.status()}`).toBe(true);
+      const { id } = (await created.json()) as { id: number };
+      if (withLogo) {
+        const full = (await (await page.request.get(`${API_URL}/themes/${id}`)).json()) as { config: { globalSettings: { logo: Record<string, unknown> } } };
+        full.config.globalSettings.logo.defaultLogoUrl = wideLogo;
+        const patched = await page.request.patch(`${API_URL}/themes/${id}`, { data: { config: full.config }, headers: csrf });
+        expect(patched.ok(), `set logo on ${template}: ${patched.status()}`).toBe(true);
+      }
+      const published = await page.request.post(`${API_URL}/themes/${id}/publish`, { data: {}, headers: csrf });
+      expect(published.ok(), `publish ${template} theme: ${published.status()}`).toBe(true);
+
+      await page.goto(`${STOREFRONT_URL}/${seed.subdomain}`);
+      await settle(page);
+      const m = await page.evaluate(() => {
+        const el = (document.querySelector('img.theme-logo-img') ?? document.querySelector('header a span.font-semibold')) as HTMLElement | null;
+        const r = el?.getBoundingClientRect();
+        return {
+          found: !!el,
+          width: r ? Math.round(r.width) : 0,
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+        };
+      });
+      const label = `${template}, ${withLogo ? 'wide logo' : 'long name, no logo'}`;
+      expect(m.found, `${label}: the logo or the business name is rendered`).toBe(true);
+      expect(m.width, `${label}: logo/name is ${m.width}px wide (a collapsed logo is 0)`).toBeGreaterThanOrEqual(40);
+      expect(m.scrollWidth, `${label}: document is ${m.scrollWidth}px wide in a ${m.clientWidth}px viewport`).toBeLessThanOrEqual(m.clientWidth);
+    }
+  }
+});

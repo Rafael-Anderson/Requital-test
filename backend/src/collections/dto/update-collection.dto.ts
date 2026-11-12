@@ -51,6 +51,12 @@ export class UpdateCollectionDto extends CollectionRulesFieldsDto {
   @IsString()
   image?: string | null;
 
+  // The Featured Collections icon. Explicit null clears it, undefined leaves it unchanged.
+  @IsOptional()
+  @IsString()
+  @MaxLength(191)
+  icon?: string | null;
+
   @IsOptional()
   @IsBoolean()
   isFeatured?: boolean;

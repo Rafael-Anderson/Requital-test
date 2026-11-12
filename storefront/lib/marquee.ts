@@ -7,7 +7,7 @@
 // jumps while it is running.
 export const ASSUMED_BAR_WIDTH_PX = 3840;
 const AVG_CHAR_PX = 7; // text-xs average advance, rough on purpose
-const ITEM_PADDING_PX = 32; // px-4 each side
+export const ITEM_PADDING_PX = 32; // px-4 each side
 
 export function estimateItemWidth(plainText: string): number {
   return Math.max(1, plainText.length) * AVG_CHAR_PX + ITEM_PADDING_PX;
@@ -22,4 +22,25 @@ export function repeatsToCover(barWidth: number, itemWidth: number): number {
 /** The count used for the server render and the first client render. */
 export function initialRepeats(plainText: string): number {
   return Math.min(128, repeatsToCover(ASSUMED_BAR_WIDTH_PX, estimateItemWidth(plainText)));
+}
+
+// --- Scroll speed -------------------------------------------------------------------------
+// The marquee moves at a CONSTANT pixels-per-second, whatever the text length or bar width.
+// (It used to be a fixed 18 s per loop, so a longer message or a wider bar travelled faster.)
+// A merchant may set marqueeSpeed; null / absent / not-a-number = the default. The bounds are
+// the ones the backend enforces (backend/src/themes/constants.ts): change all three together.
+export const MARQUEE_SPEED_MIN = 10;
+export const MARQUEE_SPEED_MAX = 200;
+export const MARQUEE_SPEED_DEFAULT = 40;
+
+export function resolveMarqueeSpeed(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return MARQUEE_SPEED_DEFAULT;
+  return Math.min(MARQUEE_SPEED_MAX, Math.max(MARQUEE_SPEED_MIN, value));
+}
+
+/** Seconds for the track to travel one half (the loop length) at `speedPxPerSec`. */
+export function marqueeDurationSeconds(halfWidthPx: number, speedPxPerSec: number): number {
+  const speed = resolveMarqueeSpeed(speedPxPerSec);
+  if (!Number.isFinite(halfWidthPx) || halfWidthPx <= 0) return 0;
+  return halfWidthPx / speed;
 }

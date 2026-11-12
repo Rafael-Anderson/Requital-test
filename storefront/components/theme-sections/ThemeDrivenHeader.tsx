@@ -42,10 +42,19 @@ const SOCIAL_LABEL: Record<string, string> = {
 
 const ZONES = ["left", "center", "right"] as const;
 
-// left / centre / right. The side zones share the room equally (1fr each) and the middle takes what
-// its content needs. It used to be three EQUAL columns, which gave a logo only a third of the row
-// (99px of a 360px phone) and let a centred nav overflow its third into the logo and the icons.
-const THREE_ZONE_COLUMNS = "grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]";
+// left / centre / right. The side zones share the room equally (1fr each) but never shrink below their
+// own content (max-content floor), and the middle track is minmax(0,auto): it takes what is left and its
+// nav scrolls, so the nav yields BEFORE the logo or the icons do. History: three EQUAL columns gave a
+// logo 99px of a 360px phone; then minmax(0,1fr) with an `auto` middle, where a wide nav took its whole
+// max-content and squeezed the sides to 0 (the logo collapsed to 0px); then a max-content floor on
+// content with no upper bound, where a long business name (truncate does not shrink max-content) made
+// the grid 528px wide in a 390px viewport. The floor is only safe because what sits in a side zone is
+// bounded: the logo and the name text carry LOGO_MAX_W.
+const THREE_ZONE_COLUMNS = "grid-cols-[minmax(max-content,1fr)_minmax(0,auto)_minmax(max-content,1fr)]";
+// The most room a logo or the business-name text may take: a share of the phone's width so the icons
+// beside it always fit (36vw is 115px at 320, 140px at 390), the old 10rem cap from sm up.
+const LOGO_MAX_W = "max-w-[36vw] sm:max-w-40";
+const NAME_MAX_W = "max-w-[36vw] sm:max-w-xs";
 
 // C1 — header.settings.height. Each render path keeps its own current
 // padding as the 'default'/absent case (the rows path and the classic
@@ -173,7 +182,7 @@ export default function ThemeDrivenHeader({
   // fallback for every shop that's never touched the new Logo category,
   // same "new system takes precedence, legacy is the fallback" convention
   // this app already uses for homepageLayout/colors/etc.
-  const logoUrl = resolveImageUrl(themeConfig?.globalSettings.logo.defaultLogoUrl ?? shop?.logoUrl ?? null);
+  const logoUrl = resolveImageUrl(themeConfig?.globalSettings.logo.defaultLogoUrl || shop?.logoUrl || null);
 
   const cartButtonClass =
     "relative flex items-center justify-center size-9 rounded-full hover:bg-mouse-over/10 transition-colors";
@@ -196,11 +205,11 @@ export default function ThemeDrivenHeader({
                 // §8.7 item 2 — 'shrink' scales the logo down via a toggled
                 // class (transform, compositor-only, no reflow) rather than
                 // touching the --theme-logo-height var mechanism.
-                className={`theme-logo-img max-w-40 object-contain min-w-0 ${shrunk ? "theme-logo-shrink" : ""}`}
+                className={`theme-logo-img ${LOGO_MAX_W} object-contain shrink-0 ${shrunk ? "theme-logo-shrink" : ""}`}
                 style={resolveImageElementStyle(block.settings)}
               />
             ) : (
-              <span className="font-semibold text-lg truncate">
+              <span className={`font-semibold text-lg truncate ${NAME_MAX_W}`}>
                 {shop?.displayName ?? shop?.name ?? shopSlug}
               </span>
             )}

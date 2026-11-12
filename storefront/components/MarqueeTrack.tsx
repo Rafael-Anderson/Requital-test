@@ -1,7 +1,13 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { initialRepeats, repeatsToCover } from "@/lib/marquee";
+import {
+  estimateItemWidth,
+  initialRepeats,
+  marqueeDurationSeconds,
+  repeatsToCover,
+  resolveMarqueeSpeed,
+} from "@/lib/marquee";
 
 // The scrolling track of an announcement bar (the bar's own element is the parent: it owns the
 // background, text colour, overflow-hidden and the dismiss button).
@@ -15,14 +21,22 @@ import { initialRepeats, repeatsToCover } from "@/lib/marquee";
 export default function MarqueeTrack({
   plainText,
   renderItem,
+  speedPxPerSec,
 }: {
   // The message as plain text, only used to estimate its width before it is measured.
   plainText: string;
   // One copy of the message. Called once per copy; copies must be identical.
   renderItem: () => ReactNode;
+  // Scroll speed in px/second (null / undefined = the default). The loop duration is derived
+  // from the measured half width, so the speed is the same for any text length or bar width.
+  speedPxPerSec?: number | null;
 }) {
+  const speed = resolveMarqueeSpeed(speedPxPerSec);
   const trackRef = useRef<HTMLDivElement>(null);
   const [repeats, setRepeats] = useState(() => initialRepeats(plainText));
+  // One half's width in px. Starts as the same estimate the server used (so server and first
+  // client render agree), then is replaced by the real measurement.
+  const [halfWidth, setHalfWidth] = useState(() => initialRepeats(plainText) * estimateItemWidth(plainText));
 
   useLayoutEffect(() => {
     const track = trackRef.current;
@@ -33,6 +47,8 @@ export default function MarqueeTrack({
       if (!item || !bar) return;
       const needed = repeatsToCover(bar.clientWidth, item.offsetWidth);
       setRepeats((current) => (needed > current ? Math.min(needed, 256) : current));
+      const half = track?.querySelector<HTMLElement>(".marquee-half");
+      if (half && half.offsetWidth > 0) setHalfWidth(half.offsetWidth);
     }
     measure();
     if (typeof ResizeObserver === "undefined") return;
@@ -52,7 +68,11 @@ export default function MarqueeTrack({
   );
 
   return (
-    <div ref={trackRef} className="marquee-track flex w-max">
+    <div
+      ref={trackRef}
+      className="marquee-track flex w-max"
+      style={{ ["--marquee-duration" as string]: `${marqueeDurationSeconds(halfWidth, speed).toFixed(2)}s` }}
+    >
       {half(false)}
       {half(true)}
     </div>

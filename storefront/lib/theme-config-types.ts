@@ -150,7 +150,9 @@ export interface AnnouncementBarConfig {
   enabled: boolean;
   messages: string[];
   scrolling?: boolean;
-  speed?: "fast" | "medium" | "slow";
+  speed?: "fast" | "medium" | "slow"; // rotation interval of a non-marquee bar
+  // Marquee scroll speed in px/second (10..200). null / absent = 40.
+  marqueeSpeed?: number | null;
   dismissible?: boolean;
   background?: string;
   textColor?: string;

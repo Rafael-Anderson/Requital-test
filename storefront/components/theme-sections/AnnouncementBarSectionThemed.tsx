@@ -70,6 +70,7 @@ export default function AnnouncementBarSectionThemed({ sectionId, settings, bloc
         <MarqueeTrack
           plainText={displayText.replace(/<[^>]*>/g, "")}
           renderItem={() => <span {...tagProps} style={textStyle} dangerouslySetInnerHTML={displayHtml} />}
+          speedPxPerSec={typeof settings.marqueeSpeed === "number" ? settings.marqueeSpeed : null}
         />
       </div>
     );

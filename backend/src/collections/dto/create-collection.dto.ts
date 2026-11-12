@@ -47,6 +47,12 @@ export class CreateCollectionDto extends CollectionRulesFieldsDto {
   @IsString()
   image?: string;
 
+  // The Featured Collections icon (a second, separate image; `image` is the banner).
+  @IsOptional()
+  @IsString()
+  @MaxLength(191)
+  icon?: string | null;
+
   @IsOptional()
   @IsBoolean()
   isFeatured?: boolean;

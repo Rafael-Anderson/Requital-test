@@ -5,6 +5,7 @@ import Select from "@/components/ui/Select";
 import TypographyControls, { type TypographyValue } from "./shared/TypographyControls";
 import BackgroundControls, { type BackgroundValue } from "./shared/BackgroundControls";
 import ScrollAnimationControl from "./shared/ScrollAnimationControl";
+import MarqueeSpeedControl from "./shared/MarqueeSpeedControl";
 import VisibilityControl from "./shared/VisibilityControl";
 import LegacyAnnouncementSettings from "../LegacyAnnouncementSettings";
 import type { ScrollAnimation, SectionVisibility } from "@/lib/types";
@@ -20,7 +21,7 @@ const SPEED_OPTIONS = [
 // "+ Add block". With "Scrolling" off, multiple messages rotate one at a
 // time with a crossfade at the interval chosen below; with "Scrolling" on,
 // every message is joined into one continuously-scrolling marquee line
-// instead (Speed doesn't apply to that mode).
+// instead, scrolling at the Speed set below (constant pixels per second).
 export default function AnnouncementBarSettings({
   settings,
   onUpdate,
@@ -34,6 +35,13 @@ export default function AnnouncementBarSettings({
         <span className="text-sm font-medium">Scrolling</span>
         <Toggle checked={!!settings.scrolling} onChange={(v) => onUpdate("scrolling", v)} />
       </div>
+
+      {!!settings.scrolling && (
+        <MarqueeSpeedControl
+          value={typeof settings.marqueeSpeed === "number" ? settings.marqueeSpeed : null}
+          onChange={(v) => onUpdate("marqueeSpeed", v)}
+        />
+      )}
 
       {!settings.scrolling && (
         <Select

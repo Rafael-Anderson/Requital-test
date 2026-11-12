@@ -37,7 +37,7 @@ interface TargetFields {
 
 interface AssembledBioLink extends BiolinkRow {
   product: { id: number; name: string; slug: string; thumbnail: string; status: string } | null;
-  collection: { id: number; name: string; slug: string; image: string | null } | null;
+  collection: { id: number; name: string; slug: string; image: string | null; icon: string | null } | null;
   template: { id: number; title: string; slug: string; image: string | null; isActive: boolean } | null;
 }
 
@@ -318,7 +318,7 @@ export class BioLinksService {
       type: string;
       label: string;
       product?: { name: string; slug: string; thumbnail: string } | null;
-      collection?: { name: string; slug: string; image: string | null } | null;
+      collection?: { name: string; slug: string; image: string | null; icon: string | null } | null;
       template?: { title: string; slug: string; image: string | null } | null;
       socialPlatform?: string | null;
     }> = [];
@@ -346,6 +346,7 @@ export class BioLinksService {
             name: link.collection.name,
             slug: link.collection.slug,
             image: link.collection.image,
+            icon: link.collection.icon,
           },
         });
       } else if (link.type === 'TEMPLATE') {
@@ -630,7 +631,7 @@ export class BioLinksService {
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT bl.*,
               p.id AS pId, p.name AS pName, p.slug AS pSlug, p.thumbnail AS pThumbnail, p.status AS pStatus,
-              c.id AS cId, c.name AS cName, c.slug AS cSlug, c.image AS cImage,
+              c.id AS cId, c.name AS cName, c.slug AS cSlug, c.image AS cImage, c.icon AS cIcon,
               t.id AS tId, t.title AS tTitle, t.slug AS tSlug, t.image AS tImage, t.isActive AS tIsActive
        FROM biolink bl
        LEFT JOIN product p ON p.id = bl.productId
@@ -672,6 +673,7 @@ export class BioLinksService {
                 name: r.cName as string,
                 slug: r.cSlug as string,
                 image: r.cImage as string | null,
+                icon: r.cIcon as string | null,
               }
             : null,
         template:

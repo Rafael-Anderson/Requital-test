@@ -17,8 +17,9 @@ const CLASSIC_HEADER: HeaderFooterConfig = {
   ],
 };
 
+const ctx = vi.hoisted(() => ({ themeConfig: null as unknown }));
 vi.mock("@/lib/shop-context", () => ({
-  useShop: () => ({ shopBasePath: "", previewMode: false, themeConfig: null }),
+  useShop: () => ({ shopBasePath: "", previewMode: false, themeConfig: ctx.themeConfig }),
 }));
 vi.mock("@/lib/cart-drawer", () => ({ useCartDrawer: () => ({ openDrawer: vi.fn() }) }));
 vi.mock("@/lib/api", () => ({ resolveImageUrl: (u: string | null) => u }));
@@ -28,7 +29,10 @@ vi.mock("@/components/MobileNav", () => ({ MobileNavTrigger: () => <button type=
 vi.mock("./ThemeImageBlock", () => ({ default: () => <span data-testid="imageblock" /> }));
 vi.mock("./SectionWrapper", () => ({ backgroundStyle: () => ({}) }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  ctx.themeConfig = null;
+});
 
 const shop = { displayName: "Test Shop", name: "test", logoUrl: null } as Shop;
 
@@ -207,7 +211,7 @@ describe("ThemeDrivenHeader — mobile menu trigger and zone columns (N4)", () =
   it("the zone grid gives the side zones equal room and the middle what it needs (not three equal thirds)", () => {
     const { container } = renderHeader(CLASSIC_HEADER);
     const grid = container.querySelector(".grid.items-center.gap-4")!;
-    expect(grid.className).toContain("grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]");
+    expect(grid.className).toContain("grid-cols-[minmax(max-content,1fr)_minmax(0,auto)_minmax(max-content,1fr)]");
     expect(grid.className).not.toContain("grid-cols-3");
   });
 
@@ -221,3 +225,66 @@ describe("ThemeDrivenHeader — mobile menu trigger and zone columns (N4)", () =
     expect(shown.getByTestId("menubar").parentElement!.className).toContain("min-w-0");
   });
 });
+
+describe("ThemeDrivenHeader — logo (regression: logo vanished once a nav sat in the middle track)", () => {
+  const withLogo = (logoUrl: string | null) =>
+    render(<ThemeDrivenHeader shopSlug="test" shop={{ ...shop, logoUrl } as Shop} customer={null} count={0} config={CLASSIC_HEADER} />);
+  const themed = (defaultLogoUrl: string | undefined) => {
+    ctx.themeConfig = { globalSettings: { logo: { defaultLogoUrl }, icons: {} } };
+  };
+
+  it("shows the theme-settings logo whenever one is set", () => {
+    themed("/uploads/theme-logo.png");
+    const { container } = withLogo("/uploads/shop-logo.png");
+    expect(container.querySelector("img.theme-logo-img")?.getAttribute("src")).toBe("/uploads/theme-logo.png");
+  });
+
+  it("falls back to the business logo, including when the theme value is an empty string", () => {
+    themed("");
+    const { container } = withLogo("/uploads/shop-logo.png");
+    expect(container.querySelector("img.theme-logo-img")?.getAttribute("src")).toBe("/uploads/shop-logo.png");
+  });
+
+  it("shows the business name as text when no logo is set anywhere", () => {
+    themed(undefined);
+    const { container } = withLogo(null);
+    expect(container.querySelector("img.theme-logo-img")).toBeNull();
+    expect(container.textContent).toContain("Test Shop");
+  });
+
+  it("side tracks keep a max-content floor in both layouts, so a wide nav cannot squeeze the logo to 0px", () => {
+    const classic = render(<ThemeDrivenHeader shopSlug="test" shop={shop} customer={null} count={0} config={CLASSIC_HEADER} />);
+    expect(classic.container.querySelector(".grid.items-center.gap-4")!.className).not.toContain("minmax(0,1fr)");
+    classic.unmount();
+    const rows = {
+      ...CLASSIC_HEADER,
+      settings: { ...CLASSIC_HEADER.settings, rows: [{ id: "r1", blockIds: ["hdr-logo", "hdr-nav-menu"], align: "zones" }] },
+    } as HeaderFooterConfig;
+    const r = render(<ThemeDrivenHeader shopSlug="test" shop={shop} customer={null} count={0} config={rows} />);
+    expect(r.container.querySelector(".grid.items-center.gap-4")!.className).toContain("minmax(max-content,1fr)");
+  });
+
+  it("the logo never shrinks (shrink-0) but is bounded by a share of the phone width, so it can neither vanish nor widen the page", () => {
+    themed("/uploads/theme-logo.png");
+    const { container } = withLogo(null);
+    const cls = container.querySelector("img.theme-logo-img")!.className;
+    expect(cls).toContain("shrink-0");
+    expect(cls).not.toContain("min-w-0");
+    expect(cls).toContain("max-w-[36vw]");
+    expect(cls).toContain("sm:max-w-40");
+  });
+
+  it("the business-name text is bounded the same way: truncate does not shrink max-content, and an unbounded name made the header 528px wide on a 390px phone", () => {
+    themed(undefined);
+    const { container } = withLogo(null);
+    const name = Array.from(container.querySelectorAll("span")).find((el) => el.textContent === "Test Shop")!;
+    expect(name.className).toContain("truncate");
+    expect(name.className).toContain("max-w-[36vw]");
+  });
+
+  it("the middle track can shrink to nothing, so a wide nav gives way before the logo or the icons", () => {
+    const { container } = render(<ThemeDrivenHeader shopSlug="test" shop={shop} customer={null} count={0} config={CLASSIC_HEADER} />);
+    expect(container.querySelector(".grid.items-center.gap-4")!.className).toContain("_minmax(0,auto)_");
+  });
+});
+

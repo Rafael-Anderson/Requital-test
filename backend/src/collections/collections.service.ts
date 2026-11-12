@@ -70,8 +70,8 @@ export class CollectionsService {
     try {
       const insertId = await this.db.transaction(async (conn) => {
         const [result] = await conn.query<ResultSetHeader>(
-          `INSERT INTO collection (shopId, name, slug, parentCollectionId, displayOrder, image, isFeatured, description, collectionType, matchMode, defaultSort)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO collection (shopId, name, slug, parentCollectionId, displayOrder, image, icon, isFeatured, description, collectionType, matchMode, defaultSort)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             ctx.shopId,
             dto.name,
@@ -79,6 +79,7 @@ export class CollectionsService {
             dto.parentCollectionId ?? null,
             dto.displayOrder ?? 0,
             dto.image ?? null,
+            dto.icon ?? null,
             dto.isFeatured ?? false,
             dto.description ?? null,
             automated ? 'automated' : 'manual',
@@ -121,6 +122,7 @@ export class CollectionsService {
         isFeatured: dto.isFeatured,
         parentCollectionId: dto.parentCollectionId,
         image: dto.image,
+        icon: dto.icon,
         description: dto.description,
         collectionType: dto.collectionType,
         matchMode: dto.matchMode,

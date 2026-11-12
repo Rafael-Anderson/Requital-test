@@ -674,6 +674,7 @@ export class PublicService {
       name: collection.name,
       slug: collection.slug,
       image: collection.image,
+      icon: collection.icon ?? null,
       description: collection.description,
       parentCollectionId: collection.parentCollectionId,
       // NULL = the page's own default (Newest); see collections/collection-sort.ts

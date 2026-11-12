@@ -67,3 +67,20 @@ describe("FeaturedGrid structure", () => {
     expect(container.querySelectorAll("a")).toHaveLength(4);
   });
 });
+
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
+  return { ...actual, resolveImageUrl: (p: string | null) => p };
+});
+
+describe("FeaturedGrid: thumbnails use the Icon", () => {
+  it("shows the Icon, not the banner, and falls back to the banner when there is no Icon", () => {
+    const collections = [
+      { ...collection(1), image: "/banner-1.jpg", icon: "/icon-1.png" },
+      { ...collection(2), image: "/banner-2.jpg", icon: null },
+    ];
+    const { container } = render(<FeaturedGrid bannerUrl={null} heroText={null} collections={collections} />);
+    expect(Array.from(container.querySelectorAll("img")).map((i) => i.getAttribute("src"))).toEqual(["/icon-1.png", "/banner-2.jpg"]);
+  });
+});
+

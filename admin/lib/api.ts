@@ -1642,6 +1642,8 @@ export interface CollectionInput {
   parentCollectionId?: number | null;
   displayOrder?: number;
   image?: string | null;
+  // Featured Collections icon (separate from the banner `image`). null clears it.
+  icon?: string | null;
   isFeatured?: boolean;
   description?: string;
   collectionType?: "manual" | "automated";

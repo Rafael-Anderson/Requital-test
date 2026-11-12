@@ -212,7 +212,10 @@ export interface Collection {
   name: string;
   slug: string;
   displayOrder: number;
+  // The BANNER: shown only on the collection's own page.
   image: string | null;
+  // Shown only in the Featured Collections circles. null/absent = first-letter placeholder.
+  icon?: string | null;
   isFeatured: boolean;
   parentCollectionId: number | null;
   description: string | null;
@@ -648,7 +651,7 @@ export interface BioLink {
   // (deleted/unavailable product or collection, unconfigured social platform)
   // rather than sending a broken entry.
   product?: { name: string; slug: string; thumbnail: string } | null;
-  collection?: { name: string; slug: string; image: string | null } | null;
+  collection?: { name: string; slug: string; image: string | null; icon?: string | null } | null;
   template?: { title: string; slug: string; image: string | null } | null;
   socialPlatform?: BioLinkSocialPlatform | null;
 }

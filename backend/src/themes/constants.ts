@@ -407,3 +407,10 @@ export const DEFAULT_THEME_CONFIG: ThemeConfig = {
 export const BANNER_HEIGHT_MIN = 120;
 export const BANNER_HEIGHT_MAX = 900;
 export const BANNER_TITLE_SPACING_MAX = 200;
+
+// Announcement-bar marquee speed, in pixels per second. Absent / null = the default
+// (MARQUEE_SPEED_DEFAULT). Mirrored by hand in storefront/lib/marquee.ts and
+// admin/lib/marquee-speed.ts: change all three together.
+export const MARQUEE_SPEED_MIN = 10;
+export const MARQUEE_SPEED_MAX = 200;
+export const MARQUEE_SPEED_DEFAULT = 40;

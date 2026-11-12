@@ -333,9 +333,10 @@ body {
 }
 
 .marquee-track {
-  /* Phase A: duration from the motion token (18s fallback = today). Stays `linear` (a ticker
-     should not ease). */
-  animation: marquee-scroll var(--motion-marquee-duration, 18s) linear infinite;
+  /* --marquee-duration is set per track (components/MarqueeTrack.tsx) as half-width / speed, so
+     the scroll speed is a constant px/second. A track that does not set it (the Brands logo
+     strip) keeps the motion token, 18s fallback. Stays `linear` (a ticker should not ease). */
+  animation: marquee-scroll var(--marquee-duration, var(--motion-marquee-duration, 18s)) linear infinite;
   will-change: transform;
 }
 [dir="rtl"] .marquee-track {

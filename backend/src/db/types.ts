@@ -502,7 +502,10 @@ export interface CollectionRow {
   name: string;
   slug: string;
   displayOrder: number;
+  // The BANNER (collection page only). See `icon` for the Featured Collections circle.
   image: string | null;
+  // Shown only in the Featured Collections circles. NULL = first-letter placeholder.
+  icon: string | null;
   isFeatured: boolean;
   parentCollectionId: number | null;
   description: string | null;

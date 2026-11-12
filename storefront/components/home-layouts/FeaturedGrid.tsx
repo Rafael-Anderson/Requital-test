@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { resolveImageUrl } from "@/lib/api";
+import { collectionTileImage } from "@/lib/collection-thumb";
 import { useShop } from "@/lib/shop-context";
 import type { Collection } from "@/lib/types";
 import ClassicHero from "./ClassicHero";
@@ -64,10 +65,10 @@ export default function FeaturedGrid({
                 className={`group rounded-lg overflow-hidden bg-white border border-stroke ${tileClassName(topLevel.length, i)}`}
               >
                 <div className="aspect-square bg-black/5 overflow-hidden">
-                  {c.image ? (
+                  {collectionTileImage(c) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={resolveImageUrl(c.image) ?? undefined}
+                      src={resolveImageUrl(collectionTileImage(c)) ?? undefined}
                       alt=""
                       className="w-full h-full object-cover theme-hover-zoom"
                     />
@@ -77,7 +78,7 @@ export default function FeaturedGrid({
                     </div>
                   )}
                 </div>
-                {c.image && <p className="px-2 py-1.5 text-xs font-medium truncate text-featured-fg">{c.name}</p>}
+                {collectionTileImage(c) && <p className="px-2 py-1.5 text-xs font-medium truncate text-featured-fg">{c.name}</p>}
               </Link>
             ))}
           </div>

@@ -34,7 +34,7 @@ export default function AnnouncementBar() {
   if (shop.announcementBarScrolling) {
     return (
       <div className="overflow-hidden whitespace-nowrap bg-accent text-accent-foreground text-xs py-1.5">
-        <MarqueeTrack plainText={text} renderItem={() => text} />
+        <MarqueeTrack plainText={text} renderItem={() => text} speedPxPerSec={null} />
       </div>
     );
   }
@@ -115,6 +115,7 @@ function ThemedAnnouncementBar({
         <MarqueeTrack
           plainText={displayText.replace(/<[^>]*>/g, "")}
           renderItem={() => <span dangerouslySetInnerHTML={displayHtml} />}
+          speedPxPerSec={cfg.marqueeSpeed}
         />
         {dismissBtn}
       </div>

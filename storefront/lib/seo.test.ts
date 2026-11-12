@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Metadata } from "next";
 import {
   buildBioPageMetadata,
   buildBrandMetadata,
@@ -8,6 +9,19 @@ import {
   canonicalUrlFor,
 } from "./seo";
 import type { BioPageConfig, Product, Shop } from "./types";
+import { resolveTitle } from "next/dist/lib/metadata/resolvers/resolve-title";
+import { businessName, resolveFaviconUrl, shopTitle } from "./seo";
+
+// What the browser tab actually shows: Next resolves a segment's title against
+// the template its parent layout declared (here the shop layout's), exactly as
+// it does when it renders <head>.
+// The shop layout's own title is never templated by itself (a template only
+// applies to descendants), so the home page reads it directly.
+const homeTitle = (meta: Metadata): string => resolveTitle(meta.title, null).absolute;
+function tabTitle(meta: Metadata, parentShop: Shop = shop({})): string {
+  const parent = resolveTitle(shopTitle(parentShop), null);
+  return resolveTitle(meta.title, parent.template).absolute;
+}
 
 // Only the fields these functions actually read are filled in — the rest
 // cast through `as Shop`/`as Product` rather than padding out every field
@@ -39,13 +53,13 @@ function product(overrides: Partial<Product>): Product {
 describe("buildShopMetadata", () => {
   it("uses the explicit SEO title/description when set", () => {
     const result = buildShopMetadata(shop({ metaTitle: "Best Flowers", metaDescription: "Same-day delivery", displayName: "Acme Flowers" }));
-    expect(result.title).toBe("Best Flowers");
+    expect(homeTitle(result)).toBe("Best Flowers");
     expect(result.description).toBe("Same-day delivery");
   });
 
   it("falls back to displayName, then name, when no SEO title is set", () => {
-    expect(buildShopMetadata(shop({ displayName: "Acme Flowers" })).title).toBe("Acme Flowers");
-    expect(buildShopMetadata(shop({ displayName: null })).title).toBe("fallback-name");
+    expect(homeTitle(buildShopMetadata(shop({ displayName: "Acme Flowers" })))).toBe("Acme Flowers");
+    expect(homeTitle(buildShopMetadata(shop({ displayName: null })))).toBe("fallback-name");
   });
 
   it("falls back to the shop's own description when no SEO description is set", () => {
@@ -90,12 +104,12 @@ function bioPageConfig(overrides: Partial<BioPageConfig>): BioPageConfig {
 describe("buildBrandMetadata", () => {
   it("composes the title and description from the brand + resolved shop name", () => {
     const result = buildBrandMetadata(shop({ displayName: "Acme Flowers" }), { name: "Rosewood" });
-    expect(result.title).toBe("Rosewood | Acme Flowers");
+    expect(tabTitle(result, shop({ displayName: "Acme Flowers" }))).toBe("Rosewood | Acme Flowers");
     expect(result.description).toBe("Shop Rosewood products at Acme Flowers.");
   });
 
   it("falls back to shop.name when there is no displayName", () => {
-    expect(buildBrandMetadata(shop({ displayName: null }), { name: "Rosewood" }).title).toBe("Rosewood | fallback-name");
+    expect(tabTitle(buildBrandMetadata(shop({ displayName: null }), { name: "Rosewood" }), shop({ displayName: null }))).toBe("Rosewood | fallback-name");
   });
 
   it("uses the shop ogImage for the OG image", () => {
@@ -110,7 +124,7 @@ describe("buildBioPageMetadata", () => {
       shop({ metaTitle: "Shop SEO Title", displayName: "Acme Flowers" }),
       bioPageConfig({ metaTitle: "Bio Page Title", metaDescription: "All our links in one place" }),
     );
-    expect(result.title).toBe("Bio Page Title");
+    expect(tabTitle(result, shop({ metaTitle: "Shop SEO Title", displayName: "Acme Flowers" }))).toBe("Bio Page Title");
     expect(result.description).toBe("All our links in one place");
   });
 
@@ -119,14 +133,14 @@ describe("buildBioPageMetadata", () => {
       shop({ metaTitle: "Shop SEO Title", metaDescription: "Shop SEO description" }),
       bioPageConfig({}),
     );
-    expect(result.title).toBe("Shop SEO Title");
+    expect(tabTitle(result, shop({ metaTitle: "Shop SEO Title" }))).toBe("Shop SEO Title");
     expect(result.description).toBe("Shop SEO description");
   });
 
   it("falls further back to displayName/name/description when nothing SEO-specific is set at all", () => {
     expect(
-      buildBioPageMetadata(shop({ displayName: "Acme Flowers" }), bioPageConfig({})).title,
-    ).toBe("Acme Flowers");
+      tabTitle(buildBioPageMetadata(shop({ displayName: "Acme Flowers" }), bioPageConfig({})), shop({ displayName: "Acme Flowers" })),
+    ).toBe("Bio | Acme Flowers");
     expect(
       buildBioPageMetadata(shop({ description: "A lovely flower shop." }), bioPageConfig({})).description,
     ).toBe("A lovely flower shop.");
@@ -206,7 +220,8 @@ describe("buildCollectionMetadata", () => {
       shop({ name: "Petals", canonicalOrigin: "https://s.requital.io" } as Partial<Shop>),
       { name: "Roses", slug: "roses" },
     );
-    expect(meta.title).toBe("Roses | Petals");
+    expect(tabTitle(meta, shop({ name: "Petals" } as Partial<Shop>))).toBe("Roses | Petals");
+    expect(meta.openGraph?.title).toBe("Roses | Petals");
     expect(meta.alternates?.canonical).toBe("https://s.requital.io/collections/roses");
   });
 
@@ -216,5 +231,47 @@ describe("buildCollectionMetadata", () => {
       { name: "Roses", slug: "roses" },
     );
     expect(meta.description).toBe("Shop Roses at Petals.");
+  });
+});
+
+describe("tab titles (business name, never the domain)", () => {
+  it("home is just the business name", () => {
+    const s = shop({ displayName: "Dubai Fresh Flowers", name: "dff.requital.io" });
+    expect(businessName(s)).toBe("Dubai Fresh Flowers");
+    expect(homeTitle(buildShopMetadata(s))).toBe("Dubai Fresh Flowers");
+  });
+
+  it("other pages read 'Page name | Business name'", () => {
+    const s = shop({ displayName: "Dubai Fresh Flowers" });
+    expect(tabTitle(buildCollectionMetadata(s, { name: "Roses", slug: "roses" }), s)).toBe("Roses | Dubai Fresh Flowers");
+    expect(tabTitle(buildProductMetadata(product({ metaTitle: "Rose Bouquet" })), s)).toBe("Rose Bouquet | Dubai Fresh Flowers");
+  });
+
+  it("a merchant-set SEO title still wins on the home page, and pages keep the business name", () => {
+    const s = shop({ displayName: "Dubai Fresh Flowers", metaTitle: "Best Flowers in Dubai" });
+    expect(homeTitle(buildShopMetadata(s))).toBe("Best Flowers in Dubai");
+    expect(tabTitle(buildCollectionMetadata(s, { name: "Roses", slug: "roses" }), s)).toBe("Roses | Dubai Fresh Flowers");
+  });
+
+  it("a blank display name falls back to the shop name", () => {
+    expect(businessName(shop({ displayName: "  ", name: "Petals" } as Partial<Shop>))).toBe("Petals");
+  });
+});
+
+describe("favicon resolution", () => {
+  const theme = (logo: { faviconUrl?: string; defaultLogoUrl?: string }) => ({ globalSettings: { logo } }) as never;
+
+  it("prefers the favicon set in theme settings, then the legacy shop favicon, then the logo, then nothing", () => {
+    const s = shop({ faviconUrl: "/uploads/legacy.png", logoUrl: "/uploads/shop-logo.png" });
+    expect(resolveFaviconUrl(s, theme({ faviconUrl: "/uploads/fav.png", defaultLogoUrl: "/uploads/tl.png" }))).toBe("http://localhost:3000/uploads/fav.png");
+    expect(resolveFaviconUrl(s, theme({ defaultLogoUrl: "/uploads/tl.png" }))).toBe("http://localhost:3000/uploads/legacy.png");
+    expect(resolveFaviconUrl(shop({ logoUrl: "/uploads/shop-logo.png" }), theme({ defaultLogoUrl: "/uploads/tl.png" }))).toBe("http://localhost:3000/uploads/tl.png");
+    expect(resolveFaviconUrl(shop({ logoUrl: "/uploads/shop-logo.png" }), null)).toBe("http://localhost:3000/uploads/shop-logo.png");
+    expect(resolveFaviconUrl(shop({}), null)).toBeNull();
+  });
+
+  it("buildShopMetadata emits the icon only when one resolves", () => {
+    expect(buildShopMetadata(shop({}), theme({ faviconUrl: "/uploads/fav.png" })).icons).toEqual({ icon: "http://localhost:3000/uploads/fav.png" });
+    expect(buildShopMetadata(shop({}), null).icons).toBeUndefined();
   });
 });

@@ -6,6 +6,7 @@ import Select from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
 import ColorPicker from "@/components/ui/ColorPicker";
 import RichTextBlockEditor from "../RichTextBlockEditor";
+import MarqueeSpeedControl from "./shared/MarqueeSpeedControl";
 import type { AnnouncementBarConfig } from "@/lib/types";
 
 // The PERSISTENT chrome announcement bar (theme-builder-expansion Phase 5,
@@ -72,6 +73,7 @@ export default function AnnouncementBarChromeSettings({
             <span className="text-sm">Scrolling (marquee)</span>
             <Toggle checked={!!cfg.scrolling} onChange={(v) => patch({ scrolling: v })} />
           </div>
+          {cfg.scrolling && <MarqueeSpeedControl value={cfg.marqueeSpeed} onChange={(v) => patch({ marqueeSpeed: v })} />}
           {!cfg.scrolling && messages.length > 1 && (
             <Select label="Rotation speed" value={cfg.speed ?? "medium"} onChange={(e) => patch({ speed: e.target.value as AnnouncementBarConfig["speed"] })}>
               <option value="fast">Fast</option>
