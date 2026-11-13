@@ -548,6 +548,35 @@ export class OrderNotificationsService {
     );
   }
 
+  // Nomod: a payment was reported for this order but did not match what was asked of
+  // the gateway (amount or currency), so it was NOT marked paid. Once per order and
+  // reason (the job key). Never throws.
+  async alertPaymentNeedsReview(
+    shopId: number,
+    orderId: number,
+    reason: string,
+  ): Promise<boolean> {
+    return this.alertMerchantAboutOrder(
+      shopId,
+      orderId,
+      `order:${orderId}:payment-review:${reason.slice(0, 40)}`,
+      (n) =>
+        `A Nomod payment for order #${n} did not match the order and was not marked paid. Check it in the Nomod dashboard.`,
+    );
+  }
+
+  // Nomod: the customer's bank opened a dispute (chargeback) on a paid order. Once
+  // per order. Never throws.
+  async alertPaymentDispute(shopId: number, orderId: number): Promise<boolean> {
+    return this.alertMerchantAboutOrder(
+      shopId,
+      orderId,
+      `order:${orderId}:payment-dispute`,
+      (n) =>
+        `A payment dispute was opened on order #${n}. Respond to it in the Nomod dashboard.`,
+    );
+  }
+
   private async alertMerchantAboutOrder(
     shopId: number,
     orderId: number,

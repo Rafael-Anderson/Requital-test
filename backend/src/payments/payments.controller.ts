@@ -9,7 +9,9 @@ import {
 } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
 import type { Request } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { PaymentsService } from './payments.service';
+import { NomodWebhookService } from './nomod/nomod-webhook.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -80,7 +82,24 @@ function extractPayPalHeaders(request: Request): string {
 // Telr/PayTabs/Tabby/Tamara for real.
 @Controller('payments/webhook')
 export class PaymentsWebhookController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly nomodWebhook: NomodWebhookService,
+  ) {}
+
+  // Nomod (Standard Webhooks). The shop is the one that owns <token>; the body is
+  // verified against that shop's own signing secret, and nothing in the payload
+  // can name a different shop. 240/min per client, the same headroom as the other
+  // public webhook routes.
+  @Public()
+  @Throttle({ default: { limit: 240, ttl: 60_000 } })
+  @Post('nomod/:token')
+  handleNomodWebhook(
+    @Req() request: RawBodyRequest<Request>,
+    @Param('token') token: string,
+  ) {
+    return this.nomodWebhook.handle(token, request.headers, request.rawBody);
+  }
 
   @Public()
   @Post('stripe')

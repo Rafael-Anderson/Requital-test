@@ -1,3 +1,4 @@
+import type { FeaturesService } from '../features/features.service';
 import { PaymentSettingsService } from './payment-settings.service';
 import { PaymentProviderRegistry } from './payment-provider.registry';
 import type { DatabaseService } from '../database/database.service';
@@ -12,7 +13,9 @@ interface MockDb {
   query: jest.Mock;
 }
 
-function createMockDb(rows: { provider: string; enabled: boolean; credentials: string | null }[]): DatabaseService & MockDb {
+function createMockDb(
+  rows: { provider: string; enabled: boolean; credentials: string | null }[],
+): DatabaseService & MockDb {
   const query = jest.fn().mockImplementation((sql: string) => {
     if (sql.includes('SELECT credentials FROM shoppaymentprovider')) {
       const row = rows.find((r) => r.provider === 'tabby');
@@ -25,6 +28,9 @@ function createMockDb(rows: { provider: string; enabled: boolean; credentials: s
 }
 
 const mockShopService = {} as ShopService;
+const mockFeatures = {
+  isEnabled: jest.fn().mockResolvedValue(true),
+} as unknown as FeaturesService;
 const registry = new PaymentProviderRegistry();
 
 describe('PaymentSettingsService.resolveTabbyMerchantCode', () => {
@@ -34,40 +40,88 @@ describe('PaymentSettingsService.resolveTabbyMerchantCode', () => {
   });
 
   it('returns null when Tabby is not enabled for the shop', async () => {
-    const db = createMockDb([{ provider: 'tabby', enabled: false, credentials: JSON.stringify({ merchantCode: 'mc_1' }) }]);
-    const service = new PaymentSettingsService(db, mockShopService, registry);
+    const db = createMockDb([
+      {
+        provider: 'tabby',
+        enabled: false,
+        credentials: JSON.stringify({ merchantCode: 'mc_1' }),
+      },
+    ]);
+    const service = new PaymentSettingsService(
+      db,
+      mockShopService,
+      registry,
+      mockFeatures,
+    );
 
     expect(await service.resolveTabbyMerchantCode(1)).toBeNull();
   });
 
   it('returns the stored merchantCode when set', async () => {
     const db = createMockDb([
-      { provider: 'tabby', enabled: true, credentials: JSON.stringify({ publicKey: 'pk_1', merchantCode: 'mc_1' }) },
+      {
+        provider: 'tabby',
+        enabled: true,
+        credentials: JSON.stringify({
+          publicKey: 'pk_1',
+          merchantCode: 'mc_1',
+        }),
+      },
     ]);
-    const service = new PaymentSettingsService(db, mockShopService, registry);
+    const service = new PaymentSettingsService(
+      db,
+      mockShopService,
+      registry,
+      mockFeatures,
+    );
 
     expect(await service.resolveTabbyMerchantCode(1)).toBe('mc_1');
   });
 
   it('falls back to publicKey when merchantCode is not set', async () => {
-    const db = createMockDb([{ provider: 'tabby', enabled: true, credentials: JSON.stringify({ publicKey: 'pk_1' }) }]);
-    const service = new PaymentSettingsService(db, mockShopService, registry);
+    const db = createMockDb([
+      {
+        provider: 'tabby',
+        enabled: true,
+        credentials: JSON.stringify({ publicKey: 'pk_1' }),
+      },
+    ]);
+    const service = new PaymentSettingsService(
+      db,
+      mockShopService,
+      registry,
+      mockFeatures,
+    );
 
     expect(await service.resolveTabbyMerchantCode(1)).toBe('pk_1');
   });
 
   it('falls back to the platform TABBY_PUBLIC_KEY env var when the shop has no credentials at all', async () => {
     process.env.TABBY_PUBLIC_KEY = 'pk_platform';
-    const db = createMockDb([{ provider: 'tabby', enabled: true, credentials: null }]);
-    const service = new PaymentSettingsService(db, mockShopService, registry);
+    const db = createMockDb([
+      { provider: 'tabby', enabled: true, credentials: null },
+    ]);
+    const service = new PaymentSettingsService(
+      db,
+      mockShopService,
+      registry,
+      mockFeatures,
+    );
 
     expect(await service.resolveTabbyMerchantCode(1)).toBe('pk_platform');
   });
 
   it('returns null when nothing is configured anywhere', async () => {
     delete process.env.TABBY_PUBLIC_KEY;
-    const db = createMockDb([{ provider: 'tabby', enabled: true, credentials: null }]);
-    const service = new PaymentSettingsService(db, mockShopService, registry);
+    const db = createMockDb([
+      { provider: 'tabby', enabled: true, credentials: null },
+    ]);
+    const service = new PaymentSettingsService(
+      db,
+      mockShopService,
+      registry,
+      mockFeatures,
+    );
 
     expect(await service.resolveTabbyMerchantCode(1)).toBeNull();
   });

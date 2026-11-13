@@ -256,6 +256,8 @@ export interface OrderreturnRow {
   storeCreditRefundAmount: string;
   restocked: boolean;
   status: string;
+  providerRefundStatus: string | null;
+  providerRefundKey: string | null;
   staffUserId: number;
   createdAt: Date;
 }
@@ -922,6 +924,7 @@ export interface ShoppaymentproviderRow {
   provider: string;
   enabled: boolean;
   credentials: string | null;
+  webhookToken: string | null;
   updatedAt: Date;
 }
 
@@ -2039,4 +2042,36 @@ export interface EmailsuppressionRow {
   reason: 'unsubscribe' | 'bounce' | 'complaint' | 'manual';
   campaignId: number | null;
   createdAt: Date;
+}
+
+// Nomod hosted checkout we created for an order (migration 20261203100000).
+export interface NomodcheckoutRow {
+  id: number;
+  shopId: number;
+  orderId: number;
+  attempt: number;
+  referenceId: string;
+  checkoutId: string | null;
+  amountMinor: number;
+  currency: string;
+  status: string;
+  chargeId: string | null;
+  refundedMinor: number;
+  reviewReason: string | null;
+  disputedAt: Date | null;
+  lastCheckedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface NomodwebhookeventRow {
+  id: number;
+  shopId: number;
+  eventId: string;
+  eventType: string;
+  objectId: string | null;
+  orderId: number | null;
+  outcome: string | null;
+  receivedAt: Date;
+  processedAt: Date | null;
 }

@@ -28,6 +28,11 @@ export const CARD_PROCESSOR_PROVIDERS: PaymentGatewayProvider[] = [
 export interface CredentialFieldDef {
   key: string;
   label: string;
+  // false = a plain setting (a base URL, a yes/no), shown back to the admin as typed
+  // instead of masked. Absent means a secret: write-only, never returned.
+  secret?: boolean;
+  // true = may be left unset (and cleared by saving it blank).
+  optional?: boolean;
 }
 
 // Field shapes:
@@ -49,17 +54,30 @@ export interface CredentialFieldDef {
 //   (clientId/clientSecret), plus webhookId — the Webhook ID PayPal issues
 //   per registered webhook, required by their remote
 //   verify-webhook-signature call (see providers/paypal-payment.provider.ts).
-// - nomod: no confirmed real API docs for this specific gateway were
-//   available to implement (or even confidently shape credentials) against
-//   — this is a placeholder 2-field shape (api key + secret), flagged the
-//   same way the field itself is flagged as a structural stub.
+// - nomod: Hosted Checkout. apiKey (sent as X-API-KEY) and webhookSecret (the
+//   whsec_... signing secret of the Hosted Checkout webhook) are secrets;
+//   baseUrl (an allow-listed Nomod host, default api.nomod.com) and
+//   allowPartialRefunds ('true' | 'false', default full refunds only) are plain
+//   optional settings. See payments/nomod/.
 export const PROVIDER_CREDENTIAL_FIELDS: Record<
   PaymentGatewayProvider,
   CredentialFieldDef[]
 > = {
   nomod: [
     { key: 'apiKey', label: 'API Key' },
-    { key: 'secretKey', label: 'Secret Key' },
+    { key: 'webhookSecret', label: 'Webhook Signing Secret (whsec_...)' },
+    {
+      key: 'baseUrl',
+      label: 'API base URL (leave blank for https://api.nomod.com)',
+      secret: false,
+      optional: true,
+    },
+    {
+      key: 'allowPartialRefunds',
+      label: 'Allow partial refunds through Nomod',
+      secret: false,
+      optional: true,
+    },
   ],
   stripe: [
     { key: 'secretKey', label: 'Secret Key' },

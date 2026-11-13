@@ -5,6 +5,7 @@ import { Copy } from "lucide-react";
 import { API_URL, getPaymentSettings, getShop, updatePaymentProvider } from "@/lib/api";
 import { stripeBlockedForCurrency } from "@/lib/blocked-gateway-currencies";
 import StripeCurrencyNotice from "@/components/StripeCurrencyNotice";
+import NomodExtras from "@/components/NomodExtras";
 import { useAuth } from "@/lib/auth-context";
 import {
   CARD_PROCESSOR_PROVIDERS,
@@ -17,6 +18,7 @@ import {
 import Card from "@/components/ui/Card";
 import SecretField from "@/components/ui/SecretField";
 import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
 import Toggle from "@/components/ui/Toggle";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
@@ -79,24 +81,52 @@ function CredentialFields({
   provider,
   values,
   maskedCredentials,
+  publicValues,
   onChange,
 }: {
   provider: PaymentGatewayProvider;
   values: Record<string, string>;
   maskedCredentials: Record<string, string> | null;
+  // Plain (non-secret) settings as saved; a secret is never in here.
+  publicValues?: Record<string, string>;
   onChange: (key: string, value: string) => void;
 }) {
   return (
     <div className="space-y-3">
-      {PROVIDER_CREDENTIAL_FIELDS[provider].map((field) => (
-        <SecretField
-          key={field.key}
-          label={field.label}
-          masked={maskedCredentials?.[field.key] ?? null}
-          value={values[field.key] ?? ""}
-          onChange={(value) => onChange(field.key, value)}
-        />
-      ))}
+      {PROVIDER_CREDENTIAL_FIELDS[provider].map((field) => {
+        if (field.secret === false) {
+          const current = values[field.key] ?? publicValues?.[field.key] ?? "";
+          if (field.key === "allowPartialRefunds") {
+            return (
+              <div key={field.key} className="flex items-center justify-between gap-3">
+                <span className="text-[13px] font-medium text-text-secondary dark:text-zinc-400">{field.label}</span>
+                <Toggle
+                  checked={current === "true"}
+                  onChange={(checked) => onChange(field.key, checked ? "true" : "false")}
+                  label={field.label}
+                />
+              </div>
+            );
+          }
+          return (
+            <Input
+              key={field.key}
+              label={field.label}
+              value={current}
+              onChange={(e) => onChange(field.key, e.target.value)}
+            />
+          );
+        }
+        return (
+          <SecretField
+            key={field.key}
+            label={field.label}
+            masked={maskedCredentials?.[field.key] ?? null}
+            value={values[field.key] ?? ""}
+            onChange={(value) => onChange(field.key, value)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -268,7 +298,11 @@ export default function PaymentIntegrationsPage() {
               options, so this list is loosely typed rather than widening
               CARD_PROCESSOR_PROVIDERS/PaymentGatewayProvider itself. */}
           {([...CARD_PROCESSOR_PROVIDERS, "telr", "paytabs"] as string[]).map((provider) => {
-            const comingSoon = COMING_SOON_PAYMENT_PROVIDERS.includes(provider);
+            // Nomod is behind a platform grant: until the shop has it, it stays a
+            // "Coming soon" row like Telr and PayTabs.
+            const comingSoon =
+              COMING_SOON_PAYMENT_PROVIDERS.includes(provider) ||
+              (provider === "nomod" && rowFor("nomod")?.available !== true);
             return (
               <label
                 key={provider}
@@ -308,8 +342,16 @@ export default function PaymentIntegrationsPage() {
           provider={cardProcessor}
           values={cardCredentials}
           maskedCredentials={rowFor(cardProcessor)?.maskedCredentials ?? null}
+          publicValues={rowFor(cardProcessor)?.publicValues}
           onChange={(key, value) => setCardCredentials((prev) => ({ ...prev, [key]: value }))}
         />
+        {cardProcessor === "nomod" && (
+          <NomodExtras
+            webhookPath={rowFor("nomod")?.webhookPath}
+            hasApiKey={!!rowFor("nomod")?.maskedCredentials?.apiKey}
+            onChanged={() => setReloadKey((k) => k + 1)}
+          />
+        )}
         {cardProcessor === "stripe" && stripeBlockedForCurrency(shopCurrency) && <StripeCurrencyNotice />}
         {cardProcessor === "stripe" && user && <StripeWebhookInstructions shopId={user.shopId} />}
         <div className="flex justify-end">

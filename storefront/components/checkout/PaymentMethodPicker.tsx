@@ -2,7 +2,7 @@
 
 import { Banknote, CreditCard, Wallet, type LucideIcon } from "lucide-react";
 import type { PaymentMethod } from "@/lib/types";
-import { PAYMENT_LABELS } from "./checkout-field-styles";
+import { paymentLabel } from "./checkout-field-styles";
 
 const PAYMENT_ICONS: Record<PaymentMethod, LucideIcon> = {
   card_online: CreditCard,
@@ -25,10 +25,12 @@ export default function PaymentMethodPicker({
   methods,
   value,
   onChange,
+  cardProcessor,
 }: {
   methods: PaymentMethod[];
   value: PaymentMethod | "";
   onChange: (method: PaymentMethod) => void;
+  cardProcessor?: string | null;
 }) {
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -48,7 +50,7 @@ export default function PaymentMethodPicker({
             }`}
           >
             <Icon className="size-4 shrink-0" />
-            <span>{PAYMENT_LABELS[m]}</span>
+            <span>{paymentLabel(m, cardProcessor)}</span>
           </button>
         );
       })}

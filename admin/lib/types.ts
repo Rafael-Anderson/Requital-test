@@ -2443,17 +2443,23 @@ export const CARD_PROCESSOR_PROVIDERS: PaymentGatewayProvider[] = ["nomod", "str
 // PROVIDER_CREDENTIAL_FIELDS — they're display-only, never a real
 // selectable/submittable option, so nothing that maps over those needs new
 // entries for them.
-export const COMING_SOON_PAYMENT_PROVIDERS: string[] = ["nomod", "telr", "paytabs"];
+export const COMING_SOON_PAYMENT_PROVIDERS: string[] = ["telr", "paytabs"];
 
 export interface CredentialFieldDef {
   key: string;
   label: string;
+  // false = a plain setting shown back as typed (Nomod's base URL, partial refunds);
+  // absent = a write-only secret.
+  secret?: boolean;
+  optional?: boolean;
 }
 
 export const PROVIDER_CREDENTIAL_FIELDS: Record<PaymentGatewayProvider, CredentialFieldDef[]> = {
   nomod: [
     { key: "apiKey", label: "API Key" },
-    { key: "secretKey", label: "Secret Key" },
+    { key: "webhookSecret", label: "Webhook Signing Secret (whsec_...)" },
+    { key: "baseUrl", label: "API base URL (leave blank for https://api.nomod.com)", secret: false, optional: true },
+    { key: "allowPartialRefunds", label: "Allow partial refunds through Nomod", secret: false, optional: true },
   ],
   stripe: [
     { key: "secretKey", label: "Secret Key" },
@@ -2503,6 +2509,25 @@ export interface PaymentProviderSettings {
   // Masked, e.g. { secretKey: "••••1234" } — never the real value. See
   // PaymentSettingsService.maskCredentials on the backend.
   maskedCredentials: Record<string, string> | null;
+  // false when the platform has not granted the provider to this shop (Nomod).
+  available?: boolean;
+  // Plain (non-secret) settings as saved, never a secret.
+  publicValues?: Record<string, string>;
+  // Nomod: the shop's own webhook path; the admin prefixes the API origin.
+  webhookPath?: string | null;
+}
+
+export interface NomodPendingCheckout {
+  id: number;
+  orderId: number;
+  shopOrderNumber: number;
+  status: string;
+  reviewReason: string | null;
+  disputed: boolean;
+  amount: string;
+  currency: string;
+  createdAt: string;
+  lastCheckedAt: string | null;
 }
 
 // --- WhatsApp Cloud API credentials — mirrors backend/src/whatsapp/whatsapp-credential-fields.ts by hand. ---

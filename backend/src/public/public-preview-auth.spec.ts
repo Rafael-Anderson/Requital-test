@@ -61,6 +61,7 @@ function buildService(db: DatabaseService) {
     unused, // ordersService
     unused, // newsletterConfirm
     unused, // collectionRules
+    unused, // nomodConfirm
   );
   return { service, jwtService };
 }

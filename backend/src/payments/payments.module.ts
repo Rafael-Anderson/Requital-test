@@ -13,6 +13,12 @@ import { PayTabsPaymentProvider } from './providers/paytabs-payment.provider';
 import { TabbyPaymentProvider } from './providers/tabby-payment.provider';
 import { TamaraPaymentProvider } from './providers/tamara-payment.provider';
 import { NomodPaymentProvider } from './providers/nomod-payment.provider';
+import { NomodClient } from './nomod/nomod-client';
+import { NomodPaymentService } from './nomod/nomod-payment.service';
+import { NomodConfirmService } from './nomod/nomod-confirm.service';
+import { NomodWebhookService } from './nomod/nomod-webhook.service';
+import { NomodAdminService } from './nomod/nomod-admin.service';
+import { NomodSettingsController } from './nomod/nomod-settings.controller';
 import { PayPalPaymentProvider } from './providers/paypal-payment.provider';
 import { PaymentSettingsController } from './payment-settings.controller';
 import { PaymentSettingsService } from './payment-settings.service';
@@ -36,14 +42,17 @@ import { PaymentReconciliationService } from './payment-reconciliation.service';
 // Gateways settings page doesn't surface them — the task's provider list
 // (Nomod/Stripe/PayPal/Tabby/Tamara/COD) replaces what's *offered in the
 // UI*, not what's registered; nothing currently depends on de-registering them.
-function paymentProviderRegistryFactory(): PaymentProviderRegistry {
+function paymentProviderRegistryFactory(
+  nomod: NomodPaymentService,
+  client: NomodClient,
+): PaymentProviderRegistry {
   const registry = new PaymentProviderRegistry();
   registry.register(new StripePaymentProvider());
   registry.register(new TelrPaymentProvider());
   registry.register(new PayTabsPaymentProvider());
   registry.register(new TabbyPaymentProvider());
   registry.register(new TamaraPaymentProvider());
-  registry.register(new NomodPaymentProvider());
+  registry.register(new NomodPaymentProvider(nomod, client));
   registry.register(new PayPalPaymentProvider());
   return registry;
 }
@@ -65,14 +74,21 @@ function paymentProviderRegistryFactory(): PaymentProviderRegistry {
     PayController,
     PaymentsWebhookController,
     PaymentSettingsController,
+    NomodSettingsController,
   ],
   providers: [
     PaymentReconciliationService,
     PaymentsService,
     PaymentSettingsService,
+    { provide: NomodClient, useFactory: () => new NomodClient() },
+    NomodPaymentService,
+    NomodConfirmService,
+    NomodWebhookService,
+    NomodAdminService,
     {
       provide: PaymentProviderRegistry,
       useFactory: paymentProviderRegistryFactory,
+      inject: [NomodPaymentService, NomodClient],
     },
   ],
   // PublicModule (storefront checkout) needs the same registry to create a
@@ -83,6 +99,11 @@ function paymentProviderRegistryFactory(): PaymentProviderRegistry {
   // PaymentsService itself is needed by DraftOrdersModule, which reuses
   // generateLink() verbatim for "send invoice" rather than building a
   // second payment-link mechanism.
-  exports: [PaymentProviderRegistry, PaymentSettingsService, PaymentsService],
+  exports: [
+    PaymentProviderRegistry,
+    PaymentSettingsService,
+    PaymentsService,
+    NomodConfirmService,
+  ],
 })
 export class PaymentsModule {}

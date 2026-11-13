@@ -162,7 +162,12 @@ export default function CheckoutSteps(state: CheckoutFormState) {
           <div className="space-y-4">
             <div>
               <p className="text-sm font-medium mb-2">Payment</p>
-              <PaymentMethodPicker methods={availablePaymentMethods} value={paymentMethod} onChange={setPaymentMethod} />
+              <PaymentMethodPicker
+          methods={availablePaymentMethods}
+          value={paymentMethod}
+          onChange={setPaymentMethod}
+          cardProcessor={shop?.cardProcessor}
+        />
             </div>
 
             <div>

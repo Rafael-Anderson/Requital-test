@@ -25,6 +25,17 @@ export class ReturnsController {
     return this.returnsService.findAllForOrder(ctx, orderId);
   }
 
+  // Retries a provider refund that failed, with the same idempotency key.
+  @Roles('admin', 'branch', 'order_manager')
+  @Post(':returnId/retry-provider-refund')
+  retryProviderRefund(
+    @CurrentUser() ctx: TenantContext,
+    @Param('orderId', ParseIntPipe) orderId: number,
+    @Param('returnId', ParseIntPipe) returnId: number,
+  ) {
+    return this.returnsService.retryProviderRefund(ctx, orderId, returnId);
+  }
+
   @Roles('admin', 'branch', 'order_manager')
   @Post()
   create(

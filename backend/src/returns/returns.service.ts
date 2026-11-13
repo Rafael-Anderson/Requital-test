@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
@@ -10,7 +12,10 @@ import type { OrderreturnRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { OrdersService } from '../orders/orders.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
-import type { PaymentProvider } from '../payments/payment-provider.interface';
+import {
+  RefundNotAttemptedError,
+  type PaymentProvider,
+} from '../payments/payment-provider.interface';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { PaymentSettingsService } from '../payments/payment-settings.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -25,6 +30,7 @@ import { StoreCreditService } from '../store-credit/store-credit.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { ProductsService } from '../products/products.service';
 import { defaultReturnRefundMinor } from './return-refund';
+import { refundIdempotencyKey } from './refund-key';
 import { CreateReturnDto } from './dto/create-return.dto';
 
 interface RefundTarget {
@@ -308,15 +314,33 @@ export class ReturnsService {
       // circuits to 'manual' with no reference, since there's nothing to
       // charge/refund through a gateway for zero amount). Called with the order
       // row lock held and every cap already passed.
-      const { refundMethod, providerRefundReference } = toStoreCredit
+      // Deterministic per refund: the same order, the same amount already refunded
+      // before it and the same amount now give the same key, so a retry of THIS
+      // refund presents the key the gateway has already seen and can never be
+      // applied twice, while the next refund (a different "already refunded") gets
+      // its own.
+      const providerRefundKey = refundIdempotencyKey(
+        orderId,
+        alreadyMinor,
+        providerPortionMinor,
+      );
+      const {
+        refundMethod,
+        providerRefundReference,
+        providerRefundStatus,
+        usedKey,
+      } = toStoreCredit
         ? {
             refundMethod: 'store_credit' as const,
             providerRefundReference: null,
+            providerRefundStatus: null,
+            usedKey: null,
           }
         : await this.attemptProviderRefund(
             order.id,
             refundTarget,
             providerRefundPortion,
+            providerRefundKey,
           );
 
       // An order with a stock record (consumptionRecordedAt) gets exactly what
@@ -357,14 +381,16 @@ export class ReturnsService {
       }
 
       const [insert] = await conn.query(
-        `INSERT INTO orderreturn (orderId, reason, refundAmount, refundMethod, providerRefundReference, giftCardRefundAmount, storeCreditRefundAmount, restocked, staffUserId)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO orderreturn (orderId, reason, refundAmount, refundMethod, providerRefundReference, providerRefundStatus, providerRefundKey, giftCardRefundAmount, storeCreditRefundAmount, restocked, staffUserId)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           orderId,
           dto.reason,
           refundAmount,
           refundMethod,
           providerRefundReference,
+          providerRefundStatus,
+          usedKey,
           giftCardRefundAmount,
           storeCreditRefundAmount,
           restock,
@@ -564,15 +590,26 @@ export class ReturnsService {
     orderId: number,
     target: RefundTarget | null,
     amount: number,
+    idempotencyKey: string,
   ): Promise<{
     refundMethod: 'provider' | 'manual';
     providerRefundReference: string | null;
+    // pending | completed from a gateway that reports it; 'failed' when the call
+    // was made and did not succeed (the refund then stays retryable); null when no
+    // provider refund was attempted or the gateway reports no state.
+    providerRefundStatus: 'pending' | 'completed' | 'failed' | null;
+    usedKey: string | null;
   }> {
     // A refund fully (or, for this call, entirely-for-its-portion) covered
     // by gift-card credit has nothing left for a provider to refund —
     // never call out to a gateway for zero amount.
     if (amount <= 0 || !target) {
-      return { refundMethod: 'manual', providerRefundReference: null };
+      return {
+        refundMethod: 'manual',
+        providerRefundReference: null,
+        providerRefundStatus: null,
+        usedKey: null,
+      };
     }
     try {
       const result = await target.provider.refundPayment!({
@@ -580,10 +617,13 @@ export class ReturnsService {
         amount,
         currency: target.currency,
         credentials: target.credentials,
+        idempotencyKey,
       });
       return {
         refundMethod: 'provider',
         providerRefundReference: result.providerReference,
+        providerRefundStatus: result.status ?? null,
+        usedKey: idempotencyKey,
       };
     } catch (error) {
       logger.warn(
@@ -593,8 +633,107 @@ export class ReturnsService {
           error: error instanceof Error ? error.message : String(error),
         },
       );
-      return { refundMethod: 'manual', providerRefundReference: null };
+      // A refund the provider chose not to send (a policy, e.g. partial refunds
+      // off) failed at nothing: it is a plain manual refund with no retry.
+      if (error instanceof RefundNotAttemptedError) {
+        return {
+          refundMethod: 'manual',
+          providerRefundReference: null,
+          providerRefundStatus: null,
+          usedKey: null,
+        };
+      }
+      return {
+        refundMethod: 'manual',
+        providerRefundReference: null,
+        providerRefundStatus: 'failed',
+        usedKey: idempotencyKey,
+      };
     }
+  }
+
+  // Tries a FAILED provider refund again, with the SAME idempotency key it was first
+  // sent with, so a gateway that already applied it answers with that refund instead
+  // of making a second one. Only a return whose provider refund is recorded as failed
+  // can be retried; the claim below makes a double click a 409, not two calls.
+  async retryProviderRefund(
+    ctx: TenantContext,
+    orderId: number,
+    returnId: number,
+  ) {
+    const order = await this.ordersService.findOne(ctx, orderId);
+    await this.branchRolesService.assertPermission(
+      ctx,
+      order.outletId,
+      'orders.manage',
+    );
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT r.id, r.refundAmount, r.giftCardRefundAmount, r.storeCreditRefundAmount,
+              r.providerRefundKey, r.providerRefundStatus
+         FROM orderreturn r JOIN \`order\` o ON o.id = r.orderId
+        WHERE r.id = ? AND r.orderId = ? AND o.shopId = ?`,
+      [returnId, orderId, order.shopId],
+    );
+    const ret = rows[0];
+    if (!ret) throw new NotFoundException('Return not found');
+    if (ret.providerRefundStatus !== 'failed' || !ret.providerRefundKey) {
+      throw new BadRequestException(
+        'This return has no failed refund to retry',
+      );
+    }
+    const claim = await this.db.execute(
+      `UPDATE orderreturn SET providerRefundStatus = 'retrying'
+        WHERE id = ? AND providerRefundStatus = 'failed'`,
+      [returnId],
+    );
+    if (claim.affectedRows !== 1) {
+      throw new ConflictException('This refund is already being retried');
+    }
+    const release = () =>
+      this.db
+        .execute(
+          `UPDATE orderreturn SET providerRefundStatus = 'failed' WHERE id = ? AND providerRefundStatus = 'retrying'`,
+          [returnId],
+        )
+        .catch(() => undefined);
+
+    const factor = minorUnitFactor(order.currency);
+    const portionMinor =
+      Math.round(Number(ret.refundAmount) * factor) -
+      Math.round(Number(ret.giftCardRefundAmount) * factor) -
+      Math.round(Number(ret.storeCreditRefundAmount) * factor);
+    const target = await this.loadRefundTarget(order.id, order.shopId);
+    if (!target || portionMinor <= 0) {
+      await release();
+      throw new BadRequestException(
+        'There is no payment to refund through the gateway for this return',
+      );
+    }
+    try {
+      const result = await target.provider.refundPayment!({
+        chargeReference: target.chargeReference,
+        amount: portionMinor / factor,
+        currency: target.currency,
+        credentials: target.credentials,
+        idempotencyKey: ret.providerRefundKey as string,
+      });
+      await this.db.execute(
+        `UPDATE orderreturn SET refundMethod = 'provider', providerRefundReference = ?, providerRefundStatus = ?
+          WHERE id = ?`,
+        [result.providerReference, result.status ?? null, returnId],
+      );
+    } catch (error) {
+      logger.warn(`provider refund retry failed for order ${orderId}`, {
+        orderId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await release();
+      throw new BadRequestException(
+        'The gateway could not complete the refund. Try again, or refund it in the gateway dashboard.',
+      );
+    }
+    const returns = await this.loadReturnsWithRelations([returnId]);
+    return this.toResponse(returns.get(returnId)!);
   }
 
   private async loadReturnsWithRelations(
@@ -639,8 +778,11 @@ export class ReturnsService {
   }
 
   private toResponse(orderReturn: AssembledOrderReturn) {
+    // The refund idempotency key is internal: never part of a response.
+    const { providerRefundKey, ...rest } = orderReturn;
+    void providerRefundKey;
     return {
-      ...orderReturn,
+      ...rest,
       refundAmount: trimDecimal(orderReturn.refundAmount),
       giftCardRefundAmount: trimDecimal(orderReturn.giftCardRefundAmount),
       storeCreditRefundAmount: trimDecimal(orderReturn.storeCreditRefundAmount),

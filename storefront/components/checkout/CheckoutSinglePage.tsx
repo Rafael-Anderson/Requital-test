@@ -120,7 +120,12 @@ export default function CheckoutSinglePage(state: CheckoutFormState) {
 
       <div>
         <p className="text-sm font-medium mb-2">Payment</p>
-        <PaymentMethodPicker methods={availablePaymentMethods} value={paymentMethod} onChange={setPaymentMethod} />
+        <PaymentMethodPicker
+          methods={availablePaymentMethods}
+          value={paymentMethod}
+          onChange={setPaymentMethod}
+          cardProcessor={shop?.cardProcessor}
+        />
       </div>
 
       <div>
