@@ -22,6 +22,14 @@ export const TEXTAREA_CLASS =
 export const BUTTON_OUTLINE_CLASS =
   "border border-stroke bg-background text-foreground";
 
+// "Pay online" when the shop's card processor is Nomod: its hosted page takes cards,
+// Apple Pay and, where the merchant has switched them on, Tabby and Tamara.
+export const NOMOD_CARD_LABEL = "Pay by card / Apple Pay / Tabby / Tamara (Nomod)";
+
+export function paymentLabel(method: PaymentMethod, cardProcessor?: string | null): string {
+  return method === "card_online" && cardProcessor === "nomod" ? NOMOD_CARD_LABEL : PAYMENT_LABELS[method];
+}
+
 export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   card_online: "Pay online (card)",
   cash_on_delivery: "Cash on delivery",

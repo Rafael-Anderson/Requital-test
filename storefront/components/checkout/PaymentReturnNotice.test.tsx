@@ -18,6 +18,18 @@ describe("PaymentReturnNotice", () => {
     expect(screen.getByRole("status").textContent).not.toContain("—");
   });
 
+  it("words a Nomod failure and a Nomod cancel differently (wording only, never proof of anything)", async () => {
+    await checkoutAttemptKey("shop", "sig");
+    window.history.pushState({}, "", "/checkout?orderId=12&payment=failed");
+    const { rerender } = render(<PaymentReturnNotice shopSlug="shop" />);
+    expect(screen.getByRole("status").textContent).toMatch(/did not go through/i);
+    window.history.pushState({}, "", "/checkout?orderId=12&payment=cancelled");
+    rerender(<PaymentReturnNotice key="again" shopSlug="shop" />);
+    expect(screen.getByRole("status").textContent).toMatch(/You cancelled the payment/);
+    expect(screen.getByRole("status").textContent).toMatch(/not be charged twice/);
+    expect(screen.getByRole("status").textContent).not.toContain("—");
+  });
+
   it("shows nothing without orderId in the URL, or without an attempt in this tab", async () => {
     await checkoutAttemptKey("shop", "sig");
     const { container, rerender } = render(<PaymentReturnNotice shopSlug="shop" />);

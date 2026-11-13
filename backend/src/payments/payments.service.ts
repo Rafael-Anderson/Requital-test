@@ -253,6 +253,7 @@ export class PaymentsService {
       throw new ConflictException('Nothing is left to pay on this order');
     }
     const session = await provider.createCheckoutSession({
+      shopId: order.shopRowId as number,
       orderId: order.id as number,
       orderNumber: order.shopOrderNumber as number,
       amount: due,

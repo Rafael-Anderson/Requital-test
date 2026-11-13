@@ -126,6 +126,7 @@ import type {
   PaginatedOrders,
   PaginatedProductSales,
   PaymentProviderSettings,
+  NomodPendingCheckout,
   PolicyPage,
   PolicyPageType,
   Product,
@@ -1017,6 +1018,27 @@ export function updatePaymentProvider(
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+// Nomod (Hosted Checkout). None of these ever returns a key or a signing secret.
+export function nomodWebhookUrl() {
+  return apiFetch<{ webhookPath: string }>("/payment-settings/nomod/webhook-url", { method: "POST" });
+}
+
+export function nomodRotateWebhookUrl() {
+  return apiFetch<{ webhookPath: string }>("/payment-settings/nomod/webhook-url/rotate", { method: "POST" });
+}
+
+export function nomodTestConnection() {
+  return apiFetch<{ ok: boolean; message: string }>("/payment-settings/nomod/test-connection", { method: "POST" });
+}
+
+export function getNomodPending(minutes = 15) {
+  return apiFetch<NomodPendingCheckout[]>(`/payment-settings/nomod/pending?minutes=${minutes}`);
+}
+
+export function recheckNomodCheckout(id: number) {
+  return apiFetch<{ outcome: string }>(`/payment-settings/nomod/pending/${id}/recheck`, { method: "POST" });
 }
 
 // MKT-4 analytics & pixels. The Meta token is write-only: send it to set or

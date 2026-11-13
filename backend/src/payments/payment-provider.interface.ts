@@ -1,5 +1,9 @@
 export interface CreateCheckoutSessionParams {
   orderId: number;
+  // The shop the order belongs to. Optional for the gateways that never needed it;
+  // a provider that reads the order's own lines (Nomod) requires it and reads them
+  // shop-scoped, never by order id alone.
+  shopId?: number;
   // The per-shop number a human is shown (order.shopOrderNumber). orderId stays
   // the machine identity every gateway round-trips; this is only for text the
   // customer reads on the gateway's own page or receipt.
@@ -75,10 +79,22 @@ export interface RefundPaymentParams {
   // were each wrong for any 3-decimal currency.
   currency: string;
   credentials?: Record<string, string> | null;
+  // Deterministic per refund (order + refunded-so-far + this amount), so a retry of
+  // the SAME refund presents the same key and a gateway that honours it cannot
+  // apply the refund twice. Ignored by a gateway with no such concept.
+  idempotencyKey?: string;
 }
+
+// Thrown by a provider that decided NOT to ask the gateway at all (a policy or a
+// precondition, e.g. partial refunds switched off). The caller records a manual
+// refund and offers no retry: nothing failed, nothing was sent.
+export class RefundNotAttemptedError extends Error {}
 
 export interface RefundResult {
   providerReference: string;
+  // What the gateway said about the refund: still processing, or done. Undefined
+  // for a gateway that reports no state (every provider before Nomod).
+  status?: 'pending' | 'completed';
 }
 
 // Strategy interface — Telr/PayTabs/Tabby/Tamara plug in by implementing this
@@ -97,7 +113,8 @@ export type CheckoutSessionOutcome =
   | { status: 'unpaid' }
   | { status: 'expired' };
 
-export interface PaymentProvider {
+export interface PaymentProvider {
+
   // See CheckoutSessionOutcome. Undefined on providers that cannot be polled.
   retrieveSessionOutcome?(
     sessionId: string,

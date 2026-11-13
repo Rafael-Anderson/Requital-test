@@ -2,6 +2,7 @@ import { StripePaymentProvider } from './providers/stripe-payment.provider';
 import { TabbyPaymentProvider } from './providers/tabby-payment.provider';
 import { TamaraPaymentProvider } from './providers/tamara-payment.provider';
 import { PayPalPaymentProvider } from './providers/paypal-payment.provider';
+import type { FeaturesService } from '../features/features.service';
 import { NomodPaymentProvider } from './providers/nomod-payment.provider';
 import { TelrPaymentProvider } from './providers/telr-payment.provider';
 import { PayTabsPaymentProvider } from './providers/paytabs-payment.provider';
@@ -89,15 +90,28 @@ describe('provider.isUsable agrees with each provider guard', () => {
   });
 
   it('the structural stubs are never usable, whatever was saved', () => {
-    for (const p of [
-      new NomodPaymentProvider(),
-      new TelrPaymentProvider(),
-      new PayTabsPaymentProvider(),
-    ]) {
+    for (const p of [new TelrPaymentProvider(), new PayTabsPaymentProvider()]) {
       expect(p.isUsable()).toBe(false);
     }
   });
+
+  it('nomod is usable only with BOTH an API key and a webhook signing secret', () => {
+    const nomod = new NomodPaymentProvider();
+    expect(nomod.isUsable(null)).toBe(false);
+    expect(nomod.isUsable({ apiKey: 'k' })).toBe(false);
+    expect(nomod.isUsable({ webhookSecret: 'whsec_x' })).toBe(false);
+    expect(nomod.isUsable({ apiKey: ' ', webhookSecret: 'whsec_x' })).toBe(
+      false,
+    );
+    expect(nomod.isUsable({ apiKey: 'k', webhookSecret: 'whsec_x' })).toBe(
+      true,
+    );
+  });
 });
+
+const featuresStub = {
+  isEnabled: jest.fn().mockResolvedValue(true),
+} as unknown as FeaturesService;
 
 describe('PaymentSettingsService.isUsable', () => {
   function service(rows: object[], registry: PaymentProviderRegistry) {
@@ -106,6 +120,7 @@ describe('PaymentSettingsService.isUsable', () => {
       db as unknown as DatabaseService,
       {} as ShopService,
       registry,
+      featuresStub,
     );
   }
   const row = (provider: string, enabled: boolean, creds?: object) => ({
@@ -134,18 +149,99 @@ describe('PaymentSettingsService.isUsable', () => {
     ).toBe(false);
   });
 
-  it('is false for a provider that is not registered, and nomod even when enabled with keys', async () => {
+  it('is false for a provider that is not registered', async () => {
     const registry = new PaymentProviderRegistry();
     registry.register(new NomodPaymentProvider());
     expect(
-      await service(
-        [row('nomod', true, { apiKey: 'a', secretKey: 's' })],
-        registry,
-      ).isUsable(1, 'nomod'),
-    ).toBe(false);
-    expect(
       await service([row('paypal', true)], registry).isUsable(1, 'paypal'),
     ).toBe(false);
+  });
+
+  // Nomod: the merchant's toggle, real keys, the platform grant AND an allowed
+  // currency must all hold.
+  describe('nomod', () => {
+    const keys = { apiKey: 'a', webhookSecret: 'whsec_x' };
+    function nomodService(opts: {
+      rows: object[];
+      currency: string;
+      granted: boolean;
+    }) {
+      const registry = new PaymentProviderRegistry();
+      registry.register(new NomodPaymentProvider());
+      const db = {
+        query: jest.fn((sql: string, params: unknown[]) => {
+          if (sql.includes('FROM shop WHERE'))
+            return Promise.resolve([{ currency: opts.currency }]);
+          if (sql.includes('AND provider = ?'))
+            return Promise.resolve(
+              opts.rows.filter(
+                (r) => (r as { provider: string }).provider === params[1],
+              ),
+            );
+          return Promise.resolve(opts.rows);
+        }),
+      };
+      const features = {
+        isEnabled: jest.fn().mockResolvedValue(opts.granted),
+      } as unknown as FeaturesService;
+      return new PaymentSettingsService(
+        db as unknown as DatabaseService,
+        {} as ShopService,
+        registry,
+        features,
+      );
+    }
+
+    it('is usable when enabled, keyed, granted and in an allowed currency', async () => {
+      const svc = nomodService({
+        rows: [row('nomod', true, keys)],
+        currency: 'AED',
+        granted: true,
+      });
+      expect(await svc.isUsable(1, 'nomod')).toBe(true);
+    });
+
+    it('is off by default: no row at all means not enabled', async () => {
+      const svc = nomodService({ rows: [], currency: 'AED', granted: true });
+      expect(await svc.isUsable(1, 'nomod')).toBe(false);
+    });
+
+    it('is not usable without the platform grant, however it was toggled', async () => {
+      const svc = nomodService({
+        rows: [row('nomod', true, keys)],
+        currency: 'AED',
+        granted: false,
+      });
+      expect(await svc.isUsable(1, 'nomod')).toBe(false);
+    });
+
+    it('is not usable without the signing secret', async () => {
+      const svc = nomodService({
+        rows: [row('nomod', true, { apiKey: 'a' })],
+        currency: 'AED',
+        granted: true,
+      });
+      expect(await svc.isUsable(1, 'nomod')).toBe(false);
+    });
+
+    it.each([
+      ['AED', true],
+      ['USD', true],
+      ['EUR', true],
+      ['GBP', true],
+      ['SAR', true],
+      ['KWD', false],
+      ['QAR', false],
+      ['BHD', false],
+      ['OMR', false],
+    ])('currency %s usable: %s', async (currency, ok) => {
+      const svc = nomodService({
+        rows: [row('nomod', true, keys)],
+        currency,
+        granted: true,
+      });
+      expect(await svc.isUsable(1, 'nomod')).toBe(ok);
+    });
   });
 
   // Stripe is not usable for a shop whose currency is KWD/BHD/OMR (checkout is
@@ -179,6 +275,7 @@ describe('PaymentSettingsService.isUsable', () => {
       db as unknown as DatabaseService,
       {} as ShopService,
       registry,
+      featuresStub,
     );
     expect(await svc.isUsable(1, 'stripe')).toBe(ok);
     // Tabby is never blocked, whatever the currency.

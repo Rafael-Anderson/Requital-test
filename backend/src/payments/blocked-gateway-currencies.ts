@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { NOMOD_CURRENCIES } from './nomod/nomod-money';
 
 // Gateway -> currencies it must NOT be asked to charge, until the owner decides
 // how Stripe handles them. Stripe's three-decimal currencies (KWD, BHD, OMR) need
@@ -17,11 +18,30 @@ export const STRIPE_BLOCKED_CURRENCIES: Readonly<
   Record<string, readonly string[]>
 > = { stripe: ['KWD', 'BHD', 'OMR'] };
 
+// Gateway -> the ONLY currencies it accepts. The mirror image of the blocklist
+// above, for a gateway whose supported set is short and fixed: Nomod takes AED,
+// USD, EUR, GBP and SAR and nothing else. A currency outside the list is treated
+// exactly like a blocked one, at every place the blocklist is already enforced.
+export const GATEWAY_ALLOWED_CURRENCIES: Readonly<
+  Record<string, readonly string[]>
+> = { nomod: NOMOD_CURRENCIES };
+
+// Does this gateway restrict currencies at all (either way)?
+export function gatewayHasCurrencyRule(gateway: string): boolean {
+  return (
+    !!STRIPE_BLOCKED_CURRENCIES[gateway] ||
+    !!GATEWAY_ALLOWED_CURRENCIES[gateway]
+  );
+}
+
 export function isGatewayCurrencyBlocked(
   gateway: string,
   currency: string,
 ): boolean {
-  return !!STRIPE_BLOCKED_CURRENCIES[gateway]?.includes(currency.toUpperCase());
+  const code = currency.toUpperCase();
+  const allowed = GATEWAY_ALLOWED_CURRENCIES[gateway];
+  if (allowed && !allowed.includes(code)) return true;
+  return !!STRIPE_BLOCKED_CURRENCIES[gateway]?.includes(code);
 }
 
 export const CURRENCY_BLOCKED_MESSAGE =

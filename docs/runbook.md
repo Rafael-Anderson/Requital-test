@@ -876,3 +876,38 @@ Migration `20261024100000_user_must_enrol_2fa` (additive `user.mustEnrol2fa`, de
 ### Added since `b9aed0f7` (the UI fix batch, 2026-10-03)
 
 One migration, additive: `20261023100000_survey_publish_consent` (two nullable columns and one index on `surveyresponse`, no backfill). **Order: migrate, backend, storefront, admin**: the new storefront survey form sends `publishConsent`, which an old backend's whitelist pipe would 400. Production theme data is untouched, but a shop on the Bloom template with the old manual testimonial blocks loses that section (the blocks are ignored, not deleted) until a review is approved under Customers > Reviews. Smoke checks: `GET /public/<testadmin slug>/reviews/featured` returns `[]` or the approved reviews with exactly four keys; Settings > Business > Information on a phone-width window shows the two-column settings with the content skeleton while it loads.
+
+## Nomod setup (UAE hosted checkout)
+
+Nomod takes cards, Apple Pay and, where the merchant's Nomod account has them switched on, Tabby and Tamara, on Nomod's own hosted page. It is OFF everywhere until two things are true for a shop: the platform grants it (feature key `nomod_payments`, default off, set per shop under Platform admin > Shops > Feature flags) and the merchant turns it on and saves both keys. Never enable the grant for a live shop until the first live check below has passed on a test shop. Accepted currencies: AED, USD, EUR, GBP, SAR (any other shop currency never sees it).
+
+Nomod is the shop's "card processor", so it is exclusive with Stripe: Stripe must be switched off first.
+
+### Owner steps in Nomod (per merchant, before a first live check)
+
+1. Create a **Hosted Checkout** API key in the Nomod dashboard. Paste it into Settings > Integrations > Payments > Card processing > Nomod > API Key. It is write-only: after saving only its last four characters are shown, and no API ever returns it.
+2. In the same Nomod screen, create a **Hosted Checkout webhook** subscribed to all eight events: `charge.created`, `charge.authorised`, `charge.completed`, `charge.failed`, `charge.cancelled`, `charge.refunded`, `charge.partially_refunded`, `charge.dispute.created`. As its URL paste the shop's own address shown in the admin (`https://api.requital.io/payments/webhook/nomod/<64 hex characters>`). The address is private: anyone holding it can only send signed events to your shop, but treat it like a password. "Generate a new URL" in the admin replaces it and the old one stops working at once.
+3. Paste the `whsec_...` **signing secret** Nomod shows for that webhook into "Webhook Signing Secret". Nomod keeps an old secret valid for 24 hours when it is rotated; Requital accepts either during that time.
+4. Use **Test connection**. It makes one harmless authenticated read with the saved key and reports "accepted", "rejected" or "could not reach Nomod". It is best-effort: Nomod documents no dedicated test call.
+5. **Ask Nomod whether a test mode exists.** None is documented. Until they answer, the first real check is one small real payment (step 6).
+6. **First live check, owner approved:** on a shop with the grant, place one order of the smallest real amount, pay it on Nomod's page with a real card, and confirm that (a) the order turns Paid and Confirmed within a few seconds, (b) there is exactly one payment row, (c) the Nomod dashboard shows the same amount. Then refund it from Requital (return the item). Confirm the refund shows as completed in the Nomod dashboard, and that the return shows "completed" once Nomod's `charge.refunded` arrives.
+
+### How it behaves
+
+- The order is created pending and unpaid first, exactly like the other redirect gateways, then the Nomod checkout is created (`reference_id` = the order id for the first attempt, `<id>-<n>` for a retry after a failed or expired session). Success goes to the order confirmation page (tracking token in the URL); failure and cancel go back to checkout with `?payment=failed|cancelled` (wording only).
+- A return page is never proof of payment. The confirmation page polls the server; the server asks Nomod (`GET /v1/checkout/{id}`, at most once every 4 seconds per checkout) and the signed webhook may arrive first or later. Both end in one idempotent apply, so stock, emails and the paid transition happen once. A 10 minute sweep re-asks Nomod for checkouts still unpaid after 20 minutes.
+- A paid event or GET answer is applied only when its amount and currency equal what Requital asked Nomod to charge AND the order's current amount due. Otherwise the order is NOT marked paid, the checkout is parked as "review", and the merchant gets one WhatsApp alert. Settings > Integrations > Payments > Nomod lists these with a "Check with Nomod" button.
+- A dispute (`charge.dispute.created`) is flagged on the checkout and alerts the merchant once.
+- Totals sent to Nomod: one item per order line, then a Delivery item, then a Tax item when the stored total carries tax on top of goods and delivery (an exclusive-tax shop), and an Adjustment item for any one-fils rounding gap. The order discount, gift card and store credit are sent as Nomod's `discount`, so `amount = sum(items) - discount` equals the amount still due to the fils. Nothing is rounded in floating point.
+- Refunds go through the normal return flow with a deterministic idempotency key (order, amount already refunded, amount now). A refund whose call failed is kept as "failed" and offers a retry that sends the SAME key. **Only full refunds go through Nomod**; a partial refund is recorded for the merchant to do by hand in the Nomod dashboard unless "Allow partial refunds through Nomod" is switched on after Nomod confirms support.
+- Switching the grant off stops new Nomod checkouts and hides it from checkout, but webhooks, confirmations, reconciliation and refunds for orders already paid keep working.
+
+### Operations
+
+- `NOMOD_API_BASE_URL` (platform env, default `https://api.nomod.com`) and `NOMOD_ALLOWED_HOSTS` (comma list of extra hosts, default none; `api.nomod.com` and `api.nomod.dev` are built in) control the only hosts the server will call. A shop can only choose among allowed hosts. Read per call; no restart needed.
+- Webhook rejects (bad signature, old timestamp) appear under Settings > Diagnostics (webhook activity, source `nomod`) as "rejected" with a fixed reason code; no signature or key is ever logged.
+- Nomod retries a delivery that got a non-2xx. An event that failed half-way is recorded but not marked processed, so the retry is handled, not swallowed.
+
+### Known unknowns (not verifiable from here)
+
+Real Nomod behaviour is UNVERIFIED end to end; everything was built from the public docs and tested against a mocked HTTP layer only: the exact shapes of the `charge.*` payloads other than `charge.completed`; whether `refundTotal`/`referenceId` are always present; whether partial refunds work; the refund response amount (documented as an integer, never trusted); whether a GET on a checkout always carries `amount`/`currency` (a paid answer without them is parked for review, not trusted); whether `items[].discount_amount` is per unit (we always send zero to avoid the question); maximum lengths of item names and metadata; whether `success_url` etc. accept query strings (we send a tracking token and a `payment` flag); whether Nomod's checkout and event ids are globally unique across accounts (we scope our own records by shop, but look a checkout up by its id alone when the reconciliation sweep asks); the checkout expiry window; and whether a 429 carries `Retry-After`.

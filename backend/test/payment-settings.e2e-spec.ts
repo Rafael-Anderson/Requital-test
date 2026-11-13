@@ -91,6 +91,19 @@ describe('Payment Settings (e2e)', () => {
     };
   }
 
+  // Nomod sits behind the platform grant (feature key nomod_payments, default off).
+  async function grantNomod(slug: string) {
+    const rows = await db.query<
+      { id: number }[] & import('mysql2/promise').RowDataPacket[]
+    >(`SELECT id FROM shop WHERE subdomain = ?`, [slug]);
+    await db.execute(
+      `INSERT INTO shopfeatureoverride (shopId, featureKey, enabled) VALUES (?, 'nomod_payments', 1)
+       ON DUPLICATE KEY UPDATE enabled = 1`,
+      [rows[0].id],
+    );
+  }
+  const NOMOD_KEYS = { apiKey: 'key', webhookSecret: 'whsec_c2VjcmV0' };
+
   function findProvider(rows: ProviderRow[], provider: string) {
     return rows.find((r) => r.provider === provider)!;
   }
@@ -196,8 +209,8 @@ describe('Payment Settings (e2e)', () => {
       );
       const row = rows[0];
       expect(row?.credentials).toBeTruthy();
-      expect(row!.credentials).not.toContain('sk_live_super_secret_value_999');
-      expect(row!.credentials).not.toContain('whsec_abc');
+      expect(row.credentials).not.toContain('sk_live_super_secret_value_999');
+      expect(row.credentials).not.toContain('whsec_abc');
     });
 
     it('saving credentials alone (no enabled field) does not silently disable an implicitly-enabled card processor', async () => {
@@ -243,12 +256,13 @@ describe('Payment Settings (e2e)', () => {
   describe('Card processor exclusivity (Nomod vs Stripe)', () => {
     it('enabling Nomod while Stripe is active (implicit default) is rejected with a clear message', async () => {
       const shop = await setupShop('pay-exclusive-a');
+      await grantNomod(shop.slug);
       const res = await request(app.getHttpServer())
         .patch('/payment-settings/nomod')
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({
           enabled: true,
-          credentials: { apiKey: 'key', secretKey: 'secret' },
+          credentials: NOMOD_KEYS,
         })
         .expect(400);
       expect(messageContains(res, 'Disable Stripe')).toBe(true);
@@ -256,6 +270,7 @@ describe('Payment Settings (e2e)', () => {
 
     it('disabling Stripe first, then enabling Nomod, succeeds — and Stripe no longer reads as enabled', async () => {
       const shop = await setupShop('pay-exclusive-b');
+      await grantNomod(shop.slug);
       await request(app.getHttpServer())
         .patch('/payment-settings/stripe')
         .set('Authorization', `Bearer ${shop.adminToken}`)
@@ -266,7 +281,7 @@ describe('Payment Settings (e2e)', () => {
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({
           enabled: true,
-          credentials: { apiKey: 'key', secretKey: 'secret' },
+          credentials: NOMOD_KEYS,
         })
         .expect(200);
 
@@ -281,6 +296,7 @@ describe('Payment Settings (e2e)', () => {
 
     it('enabling Nomod while Stripe is inactive, then trying to enable Stripe, is rejected the other direction too', async () => {
       const shop = await setupShop('pay-exclusive-c');
+      await grantNomod(shop.slug);
       await request(app.getHttpServer())
         .patch('/payment-settings/stripe')
         .set('Authorization', `Bearer ${shop.adminToken}`)
@@ -289,7 +305,7 @@ describe('Payment Settings (e2e)', () => {
       await request(app.getHttpServer())
         .patch('/payment-settings/nomod')
         .set('Authorization', `Bearer ${shop.adminToken}`)
-        .send({ enabled: true })
+        .send({ enabled: true, credentials: NOMOD_KEYS })
         .expect(200);
 
       const res = await request(app.getHttpServer())

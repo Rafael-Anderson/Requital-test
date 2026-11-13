@@ -122,6 +122,9 @@ export interface Shop {
   // deliveryPaymentCardOnline=true by default, so this second check is what
   // actually hides the option in that case.
   cardProcessorEnabled: boolean;
+  // Which gateway "Pay online" goes to ("nomod", "stripe", ...), null when none is
+  // usable. Only used to word the payment option.
+  cardProcessor?: string | null;
   // Independent online providers (PayPal/Tabby/Tamara) currently enabled
   // for this shop — see backend PublicService.getShop /
   // PaymentSettingsService.isEnabled. Each becomes its own selectable

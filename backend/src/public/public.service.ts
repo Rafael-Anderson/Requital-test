@@ -42,6 +42,7 @@ import {
 import { getZoneMatchingMode } from '../delivery-zones/zone-matching-mode';
 import { PaymentProviderRegistry } from '../payments/payment-provider.registry';
 import { PaymentSettingsService } from '../payments/payment-settings.service';
+import { NomodConfirmService } from '../payments/nomod/nomod-confirm.service';
 import { amountStillDue } from '../payments/payments.service';
 import type { CheckoutSession } from '../payments/payment-provider.interface';
 import { randomUUID } from 'crypto';
@@ -216,6 +217,7 @@ export class PublicService {
     private readonly ordersService: OrdersService,
     private readonly newsletterConfirm: NewsletterConfirmService,
     private readonly collectionRules: CollectionRulesService,
+    private readonly nomodConfirm: NomodConfirmService,
   ) {}
 
   // Backs the theme builder's live preview for a shop that hasn't published
@@ -496,6 +498,9 @@ export class PublicService {
       pickupPaymentCashOnPickup: shop.pickupPaymentCashOnPickup,
       pickupPaymentCardOnPickup: shop.pickupPaymentCardOnPickup,
       cardProcessorEnabled,
+      // Which gateway "Pay online" goes to (null when none is usable), so the
+      // storefront can name it. A name only, never a credential.
+      cardProcessor: cardProcessorEnabled ? shop.paymentGateway : null,
       enabledPaymentProviders,
       tabbyPublicKey,
       tabbyMerchantCode,
@@ -1387,8 +1392,25 @@ export class PublicService {
   // shop-scoped by design unless the caller passes its own `shopSlug` (the
   // storefront's confirmation page does): trackingToken is globally unique, so
   // the token alone identifies the order.
-  lookupOrder(token?: string, shopSlug?: string): Promise<PublicOrderView> {
-    return lookupOrderView(this.db, token, shopSlug);
+  async lookupOrder(
+    token?: string,
+    shopSlug?: string,
+  ): Promise<PublicOrderView> {
+    const view = await lookupOrderView(this.db, token, shopSlug);
+    // A shopper polling an unpaid ONLINE order may be back from Nomod before its
+    // webhook arrived: the return page is not proof of payment, so the server asks
+    // Nomod itself (GET /v1/checkout/{id}), rate-limited per checkout. Only orders
+    // that actually have a Nomod checkout do anything. Never fails the lookup.
+    if (view.paymentStatus === 'unpaid' && view.onlinePayment) {
+      try {
+        if (await this.nomodConfirm.confirmForOrder(view.id)) {
+          return await lookupOrderView(this.db, token, shopSlug);
+        }
+      } catch {
+        // the poll simply tries again
+      }
+    }
+    return view;
   }
 
   // Not shop-scoped, same reasoning as lookupOrder above — a survey token is
@@ -1874,6 +1896,7 @@ export class PublicService {
       session = await withProviderTimeout(abort, () =>
         provider.createCheckoutSession({
           signal: abort.signal,
+          shopId: shop.id,
           orderId: order.id,
           orderNumber: order.shopOrderNumber,
           amount,
