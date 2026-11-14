@@ -335,8 +335,27 @@ describe('Nomod gateway (e2e, Nomod HTTP faked)', () => {
   }
 
   describe('off by default', () => {
-    it('cannot be enabled without the platform grant, and is never offered', async () => {
+    it('a shop with no override is granted Nomod (platform-wide grant) but has it OFF and Stripe untouched', async () => {
+      const shop = await setupShop('nm-default');
+      const settings = await request(app.getHttpServer())
+        .get('/payment-settings')
+        .set('Authorization', `Bearer ${shop.adminToken}`)
+        .expect(200);
+      const rows = body<(ProviderRow & { available?: boolean })[]>(settings);
+      const nomod = rows.find((r) => r.provider === 'nomod')!;
+      expect(nomod.available).toBe(true);
+      expect(nomod.enabled).toBe(false);
+      const pub = await request(app.getHttpServer())
+        .get(`/public/${shop.slug}`)
+        .expect(200);
+      expect(
+        body<{ cardProcessor: string | null }>(pub).cardProcessor,
+      ).not.toBe('nomod');
+    });
+
+    it('cannot be enabled when the platform revokes the grant for the shop, and is never offered', async () => {
       const shop = await setupShop('nm-off');
+      await grant(shop.shopId, 0);
       const res = await request(app.getHttpServer())
         .patch('/payment-settings/nomod')
         .set('Authorization', `Bearer ${shop.adminToken}`)

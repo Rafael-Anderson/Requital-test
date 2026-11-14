@@ -650,7 +650,7 @@ fi
 if [ -n "$MATRIX_BEFORE" ]; then
   MATRIX_AFTER="$(run_matrix | matrix_strict_view)" || fail "billing flag matrix AFTER failed."
   compare_matrix || { echo "STOP: billing flag matrix differs before/after the migrations. No restart performed." >&2; exit 1; }
-  echo "billing flag matrix: identical before/after (shared keys; new keys all false)"
+  echo "billing flag matrix: identical before/after except any AUTHORISED FLIP printed above (shared keys; new keys all false)"
 fi
 
 fi   # end of the steps skipped in RESUME mode

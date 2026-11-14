@@ -6,6 +6,7 @@ import { API_URL, getPaymentSettings, getShop, updatePaymentProvider } from "@/l
 import { stripeBlockedForCurrency } from "@/lib/blocked-gateway-currencies";
 import StripeCurrencyNotice from "@/components/StripeCurrencyNotice";
 import NomodExtras from "@/components/NomodExtras";
+import PaymentGuideModal from "@/components/PaymentGuideModal";
 import { useAuth } from "@/lib/auth-context";
 import {
   CARD_PROCESSOR_PROVIDERS,
@@ -206,6 +207,18 @@ export default function PaymentIntegrationsPage() {
     return settings?.find((r) => r.provider === provider) ?? null;
   }
 
+  // This shop's own webhook address for a provider's setup guide (null = none yet).
+  function guideWebhookUrl(provider: string): string | null {
+    if (provider === "nomod") {
+      const path = rowFor("nomod")?.webhookPath;
+      return path ? `${API_URL}${path}` : null;
+    }
+    if (!user) return null;
+    if (provider === "stripe") return `${API_URL}/payments/webhook/stripe/${user.shopId}`;
+    if (provider === "paypal") return `${API_URL}/payments/webhook/paypal/${user.shopId}`;
+    return null;
+  }
+
   async function handleSaveCardProcessor() {
     setSavingCard(true);
     try {
@@ -350,7 +363,12 @@ export default function PaymentIntegrationsPage() {
           onChange={(key, value) => setCardCredentials((prev) => ({ ...prev, [key]: value }))}
         />
         {cardProcessor === "stripe" && stripeBlockedForCurrency(shopCurrency) && <StripeCurrencyNotice />}
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            {(cardProcessor === "nomod" || cardProcessor === "stripe") && (
+              <PaymentGuideModal guide={cardProcessor} webhookUrl={guideWebhookUrl(cardProcessor)} />
+            )}
+          </div>
           <Button variant="primary" onClick={handleSaveCardProcessor} disabled={savingCard}>
             {savingCard ? "Saving…" : "Save card processor"}
           </Button>
@@ -390,7 +408,8 @@ export default function PaymentIntegrationsPage() {
               }))
             }
           />
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-3">
+            <PaymentGuideModal guide={provider} webhookUrl={guideWebhookUrl(provider)} />
             <Button
               variant="primary"
               onClick={() => handleSaveIndependent(provider)}
@@ -412,6 +431,9 @@ export default function PaymentIntegrationsPage() {
             </p>
           </div>
           <Toggle checked={codEnabled} onChange={handleToggleCod} disabled={savingCod} />
+        </div>
+        <div className="mt-3">
+          <PaymentGuideModal guide="cod" buttonLabel="How it works" />
         </div>
       </Card>
       </CardGrid>

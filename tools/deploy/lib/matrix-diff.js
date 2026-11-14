@@ -36,6 +36,15 @@ function load(file) {
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
+// Effective-flag changes the owner has explicitly authorised for the deploy that
+// carries them. Each entry allows exactly ONE key to go from `before` to `after` for
+// any shop and nothing else; every other difference still fails. They are counted and
+// printed (never silent). Remove an entry once the deploy that needs it has run: a
+// stale entry would let the same flip through on a later deploy unnoticed.
+//   nomod_payments false -> true: the owner authorised the platform-wide Nomod grant
+//   (registry default flipped to true; it only makes Nomod selectable).
+const AUTHORISED_FLIPS = [{ feature: 'nomod_payments', before: false, after: true }];
+
 const scalar = (v) => typeof v === 'string' || typeof v === 'number';
 function sameChecksum(a, b) {
   return isObj(a) && isObj(b) && scalar(a.count) && scalar(a.bitXor) && scalar(b.count) && scalar(b.bitXor)
@@ -43,8 +52,9 @@ function sameChecksum(a, b) {
 }
 
 /** @returns {{ ok: boolean, problems: string[], newKeys: string[], sharedValues: number }} */
-function compareMatrix(before, after) {
+function compareMatrix(before, after, flips = AUTHORISED_FLIPS) {
   const problems = [];
+  const flipped = {};
   const newKeys = new Set();
   let sharedValues = 0;
   const bm = isObj(before) && isObj(before.matrix) ? before.matrix : null;
@@ -66,7 +76,9 @@ function compareMatrix(before, after) {
       const inA = Object.prototype.hasOwnProperty.call(a, k);
       if (inB && inA) {
         sharedValues += 1;
-        if (b[k] !== a[k]) problems.push(`MISMATCH shop=${id} feature=${k} before=${JSON.stringify(b[k])} after=${JSON.stringify(a[k])}`);
+        if (b[k] !== a[k] && flips.some((f) => f.feature === k && f.before === b[k] && f.after === a[k])) {
+          flipped[k] = (flipped[k] || 0) + 1;
+        } else if (b[k] !== a[k]) problems.push(`MISMATCH shop=${id} feature=${k} before=${JSON.stringify(b[k])} after=${JSON.stringify(a[k])}`);
       } else if (inA) {
         newKeys.add(k);
         if (a[k] !== false) problems.push(`MISMATCH shop=${id} feature=${k} is new (absent BEFORE) and resolves ${JSON.stringify(a[k])} AFTER; a new key must be false for every shop`);
@@ -82,7 +94,7 @@ function compareMatrix(before, after) {
     const empty = (d) => isObj(d && d.shop) && String(d.shop.count) === '0';
     if (!(empty(before) && empty(after))) problems.push('MISMATCH the matrix is empty but the shop checksum says there are shops');
   }
-  return { ok: problems.length === 0, problems, newKeys: [...newKeys].sort(), sharedValues };
+  return { ok: problems.length === 0, problems, newKeys: [...newKeys].sort(), sharedValues, flipped };
 }
 
 function compareChecksums(before, after) {
@@ -111,13 +123,13 @@ function compareChecksums(before, after) {
   return problems;
 }
 
-function compare(before, after) {
-  const m = compareMatrix(before, after);
+function compare(before, after, flips = AUTHORISED_FLIPS) {
+  const m = compareMatrix(before, after, flips);
   const problems = [...m.problems, ...compareChecksums(before, after)];
-  return { ok: problems.length === 0, problems, newKeys: m.newKeys, sharedValues: m.sharedValues };
+  return { ok: problems.length === 0, problems, newKeys: m.newKeys, sharedValues: m.sharedValues, flipped: m.flipped };
 }
 
-module.exports = { compare, compareMatrix, compareChecksums };
+module.exports = { compare, compareMatrix, compareChecksums, AUTHORISED_FLIPS };
 
 if (require.main === module) {
   const [bf, af] = process.argv.slice(2);
@@ -128,7 +140,12 @@ if (require.main === module) {
   const r = compare(load(bf), load(af));
   for (const p of r.problems) process.stdout.write(`${p}\n`);
   if (r.ok) {
-    process.stdout.write(`billing flag matrix: ${r.sharedValues} shared shop/key value(s) identical\n`);
+    const fl = Object.entries(r.flipped);
+    for (const [k, n] of fl) {
+      const f = AUTHORISED_FLIPS.find((x) => x.feature === k);
+      process.stdout.write(`billing flag matrix: AUTHORISED FLIP ${k} ${f.before}->${f.after} for ${n} shop(s)\n`);
+    }
+    process.stdout.write(`billing flag matrix: ${r.sharedValues - fl.reduce((t, [, n]) => t + n, 0)} shared shop/key value(s) identical\n`);
     process.stdout.write(`billing flag matrix: new keys (false for every shop): ${r.newKeys.length ? r.newKeys.join(', ') : 'none'}\n`);
     process.exit(0);
   }
