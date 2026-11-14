@@ -151,14 +151,18 @@ export const FEATURE_KEYS = {
   },
   // Nomod (UAE) Hosted Checkout. The platform grant for the gateway: with it off the
   // merchant cannot enable Nomod, the storefront never offers it and no new checkout
-  // is created. The merchant's own switch (shoppaymentprovider.enabled, default off)
-  // must ALSO be on. Deliberately NOT consulted when a webhook, a return-page
+  // is created. GRANTED TO EVERY SHOP BY DEFAULT (the owner authorised the
+  // platform-wide grant for the Nomod rollout; new shops get it too), which only makes
+  // Nomod SELECTABLE: the merchant's own switch (shoppaymentprovider.enabled, default
+  // off) must ALSO be on, and that needs the merchant's own API key and signing
+  // secret. A platform-set shopfeatureoverride (enabled = 0) still revokes it for one
+  // shop. planfeature rows already entitle every plan. Deliberately NOT consulted when a webhook, a return-page
   // confirmation, a reconciliation poll or a refund arrives for an order already
   // charged: switching the flag off must never make the platform drop money a
   // customer has paid. Consumer: payments/nomod/*.
   nomod_payments: {
     source: 'table',
-    default: false,
+    default: true,
     description: 'Nomod (UAE) hosted checkout card payments',
   },
 } as const satisfies Record<string, FeatureDef>;
