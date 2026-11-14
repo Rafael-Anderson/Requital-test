@@ -19,6 +19,7 @@ import { CardSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
+import CardGrid from "@/components/ui/CardGrid";
 
 // UAE-focused dial codes — this is a UAE-market product, not a general
 // international directory. Moved here verbatim from Business Information's
@@ -165,8 +166,8 @@ export default function MessagingIntegrationsPage() {
   }
 
   return (
-    <PageShell variant="form">
-      <div className="space-y-4">
+    <PageShell variant="wide">
+      <CardGrid>
         {!shop ? (
           shopError ? (
             <Card>
@@ -307,7 +308,7 @@ export default function MessagingIntegrationsPage() {
           )}
         </Card>
         )}
-      </div>
+      </CardGrid>
     </PageShell>
   );
 }

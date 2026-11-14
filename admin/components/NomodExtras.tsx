@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import type { NomodPendingCheckout } from "@/lib/types";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 
 // Everything about Nomod that is not a credential field: the webhook address to
@@ -101,8 +102,8 @@ export default function NomodExtras({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-border dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.03] p-3 space-y-2">
+    <>
+      <Card className="space-y-2">
         <p className="text-xs font-medium text-text-secondary dark:text-zinc-300">
           In Nomod, create a Hosted Checkout webhook with all 8 charge events (created, authorised, completed, failed,
           cancelled, refunded, partially refunded, dispute created) and paste this address as its URL. Then paste the
@@ -110,7 +111,10 @@ export default function NomodExtras({
         </p>
         {url ? (
           <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 rounded px-2 py-1.5 overflow-x-auto whitespace-nowrap">
+            <code
+              title={url}
+              className="min-w-0 flex-1 truncate text-xs bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 rounded px-2 py-1.5"
+            >
               {url}
             </code>
             <button
@@ -137,9 +141,9 @@ export default function NomodExtras({
             Generate a new URL
           </button>
         )}
-      </div>
+      </Card>
 
-      <div className="rounded-lg border border-border dark:border-white/10 p-3 space-y-2">
+      <Card className="space-y-2">
         <p className="text-xs text-text-faint">
           Partial refunds: Nomod does not document partial refunds. By default only a refund of the whole charge goes
           through Nomod; any other refund is recorded for you to do by hand in the Nomod dashboard. Turn on
@@ -167,10 +171,10 @@ export default function NomodExtras({
           The test makes one harmless read with your saved API key. It is a best-effort check: Nomod documents no
           dedicated test call.
         </p>
-      </div>
+      </Card>
 
       {pending && pending.length > 0 && (
-        <div className="rounded-lg border border-border dark:border-white/10 p-3 space-y-2">
+        <Card className="space-y-2">
           <p className="text-xs font-medium text-text-secondary dark:text-zinc-300">
             Nomod payments that need a look
           </p>
@@ -197,8 +201,8 @@ export default function NomodExtras({
               </li>
             ))}
           </ul>
-        </div>
+        </Card>
       )}
-    </div>
+    </>
   );
 }
