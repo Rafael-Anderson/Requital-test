@@ -36,14 +36,15 @@ function load(file) {
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-// Effective-flag changes the owner has explicitly authorised for the deploy that
-// carries them. Each entry allows exactly ONE key to go from `before` to `after` for
-// any shop and nothing else; every other difference still fails. They are counted and
-// printed (never silent). Remove an entry once the deploy that needs it has run: a
-// stale entry would let the same flip through on a later deploy unnoticed.
-//   nomod_payments false -> true: the owner authorised the platform-wide Nomod grant
-//   (registry default flipped to true; it only makes Nomod selectable).
-const AUTHORISED_FLIPS = [{ feature: 'nomod_payments', before: false, after: true }];
+// Effective-flag changes the owner has explicitly authorised for ONE deploy. Each entry
+// allows exactly one key to go from `before` to `after` for any shop and nothing else;
+// every other difference still fails. Allowed flips are counted and printed, never
+// silent. THE LIST IS EMPTY BY DEFAULT and must be empty on main: add an entry only in
+// the PR of the one authorised deploy, and remove it in a follow-up PR right after that
+// deploy (a stale entry would let the same flip through unnoticed on a later deploy).
+// Shape: { feature: '<registry key>', before: false, after: true }.
+// See docs/runbook.md, "Authorised flag changes".
+const AUTHORISED_FLIPS = [];
 
 const scalar = (v) => typeof v === 'string' || typeof v === 'number';
 function sameChecksum(a, b) {

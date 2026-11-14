@@ -58,33 +58,52 @@ test('matrix-diff: a new key that resolves true for any shop fails', () => {
   assert.match(r.problems.join('\n'), /shop=2 feature=k12 is new .* resolves true/);
 });
 
-// ---- authorised flips (the owner-approved platform-wide Nomod grant) ------------------------
-const NOMOD_B = { ...ELEVEN, nomod_payments: false };
-test('matrix-diff: nomod_payments false->true for every shop is the ONE authorised flip and is counted', () => {
-  const r = compare(doc({ 1: NOMOD_B, 2: NOMOD_B }), doc({ 1: { ...NOMOD_B, nomod_payments: true }, 2: { ...NOMOD_B, nomod_payments: true } }));
-  assert.equal(r.ok, true, r.problems.join('\n'));
-  assert.deepEqual(r.flipped, { nomod_payments: 2 });
+// ---- authorised flips (the mechanism; the list itself is empty on main) --------------------
+const { AUTHORISED_FLIPS } = require('../lib/matrix-diff.js');
+const FLIP = [{ feature: 'synthetic_flag', before: false, after: true }];
+const SYN_B = { ...ELEVEN, synthetic_flag: false };
+const SYN_A = { ...ELEVEN, synthetic_flag: true };
+test('matrix-diff: the committed AUTHORISED_FLIPS list is empty (a stale entry from an earlier deploy fails here)', () => {
+  assert.deepEqual(AUTHORISED_FLIPS, []);
 });
 
-test('matrix-diff: the authorised flip does not hide any other change in the same shop', () => {
-  const after = { ...NOMOD_B, nomod_payments: true, k02: false };   // k02 was true
-  const r = compare(doc({ 1: NOMOD_B }), doc({ 1: after }));
+test('matrix-diff: a listed flip passes and is counted per shop', () => {
+  const r = compare(doc({ 1: SYN_B, 2: SYN_B }), doc({ 1: SYN_A, 2: SYN_A }), FLIP);
+  assert.equal(r.ok, true, r.problems.join('\n'));
+  assert.deepEqual(r.flipped, { synthetic_flag: 2 });
+});
+
+test('matrix-diff: a listed flip does not hide any other change in the same shop', () => {
+  const r = compare(doc({ 1: SYN_B }), doc({ 1: { ...SYN_A, k02: false } }), FLIP);   // k02 was true
   assert.equal(r.ok, false);
   assert.deepEqual(r.problems, ['MISMATCH shop=1 feature=k02 before=true after=false']);
 });
 
-test('matrix-diff: only the authorised direction passes (true->false for nomod_payments, or another key false->true, fails)', () => {
-  const on = { ...ELEVEN, nomod_payments: true };
-  assert.equal(compare(doc({ 1: on }), doc({ 1: { ...on, nomod_payments: false } })).ok, false);
-  const r = compare(doc({ 1: ELEVEN }), doc({ 1: { ...ELEVEN, k01: true } }));   // k01 was false
+test('matrix-diff: only the listed direction and key pass', () => {
+  assert.equal(compare(doc({ 1: SYN_A }), doc({ 1: SYN_B }), FLIP).ok, false);        // true->false
+  const r = compare(doc({ 1: SYN_B }), doc({ 1: { ...SYN_B, k01: true } }), FLIP);   // another key false->true
   assert.equal(r.ok, false);
   assert.match(r.problems[0], /shop=1 feature=k01 before=false after=true/);
 });
 
-test('matrix-diff: with no authorised flips configured the same nomod_payments flip fails', () => {
-  const r = compare(doc({ 1: NOMOD_B }), doc({ 1: { ...NOMOD_B, nomod_payments: true } }), []);
+test('matrix-diff: with no entries the same flip fails', () => {
+  const r = compare(doc({ 1: SYN_B }), doc({ 1: SYN_A }), []);
   assert.equal(r.ok, false);
-  assert.match(r.problems[0], /feature=nomod_payments before=false after=true/);
+  assert.match(r.problems[0], /feature=synthetic_flag before=false after=true/);
+});
+
+// The gate as deploy.sh runs it: the real CLI with the committed (empty) list.
+test('matrix-diff CLI: an UNLISTED false->true flip fails the gate (exit 1) and names shop, key, before and after', () => {
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'mdiff-'));
+  try {
+    const bf = path.join(dir, 'b.json'); const af = path.join(dir, 'a.json');
+    fs.writeFileSync(bf, JSON.stringify(doc({ 1: SYN_B, 2: SYN_B })));
+    fs.writeFileSync(af, JSON.stringify(doc({ 1: SYN_A, 2: SYN_B })));
+    const r = cp.spawnSync('node', [path.join(__dirname, '..', 'lib', 'matrix-diff.js'), bf, af], { encoding: 'utf8' });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /MISMATCH shop=1 feature=synthetic_flag before=false after=true/);
+    assert.doesNotMatch(r.stdout, /AUTHORISED FLIP/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('matrix-diff: a key that existed before and is gone after fails (never silently ignored)', () => {
