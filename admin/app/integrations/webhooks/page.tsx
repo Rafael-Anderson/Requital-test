@@ -3,7 +3,7 @@ import WebhookActivityPanel from "@/components/WebhookActivityPanel";
 
 export default function WebhooksIntegrationsPage() {
   return (
-    <PageShell variant="form">
+    <PageShell variant="wide">
       <WebhookActivityPanel />
     </PageShell>
   );

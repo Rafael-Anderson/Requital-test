@@ -16,6 +16,7 @@ import {
   type PaymentProviderSettings,
 } from "@/lib/types";
 import Card from "@/components/ui/Card";
+import CardGrid, { CARD_SPAN_FULL } from "@/components/ui/CardGrid";
 import SecretField from "@/components/ui/SecretField";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -47,13 +48,16 @@ function StripeWebhookInstructions({ shopId }: { shopId: number }) {
   }
 
   return (
-    <div className="rounded-lg border border-border dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.03] p-3 space-y-2">
+    <Card className="space-y-2">
       <p className="text-xs font-medium text-text-secondary dark:text-zinc-300">
         Using your own Stripe account? Add this URL as a webhook endpoint in your Stripe Dashboard
         (Developers → Webhooks), then paste the signing secret it gives you into the Webhook Secret field above.
       </p>
       <div className="flex items-center gap-2">
-        <code className="flex-1 text-xs bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 rounded px-2 py-1.5 overflow-x-auto whitespace-nowrap">
+        <code
+          title={url}
+          className="min-w-0 flex-1 truncate text-xs bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 rounded px-2 py-1.5"
+        >
           {url}
         </code>
         <button
@@ -65,7 +69,7 @@ function StripeWebhookInstructions({ shopId }: { shopId: number }) {
           Copy
         </button>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -258,10 +262,10 @@ export default function PaymentIntegrationsPage() {
 
   if (!settings) {
     return (
-      <PageShell variant="form">
-        <div className="space-y-4">
+      <PageShell variant="wide">
+        <CardGrid>
           {loadError ? (
-            <Card>
+            <Card className={CARD_SPAN_FULL}>
               <LoadFailed
                 what="payment settings"
                 onRetry={() => {
@@ -276,14 +280,14 @@ export default function PaymentIntegrationsPage() {
               <CardSkeleton />
             </>
           )}
-        </div>
+        </CardGrid>
       </PageShell>
     );
   }
 
   return (
-    <PageShell variant="form">
-      <div className="space-y-4">
+    <PageShell variant="wide">
+      <CardGrid>
       <Card className="space-y-4">
         <div>
           <h3 className="text-[15px] font-bold text-text-primary dark:text-zinc-50">Card processing</h3>
@@ -345,21 +349,22 @@ export default function PaymentIntegrationsPage() {
           publicValues={rowFor(cardProcessor)?.publicValues}
           onChange={(key, value) => setCardCredentials((prev) => ({ ...prev, [key]: value }))}
         />
-        {cardProcessor === "nomod" && (
-          <NomodExtras
-            webhookPath={rowFor("nomod")?.webhookPath}
-            hasApiKey={!!rowFor("nomod")?.maskedCredentials?.apiKey}
-            onChanged={() => setReloadKey((k) => k + 1)}
-          />
-        )}
         {cardProcessor === "stripe" && stripeBlockedForCurrency(shopCurrency) && <StripeCurrencyNotice />}
-        {cardProcessor === "stripe" && user && <StripeWebhookInstructions shopId={user.shopId} />}
         <div className="flex justify-end">
           <Button variant="primary" onClick={handleSaveCardProcessor} disabled={savingCard}>
             {savingCard ? "Saving…" : "Save card processor"}
           </Button>
         </div>
       </Card>
+
+      {cardProcessor === "stripe" && user && <StripeWebhookInstructions shopId={user.shopId} />}
+      {cardProcessor === "nomod" && (
+        <NomodExtras
+          webhookPath={rowFor("nomod")?.webhookPath}
+          hasApiKey={!!rowFor("nomod")?.maskedCredentials?.apiKey}
+          onChanged={() => setReloadKey((k) => k + 1)}
+        />
+      )}
 
       {INDEPENDENT_PROVIDERS.map((provider) => (
         <Card key={provider} className="space-y-4">
@@ -409,7 +414,7 @@ export default function PaymentIntegrationsPage() {
           <Toggle checked={codEnabled} onChange={handleToggleCod} disabled={savingCod} />
         </div>
       </Card>
-      </div>
+      </CardGrid>
     </PageShell>
   );
 }

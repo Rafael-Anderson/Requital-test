@@ -12,6 +12,7 @@ import { CardSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
+import CardGrid, { CARD_SPAN_FULL } from "@/components/ui/CardGrid";
 
 type FieldValues = Record<AnalyticsIdField, string>;
 
@@ -145,10 +146,10 @@ export default function AnalyticsIntegrationsPage() {
 
   if (!settings) {
     return (
-      <PageShell variant="form">
-        <div className="space-y-4">
+      <PageShell variant="wide">
+        <CardGrid>
           {loadError ? (
-            <Card>
+            <Card className={CARD_SPAN_FULL}>
               <LoadFailed
                 what="analytics settings"
                 onRetry={() => {
@@ -160,15 +161,15 @@ export default function AnalyticsIntegrationsPage() {
           ) : (
             <CardSkeleton />
           )}
-        </div>
+        </CardGrid>
       </PageShell>
     );
   }
 
   return (
-    <PageShell variant="form">
-      <div className="space-y-4">
-        <Card>
+    <PageShell variant="wide">
+      <CardGrid>
+        <Card className={CARD_SPAN_FULL}>
           <h3 className="text-sm font-semibold">How this works</h3>
           <p className="text-xs text-text-faint mt-1">
             Add your ad and analytics ids and your storefront reports page views, add to cart, checkout and
@@ -193,7 +194,7 @@ export default function AnalyticsIntegrationsPage() {
               your conversion action in Google Ads.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
             <Input label="GA4 measurement id" value={values.ga4MeasurementId} onChange={set("ga4MeasurementId")} placeholder="G-XXXXXXXXXX" error={err("ga4MeasurementId")} />
             <Input label="Google Ads conversion id" value={values.googleAdsConversionId} onChange={set("googleAdsConversionId")} placeholder="AW-123456789" error={err("googleAdsConversionId")} />
             <Input label="Google Ads conversion label" value={values.googleAdsConversionLabel} onChange={set("googleAdsConversionLabel")} placeholder="AbC_dEf-123" error={err("googleAdsConversionLabel")} />
@@ -209,10 +210,10 @@ export default function AnalyticsIntegrationsPage() {
               stored encrypted and is never shown again.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
             <Input label="Pixel id" value={values.metaPixelId} onChange={set("metaPixelId")} placeholder="123456789012345" error={err("metaPixelId")} />
             <Input label="Test event code (optional)" value={values.metaTestEventCode} onChange={set("metaTestEventCode")} placeholder="TEST12345" error={err("metaTestEventCode")} tooltip="Sends server events to the Test Events tab in Meta Events Manager. Remove it when you go live." />
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 lg:col-span-1 xl:col-span-2">
               <TokenField
                 label="Conversions API access token"
                 placeholder="Paste your access token"
@@ -227,55 +228,53 @@ export default function AnalyticsIntegrationsPage() {
           </div>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold">TikTok</h3>
-              <p className="text-xs text-text-faint mt-1">
-                The pixel code from TikTok Events Manager. Add an Events API access token as well to report
-                online card payments from our server. The token is stored encrypted and is never shown again.
-              </p>
-            </div>
-            <Input label="Pixel code" value={values.tiktokPixelId} onChange={set("tiktokPixelId")} placeholder="CXXXXXXXXXXXXXXXXXXX" error={err("tiktokPixelId")} />
-            <TokenField
-              label="Events API access token"
-              placeholder="Paste your Events API access token"
-              isSet={settings.tiktokEventsTokenSet}
-              value={tokens.tiktokEventsToken}
-              onChange={setToken("tiktokEventsToken")}
-              saving={saving}
-              removeMessage="Remove the saved TikTok access token? Server side purchase events will stop."
-              onRemove={() => void save({ tiktokEventsToken: null })}
-            />
-          </Card>
-          <Card className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold">Snapchat</h3>
-              <p className="text-xs text-text-faint mt-1">
-                The pixel id from Snap Ads Manager. Add a Conversions API token as well to report online card
-                payments from our server. The token is stored encrypted and is never shown again.
-              </p>
-            </div>
-            <Input label="Pixel id" value={values.snapPixelId} onChange={set("snapPixelId")} placeholder="1b2c3d4e-0000-4000-8000-123456789abc" error={err("snapPixelId")} />
-            <TokenField
-              label="Conversions API token"
-              placeholder="Paste your Conversions API token"
-              isSet={settings.snapCapiTokenSet}
-              value={tokens.snapCapiToken}
-              onChange={setToken("snapCapiToken")}
-              saving={saving}
-              removeMessage="Remove the saved Snapchat token? Server side purchase events will stop."
-              onRemove={() => void save({ snapCapiToken: null })}
-            />
-          </Card>
-        </div>
+        <Card className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">TikTok</h3>
+            <p className="text-xs text-text-faint mt-1">
+              The pixel code from TikTok Events Manager. Add an Events API access token as well to report
+              online card payments from our server. The token is stored encrypted and is never shown again.
+            </p>
+          </div>
+          <Input label="Pixel code" value={values.tiktokPixelId} onChange={set("tiktokPixelId")} placeholder="CXXXXXXXXXXXXXXXXXXX" error={err("tiktokPixelId")} />
+          <TokenField
+            label="Events API access token"
+            placeholder="Paste your Events API access token"
+            isSet={settings.tiktokEventsTokenSet}
+            value={tokens.tiktokEventsToken}
+            onChange={setToken("tiktokEventsToken")}
+            saving={saving}
+            removeMessage="Remove the saved TikTok access token? Server side purchase events will stop."
+            onRemove={() => void save({ tiktokEventsToken: null })}
+          />
+        </Card>
+        <Card className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold">Snapchat</h3>
+            <p className="text-xs text-text-faint mt-1">
+              The pixel id from Snap Ads Manager. Add a Conversions API token as well to report online card
+              payments from our server. The token is stored encrypted and is never shown again.
+            </p>
+          </div>
+          <Input label="Pixel id" value={values.snapPixelId} onChange={set("snapPixelId")} placeholder="1b2c3d4e-0000-4000-8000-123456789abc" error={err("snapPixelId")} />
+          <TokenField
+            label="Conversions API token"
+            placeholder="Paste your Conversions API token"
+            isSet={settings.snapCapiTokenSet}
+            value={tokens.snapCapiToken}
+            onChange={setToken("snapCapiToken")}
+            saving={saving}
+            removeMessage="Remove the saved Snapchat token? Server side purchase events will stop."
+            onRemove={() => void save({ snapCapiToken: null })}
+          />
+        </Card>
 
-        <div className="flex justify-end">
+        <div className={`flex justify-end ${CARD_SPAN_FULL}`}>
           <Button variant="primary" onClick={() => void save()} disabled={saving} loading={saving}>
             {saving ? "Saving…" : "Save"}
           </Button>
         </div>
-      </div>
+      </CardGrid>
     </PageShell>
   );
 }

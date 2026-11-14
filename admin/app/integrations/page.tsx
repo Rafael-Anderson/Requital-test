@@ -10,6 +10,7 @@ import { CardSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
+import CardGrid, { CARD_SPAN_FULL } from "@/components/ui/CardGrid";
 
 const STATUS_STYLES: Record<SliderSettings["status"], string> = {
   connected: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400",
@@ -60,10 +61,10 @@ export default function DeliveryIntegrationsPage() {
 
   if (!settings) {
     return (
-      <PageShell variant="form">
-        <div className="space-y-4">
+      <PageShell variant="wide">
+        <CardGrid>
           {loadError ? (
-            <Card>
+            <Card className={CARD_SPAN_FULL}>
               <LoadFailed
                 what="delivery settings"
                 onRetry={() => {
@@ -75,14 +76,14 @@ export default function DeliveryIntegrationsPage() {
           ) : (
             <CardSkeleton />
           )}
-        </div>
+        </CardGrid>
       </PageShell>
     );
   }
 
   return (
-    <PageShell variant="form">
-      <div className="space-y-4">
+    <PageShell variant="wide">
+      <CardGrid>
         <Card className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3">
@@ -132,7 +133,7 @@ export default function DeliveryIntegrationsPage() {
             </span>
           </div>
         </Card>
-      </div>
+      </CardGrid>
     </PageShell>
   );
 }
