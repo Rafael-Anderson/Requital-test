@@ -253,6 +253,11 @@ jobs:
           node tools/check-dirham-glyph.js --self-test
           node tools/check-dirham-glyph.js
 
+      - name: List-pagination guardrail (an admin list fetch takes page/pageSize/limit or is allow-listed)
+        run: |
+          node tools/check-list-pagination.js --self-test
+          node tools/check-list-pagination.js
+
       # Deploy pipeline tooling (tools/deploy, .github/workflows/deploy.yml).
       # Added as steps INSIDE this already-required job: the job name above is a
       # pinned branch-protection context and is not renamed.

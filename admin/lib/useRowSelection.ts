@@ -6,8 +6,17 @@ import { useMemo, useState } from "react";
 // Customers) — selection is keyed by id and cleared whenever the visible
 // id set changes size to 0 isn't assumed; callers call `clear()` explicitly
 // after a bulk action completes/refreshes the list.
-export function useRowSelection(visibleIds: number[]) {
+//
+// `resetKey` ties the selection to the VIEW it was made in (a paginated list passes
+// page + page size + filters): when it changes the selection is emptied during the
+// same render, so a bulk action can never act on rows that are no longer on screen.
+export function useRowSelection(visibleIds: number[], resetKey?: string) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [seenKey, setSeenKey] = useState(resetKey);
+  if (resetKey !== seenKey) {
+    setSeenKey(resetKey);
+    setSelected(new Set());
+  }
 
   const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
   const someSelected = visibleIds.some((id) => selected.has(id));

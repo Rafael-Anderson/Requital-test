@@ -149,6 +149,7 @@ import type {
   AttributionModel,
   AttributionReport,
   PaginatedAuditLog,
+  PaginatedProducts,
   PaginatedStockMovements,
   FailedJob,
   Shop,
@@ -1247,6 +1248,23 @@ export function generatePaymentLink(orderId: number) {
 export function listProducts(outletId?: number) {
   const query = outletId ? `?outletId=${outletId}` : "";
   return apiFetch<Product[]>(`/products${query}`);
+}
+
+// One page of the shop's products (server-side pagination, shop-scoped, ordered by
+// id). `search` matches name, SKU or barcode; `collectionId` the hand-assigned
+// collection links. pageSize is capped at 100 by the server.
+export function listProductsPage(params: {
+  page: number;
+  pageSize: number;
+  outletId?: number;
+  collectionId?: number;
+  search?: string;
+}) {
+  const q = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
+  if (params.outletId) q.set("outletId", String(params.outletId));
+  if (params.collectionId) q.set("collectionId", String(params.collectionId));
+  if (params.search?.trim()) q.set("search", params.search.trim());
+  return apiFetch<PaginatedProducts>(`/products?${q.toString()}`);
 }
 
 export function adjustStock(
