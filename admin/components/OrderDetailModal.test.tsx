@@ -160,3 +160,38 @@ describe("OrderDetailModal: unverified delivery address (F9)", () => {
     expect(screen.queryByText(/Address not verified/)).not.toBeInTheDocument();
   });
 });
+
+describe("OrderDetailModal: receiver", () => {
+  it("shows the Receiver (name and phone) beside the Customer when the order has one", async () => {
+    vi.mocked(getShop).mockResolvedValue({ taxDisplayText: null } as never);
+    vi.mocked(getOrder).mockResolvedValue({
+      ...fakeOrder(),
+      receiverName: "Omar Receiver",
+      receiverPhone: "+971 50 111 2222",
+    } as Order);
+    render(<ToastProvider><OrderDetailModal orderId={42} onClose={vi.fn()} /></ToastProvider>);
+    const box = await screen.findByTestId("order-receiver");
+    expect(box).toHaveTextContent("Receiver");
+    expect(box).toHaveTextContent("Omar Receiver");
+    expect(box).toHaveTextContent("+971 50 111 2222");
+    // The customer is still shown.
+    expect(screen.getByText("Customer")).toBeInTheDocument();
+    expect(screen.getByText(fakeOrder().customerName)).toBeInTheDocument();
+  });
+
+  it("shows no Receiver section when the customer is the receiver", async () => {
+    vi.mocked(getShop).mockResolvedValue({ taxDisplayText: null } as never);
+    vi.mocked(getOrder).mockResolvedValue({ ...fakeOrder(), receiverName: null, receiverPhone: null } as Order);
+    render(<ToastProvider><OrderDetailModal orderId={42} onClose={vi.fn()} /></ToastProvider>);
+    await screen.findByText("Delivery address");
+    expect(screen.queryByTestId("order-receiver")).not.toBeInTheDocument();
+  });
+
+  it("a name without a phone is not shown as a receiver", async () => {
+    vi.mocked(getShop).mockResolvedValue({ taxDisplayText: null } as never);
+    vi.mocked(getOrder).mockResolvedValue({ ...fakeOrder(), receiverName: "Omar", receiverPhone: null } as Order);
+    render(<ToastProvider><OrderDetailModal orderId={42} onClose={vi.fn()} /></ToastProvider>);
+    await screen.findByText("Delivery address");
+    expect(screen.queryByTestId("order-receiver")).not.toBeInTheDocument();
+  });
+});

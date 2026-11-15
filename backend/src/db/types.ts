@@ -21,6 +21,9 @@ export interface OrderRow {
   deliveryTimeSlot: string | null;
   deliveryNotes: string | null;
   receiverMessage: string | null;
+  // The person who gets the order, when it is not the customer. NULL both = the customer.
+  receiverName: string | null;
+  receiverPhone: string | null;
   channel: string | null;
   orderType: string | null;
   paymentMethod: string | null;

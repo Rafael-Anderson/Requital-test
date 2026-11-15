@@ -21,6 +21,7 @@ import { resolvePaymentMethods } from "@/lib/payment-methods";
 import { effectiveOrderType, resolveFulfilmentOptions } from "@/lib/fulfilment";
 import { getStoredReferralCode } from "@/lib/referral";
 import { sanitizePhoneInput } from "@/lib/phone";
+import { RECEIVER_PHONE_PATTERN } from "@/lib/checkout-validation";
 import { track, type AnalyticsItem } from "@/lib/analytics";
 import { buildOrderAttribution } from "@/lib/attribution";
 import { buildPurchasePayload, stashPurchase } from "@/lib/purchase-tracking";
@@ -104,6 +105,12 @@ export function useCheckoutForm() {
   const [deliveryNotes, setDeliveryNotes] = useState("");
   // The gift message printed for the recipient (order.receiverMessage).
   const [receiverMessage, setReceiverMessage] = useState("");
+  // A separate RECEIVER. Off = the customer is the receiver and nothing extra is
+  // stored or sent; on = a receiver name and phone are required and sent together.
+  const [receiverIsOther, setReceiverIsOther] = useState(false);
+  const [receiverName, setReceiverName] = useState("");
+  const [receiverPhone, setReceiverPhoneRaw] = useState("");
+  const setReceiverPhone = (value: string) => setReceiverPhoneRaw(sanitizePhoneInput(value));
   const [deliveryDate, setDeliveryDate] = useState("");
   const [deliveryTimeSlot, setDeliveryTimeSlot] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
@@ -304,6 +311,10 @@ export function useCheckoutForm() {
         deliveryTimeSlot: deliveryTimeSlot || undefined,
         deliveryNotes: deliveryNotes || undefined,
         receiverMessage: receiverMessage.trim() || undefined,
+        // Only when "Receiver is someone else" is ticked. Unticked sends neither field,
+        // even if something was typed before the box was cleared.
+        receiverName: receiverIsOther ? receiverName.trim() : undefined,
+        receiverPhone: receiverIsOther ? receiverPhone.trim() : undefined,
         referralCode: getStoredReferralCode(shopSlug) ?? undefined,
         discountCode: discountCode ?? undefined,
         items: items.map((i) => ({
@@ -377,6 +388,8 @@ export function useCheckoutForm() {
     availablePaymentMethods.includes(paymentMethod) &&
     !dateBlocked &&
     (!deliveryDate || !!deliveryTimeSlot) &&
+    // A ticked "Receiver is someone else" needs both a name and a valid phone.
+    (!receiverIsOther || (!!receiverName.trim() && RECEIVER_PHONE_PATTERN.test(receiverPhone.trim()))) &&
     (selectedOutlet ? selectedOutlet.isOpen : false);
 
   // Why Place order is off, in words, for the cases the page does not already
@@ -435,6 +448,12 @@ export function useCheckoutForm() {
     setDeliveryNotes,
     receiverMessage,
     setReceiverMessage,
+    receiverIsOther,
+    setReceiverIsOther,
+    receiverName,
+    setReceiverName,
+    receiverPhone,
+    setReceiverPhone,
     deliveryDate,
     setDeliveryDate,
     deliveryTimeSlot,

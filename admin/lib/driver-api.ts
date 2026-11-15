@@ -24,6 +24,13 @@ export interface DriverStop {
   orderNumber: number;
   customerName: string;
   customerPhone: string;
+  // The person who gets the order, when it is not the customer. contact* is who the
+  // driver calls and hands over to: the receiver, else the customer.
+  receiverName?: string | null;
+  receiverPhone?: string | null;
+  contactName?: string;
+  contactPhone?: string;
+  contactIsReceiver?: boolean;
   address: string;
   deliveryNotes: string | null;
   timeSlot: string | null;

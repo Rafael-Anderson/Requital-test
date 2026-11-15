@@ -313,3 +313,124 @@ describe("Place order waits for the required fields", () => {
     });
   });
 });
+
+describe("Receiver (someone else gets the order)", () => {
+  const place = () => screen.getByRole("button", { name: "Place order" });
+  const field = (id: string) => document.getElementById(id) as HTMLInputElement;
+
+  async function fillCustomer() {
+    await userEvent.type(field("checkout-name"), "Sam");
+    await userEvent.type(field("checkout-phone"), "0501234567");
+    await userEvent.type(field("checkout-address"), "1 Palm St");
+    await userEvent.selectOptions(document.getElementById("checkout-region")!, "1");
+    await userEvent.click(screen.getByRole("button", { name: "Cash on delivery" }));
+  }
+
+  it("sits under the delivery address with the gift message next to it, unchecked by default", () => {
+    render(<Page />);
+    const left = column("checkout-details");
+    const box = left.getByLabelText("Receiver is someone else") as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(left.queryByLabelText("Receiver name")).toBeNull();
+    expect(left.queryByLabelText("Receiver phone")).toBeNull();
+    const receiverBlock = screen.getByTestId("checkout-receiver");
+    expect(receiverBlock).toContainElement(document.getElementById("checkout-gift-message"));
+    // It follows the address in the page order.
+    const address = document.getElementById("checkout-address")!;
+    expect(address.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("unchecked: nothing extra is required and no receiver is sent", async () => {
+    api.createOrder.mockResolvedValue({ order: { id: 9, total: "133.13", currency: "AED", trackingToken: "T" }, checkoutUrl: null });
+    render(<Page />);
+    await fillCustomer();
+    await waitFor(() => expect(place()).toBeEnabled());
+    fireEvent.click(place());
+    await waitFor(() => expect(api.createOrder).toHaveBeenCalled());
+    const payload = api.createOrder.mock.calls[0][1] as Record<string, unknown>;
+    expect(payload.receiverName).toBeUndefined();
+    expect(payload.receiverPhone).toBeUndefined();
+  });
+
+  it("checking the box makes the receiver name and phone required", async () => {
+    render(<Page />);
+    await fillCustomer();
+    await waitFor(() => expect(place()).toBeEnabled());
+
+    await userEvent.click(screen.getByLabelText("Receiver is someone else"));
+    expect(field("checkout-receiver-name")).toBeRequired();
+    expect(field("checkout-receiver-phone")).toBeRequired();
+    await waitFor(() => expect(place()).toBeDisabled());
+    const hint = screen.getByTestId("checkout-missing");
+    expect(hint).toHaveTextContent("receiver name");
+    expect(hint).toHaveTextContent("receiver phone");
+
+    await userEvent.type(field("checkout-receiver-name"), "Omar");
+    expect(place()).toBeDisabled();
+    // A number the server would reject (too short) does not count as filled.
+    await userEvent.type(field("checkout-receiver-phone"), "123");
+    expect(place()).toBeDisabled();
+    await userEvent.type(field("checkout-receiver-phone"), "4567890");
+    await waitFor(() => expect(place()).toBeEnabled());
+    expect(screen.queryByTestId("checkout-missing")).toBeNull();
+  });
+
+  it("the missing list takes you to the receiver field", async () => {
+    render(<Page />);
+    await userEvent.click(screen.getByLabelText("Receiver is someone else"));
+    await userEvent.click(within(screen.getByTestId("checkout-missing")).getByRole("button", { name: "receiver name" }));
+    expect(document.activeElement).toBe(field("checkout-receiver-name"));
+  });
+
+  it("the receiver phone keeps only digits, spaces, hyphens and a leading plus", async () => {
+    render(<Page />);
+    await userEvent.click(screen.getByLabelText("Receiver is someone else"));
+    await userEvent.type(field("checkout-receiver-phone"), "+971 abc50-111");
+    expect(field("checkout-receiver-phone").value).toBe("+971 50-111");
+  });
+
+  it("checked: the order carries the receiver beside the customer and the gift message", async () => {
+    api.createOrder.mockResolvedValue({ order: { id: 9, total: "133.13", currency: "AED", trackingToken: "T" }, checkoutUrl: null });
+    render(<Page />);
+    await fillCustomer();
+    await userEvent.type(document.getElementById("checkout-gift-message")!, "Happy birthday");
+    await userEvent.click(screen.getByLabelText("Receiver is someone else"));
+    await userEvent.type(field("checkout-receiver-name"), "  Omar Receiver ");
+    await userEvent.type(field("checkout-receiver-phone"), "+971 50 111 2222");
+    await waitFor(() => expect(place()).toBeEnabled());
+    fireEvent.click(place());
+    await waitFor(() => expect(api.createOrder).toHaveBeenCalled());
+    expect(api.createOrder.mock.calls[0][1]).toMatchObject({
+      customerName: "Sam",
+      customerPhone: "0501234567",
+      receiverName: "Omar Receiver",
+      receiverPhone: "+971 50 111 2222",
+      receiverMessage: "Happy birthday",
+    });
+  });
+
+  it("unchecking again drops whatever was typed: nothing is sent", async () => {
+    api.createOrder.mockResolvedValue({ order: { id: 9, total: "133.13", currency: "AED", trackingToken: "T" }, checkoutUrl: null });
+    render(<Page />);
+    await fillCustomer();
+    const box = screen.getByLabelText("Receiver is someone else");
+    await userEvent.click(box);
+    await userEvent.type(field("checkout-receiver-name"), "Omar");
+    await userEvent.type(field("checkout-receiver-phone"), "0501112222");
+    await userEvent.click(box);
+    expect(screen.queryByLabelText("Receiver name")).toBeNull();
+    await waitFor(() => expect(place()).toBeEnabled());
+    fireEvent.click(place());
+    await waitFor(() => expect(api.createOrder).toHaveBeenCalled());
+    const payload = api.createOrder.mock.calls[0][1] as Record<string, unknown>;
+    expect(payload.receiverName).toBeUndefined();
+    expect(payload.receiverPhone).toBeUndefined();
+  });
+
+  it("works for pickup too", async () => {
+    render(<Page />);
+    await userEvent.click(screen.getByRole("button", { name: "Pickup" }));
+    await userEvent.click(screen.getByLabelText("Receiver is someone else"));
+    expect(screen.getByLabelText("Receiver name")).toBeInTheDocument();
+  });
+});

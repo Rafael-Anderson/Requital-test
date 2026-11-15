@@ -299,8 +299,13 @@ export default function DeliveryRunDetailPage() {
               <div className="min-w-0 flex-1 text-sm">
                 <div className="flex flex-wrap items-center gap-x-2">
                   <span className="font-semibold">
-                    #{s.order.shopOrderNumber} {s.order.customerName}
+                    #{s.order.shopOrderNumber} {s.order.contactName ?? s.order.customerName}
                   </span>
+                  {s.order.contactIsReceiver && (
+                    <span className="text-xs text-text-muted" data-testid="run-stop-receiver">
+                      (receiver; ordered by {s.order.customerName})
+                    </span>
+                  )}
                   <span
                     className={`text-xs font-medium ${s.status === "delivered" ? "text-green-600 dark:text-green-400" : s.status === "failed" ? "text-red-600 dark:text-red-400" : "text-text-muted"}`}
                   >
@@ -308,7 +313,7 @@ export default function DeliveryRunDetailPage() {
                   </span>
                 </div>
                 <div className="text-xs text-text-muted">
-                  {[s.order.customerAddress, s.order.area, s.order.regionName].filter(Boolean).join(", ")} &middot; {s.order.customerPhone}
+                  {[s.order.customerAddress, s.order.area, s.order.regionName].filter(Boolean).join(", ")} &middot; {s.order.contactPhone ?? s.order.customerPhone}
                 </div>
                 {s.order.deliveryNotes && <div className="text-xs text-text-muted">Notes: {s.order.deliveryNotes}</div>}
                 {s.status === "failed" && s.failureReason && (

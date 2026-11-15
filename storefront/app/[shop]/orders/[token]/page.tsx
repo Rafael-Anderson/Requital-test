@@ -289,6 +289,16 @@ function OrderBody({ order, token, view, onCheckAgain }: { order: OrderLookupRes
               </div>
             )
           )}
+          {order.receiverName && order.receiverPhone && (
+            <Row label="Receiver">
+              <span data-testid="order-receiver">
+                {order.receiverName}
+                <span className="block text-foreground/70" dir="ltr">
+                  {order.receiverPhone}
+                </span>
+              </span>
+            </Row>
+          )}
           {(dateText || order.deliveryTimeSlot) && (
             <Row label={isPickup ? "Pickup time" : "Delivery time"}>
               {[dateText, order.deliveryTimeSlot].filter(Boolean).join(", ")}

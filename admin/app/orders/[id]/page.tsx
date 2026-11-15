@@ -186,6 +186,22 @@ export default function OrderDetailPage() {
         {order.customerEmail && (
           <p className="text-sm text-text-muted">{order.customerEmail}</p>
         )}
+        {order.receiverName && order.receiverPhone && (
+          <div className="mt-3" data-testid="order-receiver">
+            <h3 className="text-sm font-medium">Receiver</h3>
+            <p>{order.receiverName}</p>
+            <p className="text-sm text-text-muted">
+              <a
+                href={waLink(order.receiverPhone)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-accent-text dark:hover:text-accent hover:underline"
+              >
+                {order.receiverPhone}
+              </a>
+            </p>
+          </div>
+        )}
         <p className="text-sm mt-2">{order.customerAddress}</p>
         <p className="text-sm text-text-muted">
           {order.area ? `${order.area}, ` : ""}

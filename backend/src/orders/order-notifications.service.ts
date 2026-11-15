@@ -17,10 +17,16 @@ import { storefrontUrl } from '../common/storefront-url';
 import {
   renderOrderConfirmationHtml,
   renderOrderConfirmationText,
+  renderPeopleBlockHtml,
+  renderPeopleBlockText,
   renderTrackBlockHtml,
   renderTrackBlockText,
 } from './order-email';
-import { loadOrderEmailData, loadTrackUrl } from './order-email-data';
+import {
+  loadOrderEmailData,
+  loadOrderReceiver,
+  loadTrackUrl,
+} from './order-email-data';
 
 const logger = createLogger('OrderNotifications');
 
@@ -262,9 +268,22 @@ export class OrderNotificationsService {
     const trackUrl = order.customerEmail
       ? await loadTrackUrl(this.db, shopId, order.id).catch(() => null)
       : null;
-    const emailText = trackUrl
-      ? `${bodyText}\n\n${renderTrackBlockText(trackUrl)}`
-      : bodyText;
+    // Customer (name, email) and Receiver (name, phone) when the order has a
+    // separate receiver; nothing extra otherwise.
+    const people = {
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      ...(await loadOrderReceiver(this.db, shopId, order.id).catch(() => ({
+        receiverName: null,
+        receiverPhone: null,
+      }))),
+    };
+    const peopleText = renderPeopleBlockText(people);
+    const emailText = [
+      bodyText,
+      ...(trackUrl ? ['', renderTrackBlockText(trackUrl)] : []),
+      ...(peopleText.length ? ['', ...peopleText] : []),
+    ].join('\n');
     // Standalone literal (see notifyOrderConfirmed's own comment above) —
     // the pickup/delivery wording branch lives inside this one email type's
     // own template, not shared across types.
@@ -275,6 +294,7 @@ export class OrderNotificationsService {
 <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(order.customerName)},</p>
 <p style="margin:0;font-size:15px;line-height:1.5;color:#111111;">${messageHtml}</p>
 ${trackUrl ? `<div style="margin:20px 0 0;">${renderTrackBlockHtml(trackUrl)}</div>` : ''}
+${renderPeopleBlockHtml(people, 'left')}
 </td></tr>
 <tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
 <tr><td style="padding:24px 40px 40px;text-align:center;">

@@ -31,4 +31,21 @@ describe("missingRequiredFields", () => {
   it("a country without regions never asks for one", () => {
     expect(missingRequiredFields({ ...base, hasRegions: false, regionId: null })).toEqual([]);
   });
+
+  it("asks for nothing about a receiver unless the box is ticked", () => {
+    expect(missingRequiredFields({ ...base, receiverIsOther: false, receiverName: "", receiverPhone: "" })).toEqual([]);
+    expect(missingRequiredFields(base)).toEqual([]);
+  });
+  it("a ticked receiver needs a name and a phone the server would accept", () => {
+    expect(missingRequiredFields({ ...base, receiverIsOther: true, receiverName: " ", receiverPhone: "" })).toEqual([
+      { id: "checkout-receiver-name", label: "Receiver name" },
+      { id: "checkout-receiver-phone", label: "Receiver phone" },
+    ]);
+    expect(missingRequiredFields({ ...base, receiverIsOther: true, receiverName: "Omar", receiverPhone: "123" })).toEqual([
+      { id: "checkout-receiver-phone", label: "Receiver phone" },
+    ]);
+    expect(
+      missingRequiredFields({ ...base, receiverIsOther: true, receiverName: "Omar", receiverPhone: "+971 50 111 2222" }),
+    ).toEqual([]);
+  });
 });

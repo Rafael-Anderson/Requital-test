@@ -69,6 +69,34 @@ describe("driver page", () => {
     expect(api.driverGetRun).toHaveBeenCalledWith("T".repeat(43));
   });
 
+  it("names the receiver as the contact, with the customer beneath, when the order has one", async () => {
+    api.driverGetRun.mockResolvedValue(
+      view([
+        stop({
+          receiverName: "Omar Receiver",
+          receiverPhone: "+971501112222",
+          contactName: "Omar Receiver",
+          contactPhone: "+971501112222",
+          contactIsReceiver: true,
+        }),
+      ]),
+    );
+    render(<Page />);
+    await screen.findByText("Omar Receiver");
+    expect(screen.getByRole("link", { name: "+971501112222" }).getAttribute("href")).toBe("tel:+971501112222");
+    expect(screen.getByTestId("driver-receiver-label")).toBeInTheDocument();
+    expect(screen.getByTestId("driver-customer-line")).toHaveTextContent("Layla");
+    expect(screen.getByTestId("driver-customer-line")).toHaveTextContent("0501112233");
+  });
+
+  it("falls back to the customer as the contact when there is no receiver", async () => {
+    api.driverGetRun.mockResolvedValue(view([stop({ contactName: "Layla", contactPhone: "0501112233", contactIsReceiver: false })]));
+    render(<Page />);
+    await screen.findByText("Layla");
+    expect(screen.queryByTestId("driver-receiver-label")).toBeNull();
+    expect(screen.queryByTestId("driver-customer-line")).toBeNull();
+  });
+
   it("asks for the cash on a COD stop and sends it with the delivery", async () => {
     api.driverGetRun.mockResolvedValue(view([stop({ cod: { amount: "100.00", currency: "AED", alreadyCollected: false } })]));
     api.driverDeliver.mockResolvedValue({ status: "delivered", runCompleted: false });

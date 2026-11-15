@@ -1,3 +1,4 @@
+import { contactFor } from '../common/order-receiver';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
@@ -136,9 +137,11 @@ export class SliderDeliveryService {
         address: order.customerAddress,
         latitude: delivery.latitude,
         longitude: delivery.longitude,
+        // Who the courier calls at the door: the receiver when the order has one,
+        // else the customer.
         contactNumber:
-          normalizePhoneToE164(order.customerPhone, 'AE') ??
-          order.customerPhone,
+          normalizePhoneToE164(contactFor(order).phone, 'AE') ??
+          contactFor(order).phone,
       },
       paymentOnDelivery,
       credentials,

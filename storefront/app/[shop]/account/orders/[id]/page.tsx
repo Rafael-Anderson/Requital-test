@@ -87,6 +87,15 @@ export default function OrderDetailPage() {
               <span className="text-zinc-500">Delivery address</span>
               <span className="text-end max-w-56">{order.customerAddress}</span>
             </div>
+            {order.receiverName && order.receiverPhone && (
+              <div className="flex justify-between">
+                <span className="text-zinc-500">Receiver</span>
+                <span className="text-end max-w-56">
+                  {order.receiverName}
+                  <span className="block text-zinc-500" dir="ltr">{order.receiverPhone}</span>
+                </span>
+              </div>
+            )}
             {order.deliveryTimeSlot && (
               <div className="flex justify-between">
                 <span className="text-zinc-500">Time slot</span>

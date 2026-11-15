@@ -73,6 +73,10 @@ export interface Order {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string;
+  // The person who gets the order when it is not the customer. NULL/NULL (or absent)
+  // = the customer is the receiver.
+  receiverName?: string | null;
+  receiverPhone?: string | null;
   // Typed address with no map pin (the shopper's Google Maps was unavailable).
   addressUnverified?: boolean;
   region?: Region | null;
@@ -3694,6 +3698,13 @@ export interface DeliveryRunStop {
     shopOrderNumber: number;
     customerName: string;
     customerPhone: string;
+    // The receiver, when the order has one; contact* is who to call: the receiver,
+    // else the customer.
+    receiverName?: string | null;
+    receiverPhone?: string | null;
+    contactName?: string;
+    contactPhone?: string;
+    contactIsReceiver?: boolean;
     customerAddress: string;
     area: string | null;
     regionName: string | null;

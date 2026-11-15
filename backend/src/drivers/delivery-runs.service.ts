@@ -25,6 +25,7 @@ import { amountDueDecimal } from '../common/amount-due';
 import { completeRunIfDone, connExec } from './run-lifecycle';
 import { shopOrderNumberLabel } from '../orders/order-number';
 import { renderRunSheetHtml } from './run-sheet-html';
+import { contactFor, type ContactRow } from '../common/order-receiver';
 import {
   AddStopsDto,
   CreateDeliveryRunDto,
@@ -268,6 +269,8 @@ export class DeliveryRunsService {
         orderNumber: s.order.shopOrderNumber,
         customerName: s.order.customerName,
         customerPhone: s.order.customerPhone,
+        receiverName: s.order.receiverName,
+        receiverPhone: s.order.receiverPhone,
         address: [s.order.customerAddress, s.order.area, s.order.regionName]
           .filter((x): x is string => typeof x === 'string' && x.length > 0)
           .join(', '),
@@ -293,7 +296,7 @@ export class DeliveryRunsService {
       `SELECT s.id, s.position, s.status, s.failureReason, s.deliveredAt, s.failedAt,
               s.proofType, (s.proofPhotoKey IS NOT NULL) AS hasProofPhoto, s.codExpected, s.cashCollectedAmount, s.cashCurrency, s.cashDiscrepancy,
               s.otpSentAt, s.otpSendCount,
-              o.id AS orderId, o.shopOrderNumber, o.customerName, o.customerPhone, o.customerAddress,
+              o.id AS orderId, o.shopOrderNumber, o.customerName, o.customerPhone, o.receiverName, o.receiverPhone, o.customerAddress,
               o.area, o.deliveryNotes, o.deliveryTimeSlot, o.status AS orderStatus,
               o.paymentMethod, o.paymentStatus, o.total AS orderTotal, o.giftCardAmount, o.storeCreditAmount, o.currency AS orderCurrency,
               o.cashCollectedAt, rg.nameEn AS regionName
@@ -327,6 +330,13 @@ export class DeliveryRunsService {
         shopOrderNumber: r.shopOrderNumber as number,
         customerName: r.customerName as string,
         customerPhone: r.customerPhone as string,
+        // The person who gets the order, when it is not the customer (NULL/NULL =
+        // the customer). contact* is the one to call: the receiver, else the customer.
+        receiverName: (r.receiverName as string | null) ?? null,
+        receiverPhone: (r.receiverPhone as string | null) ?? null,
+        contactName: contactFor(r as ContactRow).name,
+        contactPhone: contactFor(r as ContactRow).phone,
+        contactIsReceiver: contactFor(r as ContactRow).isReceiver,
         customerAddress: r.customerAddress as string,
         area: r.area as string | null,
         regionName: r.regionName as string | null,
@@ -511,7 +521,7 @@ export class DeliveryRunsService {
       throw new BadRequestException('outletId is invalid for this shop');
     await this.branchRoles.assertPermission(ctx, outletId, 'deliveries.view');
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT o.id, o.shopOrderNumber, o.customerName, o.customerPhone, o.customerAddress, o.area,
+      `SELECT o.id, o.shopOrderNumber, o.customerName, o.customerPhone, o.receiverName, o.receiverPhone, o.customerAddress, o.area,
               o.deliveryDate, o.deliveryTimeSlot, o.status, o.paymentMethod, o.total, o.currency,
               rg.nameEn AS regionName
          FROM \`order\` o LEFT JOIN region rg ON rg.id = o.regionId
