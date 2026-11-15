@@ -66,7 +66,7 @@ test('settings search opens a setting from another panel, and the Layout list hi
 
   // 3. Layout list: only what applies to a Sections-mode storefront.
   await page.getByRole('button', { name: 'Layout', exact: true }).click();
-  for (const live of ['Home tab', 'Menu', 'Product page layout', 'Cart layout', 'Checkout layout', 'Icon style', 'Button shape', 'Button fill']) {
+  for (const live of ['Home tab', 'Menu', 'Product page layout', 'Cart layout', 'Icon style', 'Button shape', 'Button fill']) {
     await expect(page.getByRole('button', { name: live, exact: true })).toBeVisible();
   }
   for (const dead of ['Homepage layout', 'Top bar layout', 'Header size', 'Footer layout', 'Footer size']) {

@@ -22,7 +22,6 @@ describe("LayoutList", () => {
       "Menu",
       "Product page layout",
       "Cart layout",
-      "Checkout layout",
       "Icon style",
       "Button shape",
       "Button fill",
@@ -32,10 +31,10 @@ describe("LayoutList", () => {
     }
   });
 
-  it("Layout mode renders all 13", () => {
+  it("Layout mode renders all 12", () => {
     const { editor } = editorFor({ sectionsMode: false, sectionTypesPresent: new Set() });
     render(<LayoutList editor={editor} />);
-    expect(screen.getAllByRole("button")).toHaveLength(13);
+    expect(screen.getAllByRole("button")).toHaveLength(12);
   });
 
   it("a stale selection that is hidden highlights the first applicable entry instead", () => {

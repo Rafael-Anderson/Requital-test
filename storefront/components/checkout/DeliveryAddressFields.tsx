@@ -7,8 +7,8 @@ import MapPicker from "@/components/MapPicker";
 import { useShop } from "@/lib/shop-context";
 import { FIELD_CLASS, TEXTAREA_CLASS, BUTTON_OUTLINE_CLASS } from "./checkout-field-styles";
 
-// The "delivery address" card — identical in CheckoutSinglePage and
-// CheckoutSteps (only the surrounding step chrome differs), pulled out here
+// The "delivery address" card of the checkout,
+// pulled out here
 // so the map integration exists in exactly one place.
 export default function DeliveryAddressFields({ state }: { state: CheckoutFormState }) {
   const {
@@ -87,8 +87,9 @@ export default function DeliveryAddressFields({ state }: { state: CheckoutFormSt
         }}
       />
       <div>
-        <label className="text-sm font-medium block mb-1">Full address</label>
+        <label htmlFor="checkout-address" className="text-sm font-medium block mb-1">Full address</label>
         <textarea
+          id="checkout-address"
           required
           value={customerAddress}
           onChange={(e) => {

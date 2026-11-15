@@ -1,5 +1,5 @@
 import { ShoppingCart, Menu } from "lucide-react";
-import type { HomepageLayout, TopBarLayout, PdpLayout, CartLayout, CheckoutLayout, IconStyle, ButtonRadius, ButtonFill, FooterLayout, Density } from "@/lib/types";
+import type { HomepageLayout, TopBarLayout, PdpLayout, CartLayout, IconStyle, ButtonRadius, ButtonFill, FooterLayout, Density } from "@/lib/types";
 import type { HomepagePreset } from "@/lib/useThemeEditor";
 
 // Small static illustrations (not live-rendered previews, per the task
@@ -307,31 +307,6 @@ export function CartLayoutThumbnail({ layout }: { layout: CartLayout }) {
     <div className={FRAME}>
       {[0, 1, 2].map((i) => (
         <div key={i} className={`h-4 ${BAR}`} />
-      ))}
-    </div>
-  );
-}
-
-export function CheckoutLayoutThumbnail({ layout }: { layout: CheckoutLayout }) {
-  if (layout === "step_by_step") {
-    return (
-      <div className={FRAME}>
-        <div className="flex items-center gap-1.5 mb-1">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className={`size-3.5 rounded-full flex items-center justify-center ${i === 0 ? "bg-accent" : "bg-black/10 dark:bg-white/10"}`} />
-          ))}
-        </div>
-        {[0, 1].map((i) => (
-          <div key={i} className={`h-4 ${BAR}`} />
-        ))}
-      </div>
-    );
-  }
-  // single_page
-  return (
-    <div className={FRAME}>
-      {[0, 1, 2, 3].map((i) => (
-        <div key={i} className={`h-3 ${BAR}`} />
       ))}
     </div>
   );

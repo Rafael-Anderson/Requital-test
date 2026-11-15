@@ -30,15 +30,14 @@ describe("layout entry registry", () => {
       "Menu",
       "Product page layout",
       "Cart layout",
-      "Checkout layout",
       "Icon style",
       "Button shape",
       "Button fill",
     ]);
   });
 
-  it("Layout mode lists all 13", () => {
-    expect(applicableLayoutEntries(LAYOUT)).toHaveLength(13);
+  it("Layout mode lists all 12", () => {
+    expect(applicableLayoutEntries(LAYOUT)).toHaveLength(12);
   });
 
   it("a saved or deep-linked entry that is hidden falls back to the first applicable one", () => {
@@ -92,7 +91,6 @@ describe("layout predicates match the storefront code", () => {
     expect(sf("components/theme-sections/ThemeDrivenHeader.tsx")).toMatch(/shop\?\.cartLayout/);
     expect(sf("components/theme-sections/HeroSection.tsx")).toMatch(/shop\?\.buttonFill/);
     expect(sf("app/[shop]/products/[slug]/ProductDetailClient.tsx")).toMatch(/shop\?\.pdpLayout/);
-    expect(sf("app/[shop]/checkout/page.tsx")).toMatch(/checkoutLayout/);
     expect(sf("lib/shop-context.tsx")).toMatch(/--theme-btn-primary-radius/);
   });
 });
@@ -105,7 +103,12 @@ describe("settings search index", () => {
     expect(layoutGroup).not.toContain("Top bar layout");
     expect(layoutGroup).not.toContain("Footer layout");
     expect(layoutGroup).toContain("Cart layout");
-    expect(buildSearchIndex(LAYOUT).filter((e) => e.group === "Layout")).toHaveLength(13);
+    // The checkout is one page with two columns: there is nothing to choose, so
+    // no Layout entry and nothing in the search for it.
+    expect(layoutGroup).not.toContain("Checkout layout");
+    expect(applicableLayoutEntries(LAYOUT).map((e) => e.id)).not.toContain("Checkout layout");
+    expect(buildSearchIndex(LAYOUT).map((e) => e.label)).not.toContain("Checkout layout");
+    expect(buildSearchIndex(LAYOUT).filter((e) => e.group === "Layout")).toHaveLength(12);
   });
 
   it("includes section-level settings only for section types the theme has", () => {

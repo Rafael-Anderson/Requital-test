@@ -31,11 +31,9 @@ function cartAnalyticsItems(items: { productId: number; name: string; price: num
 }
 
 // All checkout state, derived values, and submit handling — pulled out of
-// the page component so both the single-page and step-by-step presets (see
-// theme.checkoutLayout, Theme Customizer v2) render off the exact same
-// logic. Every field/validation/submission behavior is identical between
-// the two presets; only how the fields are grouped and paged through
-// differs, entirely in the presentational components that call this.
+// the page component so the presentation (components/checkout/CheckoutLayout.tsx,
+// the one-page two-column checkout) is separate from how an order actually gets
+// placed.
 export function useCheckoutForm() {
   const router = useRouter();
   const { shopSlug, shopBasePath, shop, outlets } = useShop();
@@ -53,8 +51,7 @@ export function useCheckoutForm() {
   const total = Math.max(0, subtotal - (discountAmount ?? 0) - (giftCardAmount ?? 0));
   // The tax quote shown at checkout. A display mirror of the server's per-line
   // computation (see lib/order-tax.ts) - the server recomputes and charges its
-  // own number at order creation. Computed once here so both checkout layouts
-  // show the identical figure.
+  // own number at order creation. Computed once here for the summary.
   const taxQuote = quoteCartTax({
     lines: items.map((i) => ({
       amount: i.price * i.quantity,
@@ -105,6 +102,8 @@ export function useCheckoutForm() {
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [deliveryNotes, setDeliveryNotes] = useState("");
+  // The gift message printed for the recipient (order.receiverMessage).
+  const [receiverMessage, setReceiverMessage] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
   const [deliveryTimeSlot, setDeliveryTimeSlot] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
@@ -247,7 +246,7 @@ export function useCheckoutForm() {
   }
 
   // Fired on phone-field blur (see the two checkout presentational
-  // components) once name+phone are both filled in — the "customer has
+  // component) once name+phone are both filled in — the "customer has
   // provided enough identity to be reachable" trigger point the Abandoned
   // Cart Recovery feature is built around. Fire-and-forget: never surfaced
   // to the shopper, never blocks or delays anything else on this page.
@@ -304,6 +303,7 @@ export function useCheckoutForm() {
         deliveryDate: deliveryDate || undefined,
         deliveryTimeSlot: deliveryTimeSlot || undefined,
         deliveryNotes: deliveryNotes || undefined,
+        receiverMessage: receiverMessage.trim() || undefined,
         referralCode: getStoredReferralCode(shopSlug) ?? undefined,
         discountCode: discountCode ?? undefined,
         items: items.map((i) => ({
@@ -433,6 +433,8 @@ export function useCheckoutForm() {
     useMyLocation,
     deliveryNotes,
     setDeliveryNotes,
+    receiverMessage,
+    setReceiverMessage,
     deliveryDate,
     setDeliveryDate,
     deliveryTimeSlot,

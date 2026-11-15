@@ -10,7 +10,6 @@ import {
   TopBarLayoutThumbnail,
   PdpLayoutThumbnail,
   CartLayoutThumbnail,
-  CheckoutLayoutThumbnail,
   FooterLayoutThumbnail,
   DensityThumbnail,
   IconStyleThumbnail,
@@ -22,7 +21,6 @@ import {
   TOP_BAR_LAYOUT_OPTIONS,
   PDP_LAYOUT_OPTIONS,
   CART_LAYOUT_OPTIONS,
-  CHECKOUT_LAYOUT_OPTIONS,
   FOOTER_LAYOUT_OPTIONS,
   HEADER_DENSITY_OPTIONS,
   FOOTER_DENSITY_OPTIONS,
@@ -241,20 +239,6 @@ export function CartLayoutSetting({ editor }: LayoutSettingProps) {
       value={legacyTheme.cartLayout}
       onChange={(key) => void updateLegacyTheme({ cartLayout: key })}
       renderThumbnail={(key) => <CartLayoutThumbnail layout={key} />}
-    />
-  );
-}
-
-export function CheckoutLayoutSetting({ editor }: LayoutSettingProps) {
-  const { legacyTheme, updateLegacyTheme } = editor;
-  if (!legacyTheme) return null;
-  return (
-    <PresetPicker
-      singleColumn
-      options={CHECKOUT_LAYOUT_OPTIONS}
-      value={legacyTheme.checkoutLayout}
-      onChange={(key) => void updateLegacyTheme({ checkoutLayout: key })}
-      renderThumbnail={(key) => <CheckoutLayoutThumbnail layout={key} />}
     />
   );
 }

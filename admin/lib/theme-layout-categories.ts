@@ -12,7 +12,6 @@ export const THEME_LAYOUT_CATEGORY_LABELS = [
   "Footer size",
   "Product page layout",
   "Cart layout",
-  "Checkout layout",
   "Icon style",
   "Button shape",
   "Button fill",

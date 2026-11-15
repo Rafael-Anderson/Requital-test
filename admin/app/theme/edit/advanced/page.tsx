@@ -8,7 +8,6 @@ import {
   TOP_BAR_LAYOUT_OPTIONS,
   PDP_LAYOUT_OPTIONS,
   CART_LAYOUT_OPTIONS,
-  CHECKOUT_LAYOUT_OPTIONS,
   FOOTER_LAYOUT_OPTIONS,
   HEADER_DENSITY_OPTIONS,
   FOOTER_DENSITY_OPTIONS,
@@ -20,7 +19,6 @@ import {
   type TopBarLayout,
   type PdpLayout,
   type CartLayout,
-  type CheckoutLayout,
   type FooterLayout,
   type Density,
   type IconStyle,
@@ -38,7 +36,6 @@ import {
   TopBarLayoutThumbnail,
   PdpLayoutThumbnail,
   CartLayoutThumbnail,
-  CheckoutLayoutThumbnail,
   FooterLayoutThumbnail,
   DensityThumbnail,
   IconStyleThumbnail,
@@ -67,7 +64,6 @@ export default function ThemeLayoutPage() {
   const [topBarLayout, setTopBarLayout] = useState<TopBarLayout>("logo_left");
   const [pdpLayout, setPdpLayout] = useState<PdpLayout>("gallery_left");
   const [cartLayout, setCartLayout] = useState<CartLayout>("full_page");
-  const [checkoutLayout, setCheckoutLayout] = useState<CheckoutLayout>("single_page");
   const [footerLayout, setFooterLayout] = useState<FooterLayout>("columns");
   const [headerDensity, setHeaderDensity] = useState<Density>("regular");
   const [footerDensity, setFooterDensity] = useState<Density>("regular");
@@ -96,7 +92,6 @@ export default function ThemeLayoutPage() {
         setTopBarLayout(data.topBarLayout);
         setPdpLayout(data.pdpLayout);
         setCartLayout(data.cartLayout);
-        setCheckoutLayout(data.checkoutLayout);
         setFooterLayout(data.footerLayout);
         setHeaderDensity(data.headerDensity);
         setFooterDensity(data.footerDensity);
@@ -121,7 +116,6 @@ export default function ThemeLayoutPage() {
         topBarLayout,
         pdpLayout,
         cartLayout,
-        checkoutLayout,
         footerLayout,
         headerDensity,
         footerDensity,
@@ -261,20 +255,6 @@ export default function ThemeLayoutPage() {
                 value={cartLayout}
                 onChange={setCartLayout}
                 renderThumbnail={(key) => <CartLayoutThumbnail layout={key} />}
-              />
-            </Section>
-          </Card>
-
-          <Card>
-            <Section
-              title="Checkout layout"
-              hint="Every field is the same either way. This only changes how they're grouped."
-            >
-              <PresetPicker
-                options={CHECKOUT_LAYOUT_OPTIONS}
-                value={checkoutLayout}
-                onChange={setCheckoutLayout}
-                renderThumbnail={(key) => <CheckoutLayoutThumbnail layout={key} />}
               />
             </Section>
           </Card>

@@ -12,7 +12,7 @@ function Amount({ value, currency }: { value: number | string; currency?: string
   );
 }
 
-// The order summary of both checkout layouts. Once the server has quoted the
+// The order summary of the checkout. Once the server has quoted the
 // cart, EVERY figure here is the server's (subtotal, discount, tax, delivery,
 // total from POST delivery-quote, which runs the same pricing the order is
 // charged with); nothing is added up in the browser. Before a quote exists the
@@ -111,6 +111,29 @@ export default function CheckoutSummary({ state }: { state: CheckoutFormState })
         </p>
       )}
       {shop?.taxDisplayText && <p className="text-xs text-zinc-400">{shop.taxDisplayText}</p>}
+    </div>
+  );
+}
+
+// The total again, for just above Place order on a phone or tablet (the full summary
+// has scrolled out of view by then). Hidden from lg up, where the summary card is
+// right there and sticky. The same server quote as the summary, never a sum of its own.
+export function CheckoutTotalCompact({ state }: { state: CheckoutFormState }) {
+  const { shop, deliveryQuote } = state;
+  const q = deliveryQuote.phase === "ready" ? deliveryQuote.quote : null;
+  const priced = q && q.total !== null ? q : null;
+  return (
+    <div className="flex items-center justify-between font-medium lg:hidden" data-testid="checkout-total-compact">
+      <span>Total</span>
+      {deliveryQuote.phase === "loading" ? (
+        <span aria-busy="true" className="inline-block h-4 w-20 rounded bg-black/10 animate-pulse" />
+      ) : priced ? (
+        <span>
+          <Amount value={priced.total!} currency={shop?.currency} />
+        </span>
+      ) : (
+        <span className="text-zinc-500">To be confirmed</span>
+      )}
     </div>
   );
 }

@@ -2191,13 +2191,11 @@ export const CART_LAYOUT_OPTIONS: { key: CartLayout; label: string; description:
   { key: "drawer", label: "Slide-out drawer", description: "The cart icon opens a panel over the current page instead." },
 ];
 
+// OBSOLETE: the storefront checkout is one page with two columns and there is no
+// setting for it any more. The stored column is still read (and kept as it is) so an
+// older theme row stays valid; nothing renders or edits it.
 export const CHECKOUT_LAYOUTS = ["single_page", "step_by_step"] as const;
 export type CheckoutLayout = (typeof CHECKOUT_LAYOUTS)[number];
-export const CHECKOUT_LAYOUT_OPTIONS: { key: CheckoutLayout; label: string; description: string }[] = [
-  { key: "single_page", label: "Single page", description: "Every field on one page, the current default." },
-  { key: "step_by_step", label: "Step by step", description: "Contact, delivery, and payment as separate steps." },
-];
-
 export const FOOTER_LAYOUTS = ["columns", "centered"] as const;
 export type FooterLayout = (typeof FOOTER_LAYOUTS)[number];
 export const FOOTER_LAYOUT_OPTIONS: { key: FooterLayout; label: string; description: string }[] = [

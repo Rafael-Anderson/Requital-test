@@ -26,14 +26,18 @@ export default function PaymentMethodPicker({
   value,
   onChange,
   cardProcessor,
+  stacked = false,
 }: {
   methods: PaymentMethod[];
   value: PaymentMethod | "";
   onChange: (method: PaymentMethod) => void;
   cardProcessor?: string | null;
+  // One option per row: for a narrow column (the checkout summary card), where two
+  // cards side by side would wrap their labels.
+  stacked?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className={stacked ? "grid grid-cols-1 gap-2" : "grid grid-cols-2 gap-2"}>
       {methods.map((m) => {
         const Icon = PAYMENT_ICONS[m];
         const selected = value === m;

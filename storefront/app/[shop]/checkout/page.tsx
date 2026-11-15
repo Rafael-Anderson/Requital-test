@@ -3,17 +3,16 @@
 import { useState } from "react";
 import { useCheckoutForm } from "@/lib/useCheckoutForm";
 import { useCart } from "@/lib/cart";
-import CheckoutSinglePage from "@/components/checkout/CheckoutSinglePage";
-import CheckoutSteps from "@/components/checkout/CheckoutSteps";
+import CheckoutLayout from "@/components/checkout/CheckoutLayout";
 import AddonPrompt from "@/components/checkout/AddonPrompt";
 import StorefrontPageShell from "@/components/StorefrontPageShell";
 import EmptyCartState from "@/components/EmptyCartState";
 import PaymentReturnNotice from "@/components/checkout/PaymentReturnNotice";
 
-// Dispatches on theme.checkoutLayout — both presets share the exact same
-// state/validation/submission logic (useCheckoutForm), so a layout switch
-// can never change how an order actually gets placed, only how the fields
-// are grouped and paged through. See useCheckoutForm.ts.
+// One page, two columns (components/checkout/CheckoutLayout.tsx). The older
+// step-by-step layout and the Checkout layout theme setting are gone; a theme that
+// still stores `checkoutLayout` is simply ignored here. All state, validation and
+// submission live in useCheckoutForm.
 export default function CheckoutPage() {
   const state = useCheckoutForm();
   const { outletId: cartOutletId } = useCart();
@@ -47,9 +46,9 @@ export default function CheckoutPage() {
   }
 
   return (
-    <StorefrontPageShell variant="medium">
+    <StorefrontPageShell variant="wide">
       <PaymentReturnNotice shopSlug={state.shopSlug} />
-      {state.shop?.checkoutLayout === "step_by_step" ? <CheckoutSteps {...state} /> : <CheckoutSinglePage {...state} />}
+      <CheckoutLayout {...state} />
     </StorefrontPageShell>
   );
 }

@@ -122,7 +122,6 @@ const LEGACY_THEME_SHOP_FIELDS = [
   "buttonFill",
   "pdpLayout",
   "cartLayout",
-  "checkoutLayout",
   "footerLayout",
   "headerDensity",
   "footerDensity",

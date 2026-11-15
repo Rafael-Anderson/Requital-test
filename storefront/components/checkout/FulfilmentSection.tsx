@@ -24,7 +24,7 @@ export function FulfilmentUnavailable({ state }: { state: CheckoutFormState }) {
 // The Delivery / Pickup choice, the branch picker and, for pickup, where to
 // collect. The Delivery / Pickup buttons exist only when the selected outlet
 // offers both; a single option is applied with no control (the fields below
-// already show only what that option needs). Shared by both checkout layouts.
+// already show only what that option needs).
 export default function FulfilmentSection({ state }: { state: CheckoutFormState }) {
   const { fulfilment, orderType, setOrderType, outletOptions, outletId, setOutletId, selectedOutlet } = state;
   return (

@@ -103,7 +103,6 @@ export interface Shop {
   buttonFill: ButtonFill;
   pdpLayout: PdpLayout;
   cartLayout: CartLayout;
-  checkoutLayout: CheckoutLayout;
   footerLayout: FooterLayout;
   headerDensity: Density;
   footerDensity: Density;
@@ -187,9 +186,6 @@ export type PdpLayout = (typeof PDP_LAYOUTS)[number];
 
 export const CART_LAYOUTS = ["full_page", "drawer"] as const;
 export type CartLayout = (typeof CART_LAYOUTS)[number];
-
-export const CHECKOUT_LAYOUTS = ["single_page", "step_by_step"] as const;
-export type CheckoutLayout = (typeof CHECKOUT_LAYOUTS)[number];
 
 export const FOOTER_LAYOUTS = ["columns", "centered"] as const;
 export type FooterLayout = (typeof FOOTER_LAYOUTS)[number];
