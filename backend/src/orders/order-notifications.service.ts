@@ -14,6 +14,13 @@ import { createLogger } from '../common/logging/logger';
 import { JobsService } from '../jobs/jobs.service';
 import { formatMoney } from '../common/money-format';
 import { storefrontUrl } from '../common/storefront-url';
+import {
+  renderOrderConfirmationHtml,
+  renderOrderConfirmationText,
+  renderTrackBlockHtml,
+  renderTrackBlockText,
+} from './order-email';
+import { loadOrderEmailData, loadTrackUrl } from './order-email-data';
 
 const logger = createLogger('OrderNotifications');
 
@@ -93,11 +100,56 @@ export class OrderNotificationsService {
   async notifyOrderConfirmed(shopId: number, order: NotifiableOrder) {
     if (await this.isMarketplaceOrder(shopId, order.id)) return;
     const bodyText = `Hi ${order.customerName}, we've received your order #${order.shopOrderNumber} (total ${formatMoney(order.total, order.currency)}). We'll message you again once it's on its way.`;
-    // Standalone literal, not shared with notifyOutForDelivery's own HTML
-    // below — deliberately duplicated rather than factored into a common
-    // renderer, so a future change to one order email type can't silently
-    // alter another's markup.
-    const html = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
+    // The rich confirmation (items, bill, delivery details, Track button) is
+    // rendered from the order's own captured columns. It must never be the reason
+    // a customer gets no confirmation at all, so any failure to build it falls
+    // back to the short message this method always sent.
+    const email = order.customerEmail
+      ? await this.buildConfirmationEmail(shopId, order, bodyText)
+      : { html: this.fallbackConfirmationHtml(order), text: bodyText };
+    await Promise.all([
+      this.sendEmail(
+        shopId,
+        order,
+        `Order confirmation #${order.shopOrderNumber}`,
+        email.text,
+        email.html,
+        `order:${order.id}:confirmed-email`,
+      ),
+      this.sendWhatsApp(shopId, order, bodyText),
+      this.sendMerchantAlert(shopId, order),
+    ]);
+  }
+
+  private async buildConfirmationEmail(
+    shopId: number,
+    order: NotifiableOrder,
+    fallbackText: string,
+  ): Promise<{ html: string; text: string }> {
+    try {
+      const data = await loadOrderEmailData(this.db, shopId, order.id);
+      if (data) {
+        return {
+          html: renderOrderConfirmationHtml(data),
+          text: renderOrderConfirmationText(data),
+        };
+      }
+    } catch (err) {
+      logger.error(
+        `order #${order.id}: rich confirmation email failed, sending the short one`,
+        {
+          orderId: order.id,
+          shopId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      );
+    }
+    return { html: this.fallbackConfirmationHtml(order), text: fallbackText };
+  }
+
+  // The short confirmation, kept as the fallback for the rich one.
+  private fallbackConfirmationHtml(order: NotifiableOrder): string {
+    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 16px;"><tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <tr><td style="background-color:#0d9488;height:60px;text-align:center;vertical-align:middle;"><span style="color:#ffffff;font-size:22px;font-weight:600;">Requital</span></td></tr>
 <tr><td style="padding:40px;">
@@ -110,18 +162,6 @@ export class OrderNotificationsService {
 </td></tr>
 </table>
 </td></tr></table>`;
-    await Promise.all([
-      this.sendEmail(
-        shopId,
-        order,
-        `Order confirmation #${order.shopOrderNumber}`,
-        bodyText,
-        html,
-        `order:${order.id}:confirmed-email`,
-      ),
-      this.sendWhatsApp(shopId, order, bodyText),
-      this.sendMerchantAlert(shopId, order),
-    ]);
   }
 
   // SHP-5: the one-time code a customer reads to their driver. Returns which
@@ -217,6 +257,14 @@ export class OrderNotificationsService {
     const messageHtml = isPickup
       ? `Order <strong>#${order.shopOrderNumber}</strong> is ready for pickup at your selected outlet.`
       : `Order <strong>#${order.shopOrderNumber}</strong> is on its way to you now.`;
+    // The same Track your order block the confirmation carries (one shared partial,
+    // so the two cannot drift). Null when the order has no tracking token.
+    const trackUrl = order.customerEmail
+      ? await loadTrackUrl(this.db, shopId, order.id).catch(() => null)
+      : null;
+    const emailText = trackUrl
+      ? `${bodyText}\n\n${renderTrackBlockText(trackUrl)}`
+      : bodyText;
     // Standalone literal (see notifyOrderConfirmed's own comment above) —
     // the pickup/delivery wording branch lives inside this one email type's
     // own template, not shared across types.
@@ -226,6 +274,7 @@ export class OrderNotificationsService {
 <tr><td style="padding:40px;">
 <p style="margin:0 0 16px;font-size:15px;line-height:1.5;color:#111111;">Hi ${escapeHtml(order.customerName)},</p>
 <p style="margin:0;font-size:15px;line-height:1.5;color:#111111;">${messageHtml}</p>
+${trackUrl ? `<div style="margin:20px 0 0;">${renderTrackBlockHtml(trackUrl)}</div>` : ''}
 </td></tr>
 <tr><td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
 <tr><td style="padding:24px 40px 40px;text-align:center;">
@@ -238,7 +287,7 @@ export class OrderNotificationsService {
         shopId,
         order,
         subject,
-        bodyText,
+        emailText,
         html,
         `order:${order.id}:out-for-delivery-email`,
       ),
