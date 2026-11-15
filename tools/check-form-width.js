@@ -109,7 +109,6 @@ const ALLOWLIST = [
   { file: "admin/components/ui/DateTimePicker.tsx", detail: "grid grid-cols-7 gap-y-1 text-center text-sm mb-3", reason: "calendar day grid, always 7 columns" },
   { file: "storefront/components/checkout/DeliveryDateCalendar.tsx", detail: "grid grid-cols-7 gap-1 mb-1", reason: "calendar weekday header, always 7 columns" },
   { file: "storefront/components/checkout/DeliveryDateCalendar.tsx", detail: "grid grid-cols-7 gap-1", reason: "calendar day grid, always 7 columns" },
-  { file: "storefront/components/checkout/PaymentMethodPicker.tsx", detail: "grid grid-cols-2 gap-2", reason: "two-per-row payment method buttons, content is short labels" },
 ];
 
 const files = SCAN_DIRS.flatMap((d) => walk(path.join(ROOT, d)));

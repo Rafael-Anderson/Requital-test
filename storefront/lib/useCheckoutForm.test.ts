@@ -55,7 +55,7 @@ vi.mock("@/lib/shop-context", () => ({
 }));
 
 // useCheckoutForm.canSubmit gates the real submit button (see
-// CheckoutSinglePage/CheckoutSteps) on `selectedOutlet.isOpen` — this is the
+// CheckoutLayout) on `selectedOutlet.isOpen` — this is the
 // single place that logic lives, so it's tested at the hook level rather
 // than duplicated per checkout layout preset.
 describe("useCheckoutForm — outlet open/closed gating", () => {

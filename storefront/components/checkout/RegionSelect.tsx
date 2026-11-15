@@ -26,8 +26,9 @@ export default function RegionSelect({
   if (regions.length === 0) return null;
   return (
     <div>
-      <label className="text-sm font-medium block mb-1">{regionLabel}</label>
+      <label htmlFor="checkout-region" className="text-sm font-medium block mb-1">{regionLabel}</label>
       <select
+        id="checkout-region"
         required={required}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}

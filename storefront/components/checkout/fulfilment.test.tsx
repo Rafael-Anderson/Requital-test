@@ -2,8 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useCheckoutForm } from "@/lib/useCheckoutForm";
-import CheckoutSinglePage from "./CheckoutSinglePage";
-import CheckoutSteps from "./CheckoutSteps";
+import CheckoutLayout from "./CheckoutLayout";
 
 afterEach(cleanup);
 
@@ -104,20 +103,12 @@ const outlet = (o: Partial<TestOutlet> & { id: number }): TestOutlet => ({
   ...o,
 });
 
-function Delivered({ layout }: { layout: "single" | "steps" }) {
+function Delivered() {
   const state = useCheckoutForm();
-  return layout === "single" ? <CheckoutSinglePage {...state} /> : <CheckoutSteps {...state} />;
+  return <CheckoutLayout {...state} />;
 }
 
-// Step layout shows the delivery fields on step 2; click through the contact step.
-async function toDeliveryStep(layout: "single" | "steps") {
-  if (layout === "single") return;
-  await userEvent.type(byLabel("Name"), "Sam");
-  await userEvent.type(byLabel("Phone"), "0501234567");
-  await userEvent.click(screen.getByRole("button", { name: "Continue" }));
-}
-
-describe.each(["single", "steps"] as const)("fulfilment selector (%s layout)", (layout) => {
+describe("fulfilment selector", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     auth.customer = null;
@@ -125,38 +116,34 @@ describe.each(["single", "steps"] as const)("fulfilment selector (%s layout)", (
 
   it("both: shows the Delivery/Pickup toggle, delivery by default, and switching swaps the fields", async () => {
     ctx.outlets = [outlet({ id: 1, deliveryEnabled: true, pickupEnabled: true })];
-    render(<Delivered layout={layout} />);
+    render(<Delivered />);
     expect(screen.getByRole("button", { name: "Delivery" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Pickup" })).toHaveAttribute("aria-pressed", "false");
-    await toDeliveryStep(layout);
     expect(screen.getByText("Delivery address")).toBeInTheDocument();
-    await userEvent.click(screen.queryByRole("button", { name: "Back" }) ?? screen.getByRole("button", { name: "Pickup" }));
-    if (layout === "steps") await userEvent.click(screen.getByRole("button", { name: "Pickup" }));
+    await userEvent.click(screen.getByRole("button", { name: "Pickup" }));
     expect(screen.queryByText("Delivery address")).not.toBeInTheDocument();
     expect(screen.getByTestId("pickup-details")).toBeInTheDocument();
   });
 
   it("delivery only: no toggle, no pickup details, address fields shown", async () => {
     ctx.outlets = [outlet({ id: 1, deliveryEnabled: true })];
-    render(<Delivered layout={layout} />);
+    render(<Delivered />);
     expect(screen.queryByRole("button", { name: "Delivery" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Pickup" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("pickup-details")).not.toBeInTheDocument();
     expect(screen.queryByText(/Pickup location/)).not.toBeInTheDocument();
-    await toDeliveryStep(layout);
     expect(screen.getByText("Delivery address")).toBeInTheDocument();
     expect(screen.getByText("Delivery date (optional)")).toBeInTheDocument();
   });
 
   it("pickup only: no toggle, no address fields, pickup details and pickup date wording", async () => {
     ctx.outlets = [outlet({ id: 1, name: "Marina", area: "Dubai Marina", phone: "+97145550000", pickupEnabled: true })];
-    render(<Delivered layout={layout} />);
+    render(<Delivered />);
     expect(screen.queryByRole("button", { name: "Delivery" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Pickup" })).not.toBeInTheDocument();
     const details = screen.getByTestId("pickup-details");
     expect(within(details).getByText("Marina")).toBeInTheDocument();
     expect(within(details).getByText("Dubai Marina")).toBeInTheDocument();
-    await toDeliveryStep(layout);
     expect(screen.queryByText("Delivery address")).not.toBeInTheDocument();
     expect(screen.queryByTestId("map")).not.toBeInTheDocument();
     expect(screen.getByText("Pickup date (optional)")).toBeInTheDocument();
@@ -164,7 +151,7 @@ describe.each(["single", "steps"] as const)("fulfilment selector (%s layout)", (
 
   it("neither: explains why and Place order is disabled, with no form to fill", () => {
     ctx.outlets = [outlet({ id: 1 })];
-    render(<Delivered layout={layout} />);
+    render(<Delivered />);
     expect(screen.getByRole("alert")).toHaveTextContent(/Neither delivery nor pickup/);
     expect(screen.getByRole("button", { name: "Place order" })).toBeDisabled();
     expect(screen.queryByText("Name")).not.toBeInTheDocument();
@@ -175,13 +162,12 @@ describe.each(["single", "steps"] as const)("fulfilment selector (%s layout)", (
       outlet({ id: 1, name: "A", deliveryEnabled: true }),
       outlet({ id: 2, name: "B", pickupEnabled: true, area: "Bay" }),
     ];
-    render(<Delivered layout={layout} />);
+    render(<Delivered />);
     expect(screen.queryByRole("button", { name: "Pickup" })).not.toBeInTheDocument();
     expect(byLabel("Branch")).toBeInTheDocument();
     await userEvent.selectOptions(byLabel("Branch"), "2");
     await waitFor(() => expect(screen.getByTestId("pickup-details")).toBeInTheDocument());
     expect(byLabel("Pickup location")).toBeInTheDocument();
-    await toDeliveryStep(layout);
     expect(screen.queryByText("Delivery address")).not.toBeInTheDocument();
   });
 
@@ -191,7 +177,7 @@ describe.each(["single", "steps"] as const)("fulfilment selector (%s layout)", (
       outlet({ id: 2, name: "B", pickupEnabled: true }),
     ];
     api.createOrder.mockResolvedValue({ order: { id: 9, total: "10", currency: "AED" }, checkoutUrl: null });
-    render(<Delivered layout="single" />);
+    render(<Delivered />);
     await userEvent.type(byLabel("Name"), "Sam");
     await userEvent.type(byLabel("Phone"), "0501234567");
     await userEvent.type(byLabel("Full address"), "1 Palm St");
@@ -206,7 +192,7 @@ describe.each(["single", "steps"] as const)("fulfilment selector (%s layout)", (
   it("saved-address picker is a delivery-only control", async () => {
     auth.customer = { name: "Sam", phone: "0501234567", email: "" };
     ctx.outlets = [outlet({ id: 1, deliveryEnabled: true, pickupEnabled: true })];
-    render(<Delivered layout="single" />);
+    render(<Delivered />);
     await waitFor(() => expect(screen.getByText("Use a saved address")).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Pickup" }));
     expect(screen.queryByText("Use a saved address")).not.toBeInTheDocument();

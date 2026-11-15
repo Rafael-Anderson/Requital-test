@@ -37,7 +37,6 @@ export const LAYOUT_ENTRY_IDS = [
   "Footer size",
   "Product page layout",
   "Cart layout",
-  "Checkout layout",
   "Icon style",
   "Button shape",
   "Button fill",
@@ -124,13 +123,6 @@ export const LAYOUT_ENTRIES: readonly LayoutEntry[] = [
     keywords: ["cart", "drawer", "basket"],
     applies: always,
     evidence: "ShopLayoutClient mounts CartDrawer when shop.cartLayout === 'drawer'; ThemeDrivenHeader's cart icon also branches on it.",
-  },
-  {
-    id: "Checkout layout",
-    description: "Single page or step-by-step checkout",
-    keywords: ["checkout", "steps", "single page"],
-    applies: always,
-    evidence: "app/[shop]/checkout/page.tsx dispatches on shop.checkoutLayout; checkout is not section-driven.",
   },
   {
     id: "Icon style",

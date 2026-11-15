@@ -1,6 +1,6 @@
 import type { PaymentMethod } from "@/lib/types";
 
-// Shared between CheckoutSinglePage and CheckoutSteps — same visible-input
+// Shared by the checkout components — same visible-input
 // treatment as admin's components/ui/Input.tsx. Previously used a literal
 // `dark:bg-zinc-900` pairing with no matching `dark:text-*`, from back when
 // the storefront was assumed to follow OS dark mode — it no longer does
