@@ -45,6 +45,12 @@ const OWNERSHIP_MARKERS = [
 ];
 
 const ALLOWLIST = [
+  // Pagination of GET /products: read-only. The outletId is the one findAll already
+  // resolved through resolveOutletFilter() and permission-checked (a branch user is
+  // forced to their own outlet); here it only picks which outlet's stock figures are
+  // attached to product ids that the shop-scoped page query just selected. Nothing is
+  // written, and every row id came from `WHERE p.shopId = ?`.
+  "products/product-catalog.service.ts:findPage",
   // E1: read-only lookup of an outlet's alert phone; the query is
   // `WHERE o.id = ? AND o.shopId = ?`, so a foreign outletId matches nothing.
   // Callers pass an outletId from a verified channelconnection / shop-scoped order.
