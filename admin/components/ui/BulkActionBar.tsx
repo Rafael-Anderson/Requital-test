@@ -3,16 +3,22 @@
 export default function BulkActionBar({
   count,
   onClear,
+  scope,
   children,
 }: {
   count: number;
   onClear: () => void;
+  // Says what the selection (and so every action here) applies to, for a list
+  // that is paginated: "on this page", "of all loaded", "matching the filter".
+  scope?: string;
   children: React.ReactNode;
 }) {
   if (count === 0) return null;
   return (
     <div className="flex items-center gap-3 rounded-lg border border-accent/30 bg-accent/5 px-4 py-2.5 mb-3 flex-wrap">
-      <span className="text-sm font-medium">{count} selected</span>
+      <span className="text-sm font-medium">
+        {count} selected{scope ? ` ${scope}` : ""}
+      </span>
       <div className="flex items-center gap-2 flex-wrap">{children}</div>
       <button
         type="button"

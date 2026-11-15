@@ -2,8 +2,8 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeftRight, ChevronDown, Copy, MoreVertical, Pencil, Plus, SlidersHorizontal, Trash2, Upload } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeftRight, ChevronDown, Copy, MoreVertical, Pencil, Plus, Search, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import {
   bulkDeleteProducts,
   bulkUpdateProductStatus,
@@ -11,7 +11,7 @@ import {
   deleteProduct,
   duplicateProduct,
   listCollections,
-  listProducts,
+  listProductsPage,
   previewImportProducts,
   updateProductAvailability,
   downloadExport,
@@ -31,6 +31,9 @@ import ShopifyImportModal from "@/components/ShopifyImportModal";
 import DropdownMenu from "@/components/ui/DropdownMenu";
 import { useOutletFilter } from "@/lib/outlet-context";
 import { useRowSelection } from "@/lib/useRowSelection";
+import { useUrlPagination } from "@/lib/useUrlPagination";
+import { loadAllPages } from "@/lib/load-all-pages";
+import Pagination from "@/components/ui/Pagination";
 import { downloadCsv } from "@/lib/csv";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -61,6 +64,11 @@ export default function InventoryPage() {
   );
 }
 
+// "Show all" loads the list a hundred at a time (the server's page cap) and stops at
+// this ceiling, with a notice, so a very large catalogue cannot hang the tab.
+const SHOW_ALL_CHUNK = 100;
+const SHOW_ALL_MAX = 2000;
+
 function isLowStock(p: Product) {
   return (
     p.trackInventory &&
@@ -73,13 +81,19 @@ function isLowStock(p: Product) {
 function InventoryPageContent() {
   const currency = useShopCurrency();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [products, setProducts] = useState<Product[] | null>(null);
+  const [total, setTotal] = useState(0);
   const [collections, setCollections] = useState<Collection[]>([]);
-  // Seeded from ?collection=<id> so homepage shortcut tiles can deep-link into
-  // an already-filtered list; purely the initial value — changing the
-  // dropdown afterward doesn't write back to the URL.
-  const [collectionFilter, setCollectionFilter] = useState(searchParams.get("collection") ?? "");
+  const pagination = useUrlPagination();
+  const { page, pageSize, all } = pagination;
+  // Filters live in the URL too (?collection=<id>&q=<text>), so a refresh, a shared
+  // link and the Back button all restore the same list. Changing one goes back to
+  // page 1.
+  const collectionFilter = pagination.params.get("collection") ?? "";
+  const urlSearch = pagination.params.get("q") ?? "";
+  const [searchText, setSearchText] = useState(urlSearch);
+  const [allProgress, setAllProgress] = useState<{ loaded: number; total: number } | null>(null);
+  const [capped, setCapped] = useState(false);
   const [transferringProduct, setTransferringProduct] = useState<Product | null>(null);
   const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,24 +101,70 @@ function InventoryPageContent() {
   const deleteWithUndo = useUndoableDelete();
   const { selectedOutletId, outlets } = useOutletFilter();
 
+  // The search box is applied 300ms after the last keystroke.
+  useEffect(() => {
+    if (searchText.trim() === urlSearch) return;
+    const timer = setTimeout(() => pagination.resetPage({ q: searchText.trim() || null }), 300);
+    return () => clearTimeout(timer);
+  }, [searchText, urlSearch, pagination]);
+
   // Products and collections load independently: the table must not wait on
   // (or be lost to) the collections request, which only feeds the filter. A
   // failed products request ends in an error state with a Retry (below), never
-  // an endless skeleton. `latest` drops a response that a newer refresh (an
-  // outlet switch) has already superseded.
+  // an endless skeleton. `latest` drops a response that a newer refresh (a page
+  // or filter change) has already superseded.
   const latest = useRef(0);
   const refresh = useCallback(() => {
     const mine = ++latest.current;
-    listProducts(selectedOutletId ?? undefined)
-      .then((list) => {
+    const filters = {
+      outletId: selectedOutletId ?? undefined,
+      collectionId: collectionFilter ? Number(collectionFilter) : undefined,
+      search: urlSearch,
+    };
+    if (all) {
+      // Everything on one long page: fetched a hundred at a time, up to a ceiling,
+      // with progress. A request that fails ends in the same error state.
+      // (State is set from a microtask, not synchronously in the effect that calls us.)
+      queueMicrotask(() => {
         if (mine !== latest.current) return;
-        setProducts(list);
-        setError(null);
-      })
-      .catch((err) => {
-        if (mine !== latest.current) return;
-        setError(err instanceof Error ? err.message : "Failed to load products");
+        setProducts(null);
+        setAllProgress({ loaded: 0, total: 0 });
       });
+      loadAllPages((p) => listProductsPage({ page: p, pageSize: SHOW_ALL_CHUNK, ...filters }), {
+        chunk: SHOW_ALL_CHUNK,
+        max: SHOW_ALL_MAX,
+        isStale: () => mine !== latest.current,
+        onProgress: (loaded, target) => setAllProgress({ loaded, total: target }),
+      })
+        .then((result) => {
+          if (!result) return;
+          setProducts(result.items);
+          setTotal(result.total);
+          setCapped(result.capped);
+          setError(null);
+        })
+        .catch((err) => {
+          if (mine !== latest.current) return;
+          setError(err instanceof Error ? err.message : "Failed to load products");
+        })
+        .finally(() => {
+          if (mine === latest.current) setAllProgress(null);
+        });
+    } else {
+      listProductsPage({ page, pageSize, ...filters })
+        .then((res) => {
+          if (mine !== latest.current) return;
+          setProducts(res.data);
+          setTotal(res.total);
+          setCapped(false);
+          setAllProgress(null);
+          setError(null);
+        })
+        .catch((err) => {
+          if (mine !== latest.current) return;
+          setError(err instanceof Error ? err.message : "Failed to load products");
+        });
+    }
     listCollections()
       .then((list) => {
         if (mine === latest.current) setCollections(list);
@@ -112,25 +172,32 @@ function InventoryPageContent() {
       .catch(() => {
         /* the filter just stays at "All collections" */
       });
-  }, [selectedOutletId]);
+  }, [selectedOutletId, page, pageSize, all, collectionFilter, urlSearch]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  const collectionRows = useMemo(() => flattenCollectionTree(buildCollectionTree(collections)), [collections]);
-  const visibleProducts = useMemo(() => {
-    if (!products) return null;
-    let result = products;
-    if (collectionFilter) {
-      const id = Number(collectionFilter);
-      result = result.filter((p) => p.collections.some((c) => c.id === id));
+  // A page past the end (rows were deleted, or a stale link): go to the last real one.
+  useEffect(() => {
+    if (!all && products !== null && products.length === 0 && total > 0 && page > 1) {
+      pagination.setPage(Math.max(1, Math.ceil(total / pageSize)));
     }
-    return result;
-  }, [products, collectionFilter]);
+  }, [all, products, total, page, pageSize, pagination]);
+
+  const collectionRows = useMemo(() => flattenCollectionTree(buildCollectionTree(collections)), [collections]);
+  // Filtering and paging are the server's: what arrived is what is shown.
+  const visibleProducts = products;
+  // Show all is loading while it has nothing to show yet and has not failed.
+  const loadingAll = all && products === null && !error;
 
   const visibleIds = useMemo(() => (visibleProducts ?? []).map((p) => p.id), [visibleProducts]);
-  const selection = useRowSelection(visibleIds);
+  // Bulk actions apply to the ticked rows of the CURRENT view only: the selection
+  // is emptied whenever the page, page size, filter, search or outlet changes.
+  const selection = useRowSelection(
+    visibleIds,
+    `${page}|${pageSize}|${all}|${collectionFilter}|${urlSearch}|${selectedOutletId ?? ""}`,
+  );
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkPricing, setBulkPricing] = useState(false);
@@ -152,7 +219,10 @@ function InventoryPageContent() {
     deleteWithUndo({
       id: product.id,
       label: `"${product.name}"`,
-      onRemoveLocally: () => setProducts((prev) => (prev ? prev.filter((p) => p.id !== product.id) : prev)),
+      onRemoveLocally: () => {
+        setProducts((prev) => (prev ? prev.filter((p) => p.id !== product.id) : prev));
+        setTotal((t) => Math.max(0, t - 1));
+      },
       onRestoreLocally: refresh,
       commit: () => deleteProduct(product.id),
     });
@@ -303,7 +373,11 @@ function InventoryPageContent() {
     visibleProducts === null && error ? (
       <LoadFailed what="products" onRetry={refresh} />
     ) : visibleProducts !== null && visibleProducts.length === 0 && !error ? (
-      <EmptyState title="No products yet" description="Products you add to the catalog will show up here." />
+      collectionFilter || urlSearch ? (
+        <EmptyState title="No products match" description="Try a different search or collection." />
+      ) : (
+        <EmptyState title="No products yet" description="Products you add to the catalog will show up here." />
+      )
     ) : null;
 
   return (
@@ -320,10 +394,21 @@ function InventoryPageContent() {
             Export all
           </Button>
         </div>
+        <div className="relative order-4 w-full min-w-0 sm:order-3 sm:w-56">
+          <Search className="absolute start-3 top-1/2 size-3.5 -translate-y-1/2 text-text-faint" aria-hidden="true" />
+          <input
+            type="search"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="Search name or SKU"
+            aria-label="Search products"
+            className="w-full h-9 rounded-[10px] border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 ps-8 pe-3 text-[13.5px] outline-none transition-shadow focus:border-accent focus:ring-[3px] focus:ring-accent/20"
+          />
+        </div>
         <div className="order-4 w-44 min-w-0 max-w-full sm:order-3">
           <Select
             value={collectionFilter}
-            onChange={(e) => setCollectionFilter(e.target.value)}
+            onChange={(e) => pagination.resetPage({ collection: e.target.value || null })}
             aria-label="Filter by collection"
           >
             <option value="">All collections</option>
@@ -410,8 +495,25 @@ function InventoryPageContent() {
         </div>
       </div>
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
+      {loadingAll && allProgress && (
+        <p role="status" className="mb-3 text-sm text-text-muted dark:text-zinc-400">
+          Loading {allProgress.loaded} of {allProgress.total || "..."} products...
+        </p>
+      )}
+      {all && capped && (
+        <p
+          role="status"
+          className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          Showing the first {SHOW_ALL_MAX} of {total} products. Use search or the collection filter to narrow the list.
+        </p>
+      )}
 
-      <BulkActionBar count={selection.selectedIds.length} onClear={selection.clear}>
+      <BulkActionBar
+        count={selection.selectedIds.length}
+        onClear={selection.clear}
+        scope={all ? "of all loaded" : "on this page"}
+      >
         <select
           value={bulkStatus}
           onChange={(e) => setBulkStatus(e.target.value)}
@@ -744,6 +846,20 @@ function InventoryPageContent() {
           )}
         </TBody>
       </Table>
+
+      {visibleProducts !== null || total > 0 ? (
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          noun="products"
+          showingAll={all}
+          loadingAll={loadingAll}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+          onShowAll={() => pagination.setAll(!all)}
+        />
+      ) : null}
 
       {transferringProduct && (
         <TransferStockModal

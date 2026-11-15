@@ -27,6 +27,7 @@ import { BulkProductIdsDto } from './dto/bulk-product-ids.dto';
 import { BulkUpdateProductStatusDto } from './dto/bulk-update-product-status.dto';
 import { BulkPriceUpdateDto } from './dto/bulk-price-update.dto';
 import { ListProductsQueryDto } from './dto/list-products-query.dto';
+import { ListProductsPageQueryDto } from './dto/list-products-page-query.dto';
 import { ImportQueryDto } from './dto/import-query.dto';
 import { ProductShopifyImportService } from './product-shopify-import.service';
 import { UpdateProductOptionsDto } from './dto/update-product-options.dto';
@@ -74,9 +75,14 @@ export class ProductsController {
   @Get()
   findAll(
     @CurrentUser() ctx: TenantContext,
-    @Query() query: ListProductsQueryDto,
+    @Query() query: ListProductsPageQueryDto,
   ) {
-    return this.productsService.findAll(ctx, query.outletId);
+    return this.productsService.findAll(ctx, query.outletId, {
+      page: query.page,
+      pageSize: query.pageSize,
+      collectionId: query.collectionId,
+      search: query.search,
+    });
   }
 
   @Roles('admin')

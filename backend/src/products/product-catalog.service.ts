@@ -30,6 +30,12 @@ import {
   comboKey,
   generateVariantCombinations,
 } from './variant-generator';
+import {
+  isPaginated,
+  likeContains,
+  resolvePage,
+  toPage,
+} from '../common/pagination';
 import { DatabaseService } from '../database/database.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
@@ -53,7 +59,18 @@ export class ProductCatalogService {
     private readonly bom: ProductBomService,
   ) {}
 
-  async findAll(ctx: TenantContext, requestedOutletId?: number) {
+  // The whole catalogue (pickers, exports), or, when the query carries `page` or
+  // `pageSize`, one shop-scoped page with a total (the admin Products list).
+  async findAll(
+    ctx: TenantContext,
+    requestedOutletId?: number,
+    paging?: {
+      page?: number;
+      pageSize?: number;
+      collectionId?: number;
+      search?: string;
+    },
+  ) {
     const outletId = resolveOutletFilter(ctx, requestedOutletId);
     // Products are shop-wide catalog — outletId here is only which
     // outlet's stock count to attach, not ownership, so this uses the
@@ -66,6 +83,9 @@ export class ProductCatalogService {
         'products.view',
       );
     }
+    if (paging && isPaginated(paging)) {
+      return this.findPage(ctx, outletId, paging);
+    }
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT id FROM product WHERE shopId = ? ORDER BY id ASC`,
       [ctx.shopId],
@@ -75,6 +95,61 @@ export class ProductCatalogService {
     const soldByProduct = await this.read.getUnitsSoldByProduct(ctx.shopId, ids);
     return ids.map((id) =>
       this.read.toResponse(products.get(id)!, soldByProduct.get(id) ?? 0),
+    );
+  }
+
+  // One page of the shop's products. Both the COUNT and the SELECT carry the same
+  // shop-scoped WHERE; the order is the product id (unique), so a page boundary
+  // can never show a row twice or skip one.
+  private async findPage(
+    ctx: TenantContext,
+    outletId: number | undefined,
+    q: {
+      page?: number;
+      pageSize?: number;
+      collectionId?: number;
+      search?: string;
+    },
+  ) {
+    const { page, pageSize, limit, offset } = resolvePage(q);
+    const where: string[] = ['p.shopId = ?'];
+    const params: (string | number)[] = [ctx.shopId];
+    if (q.collectionId !== undefined) {
+      where.push(
+        `EXISTS (SELECT 1 FROM productcollection pc
+                  JOIN collection c ON c.id = pc.collectionId AND c.shopId = p.shopId
+                 WHERE pc.productId = p.id AND pc.collectionId = ?)`,
+      );
+      params.push(q.collectionId);
+    }
+    const search = q.search?.trim();
+    if (search) {
+      where.push(
+        `(p.name LIKE ? ESCAPE '\\\\' OR p.sku LIKE ? ESCAPE '\\\\' OR p.barcode LIKE ? ESCAPE '\\\\')`,
+      );
+      const like = likeContains(search);
+      params.push(like, like, like);
+    }
+    const whereSql = where.join(' AND ');
+    const countRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS total FROM product p WHERE ${whereSql}`,
+      params,
+    );
+    const total = Number(countRows[0].total);
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT p.id FROM product p WHERE ${whereSql} ORDER BY p.id ASC LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+    );
+    const ids = rows.map((r) => r.id as number);
+    const products = await this.read.loadProductsWithRelations(ids, outletId);
+    const soldByProduct = await this.read.getUnitsSoldByProduct(ctx.shopId, ids);
+    return toPage(
+      ids.map((id) =>
+        this.read.toResponse(products.get(id)!, soldByProduct.get(id) ?? 0),
+      ),
+      total,
+      page,
+      pageSize,
     );
   }
 

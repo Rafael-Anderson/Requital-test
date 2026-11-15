@@ -239,6 +239,13 @@ export interface OrderNote {
   createdAt: string;
 }
 
+export interface PaginatedProducts {
+  data: Product[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export interface PaginatedOrders {
   data: Order[];
   page: number;
