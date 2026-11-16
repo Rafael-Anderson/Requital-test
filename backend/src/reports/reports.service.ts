@@ -413,8 +413,18 @@ export class ReportsService {
     let sql = whereSql;
     const params = [...whereParams];
     if (search) {
-      const orParts = ['o.customerName LIKE ?', 'o.customerPhone LIKE ?'];
-      const orParams: QueryParam[] = [`%${search}%`, `%${search}%`];
+      const orParts = [
+        'o.customerName LIKE ?',
+        'o.customerPhone LIKE ?',
+        'o.receiverName LIKE ?',
+        'o.receiverPhone LIKE ?',
+      ];
+      const orParams: QueryParam[] = [
+        `%${search}%`,
+        `%${search}%`,
+        `%${search}%`,
+        `%${search}%`,
+      ];
       if (searchAsId !== undefined) {
         orParts.push('o.shopOrderNumber = ?');
         orParams.push(searchAsId);

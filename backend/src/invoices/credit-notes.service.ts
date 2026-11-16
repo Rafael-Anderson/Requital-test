@@ -42,6 +42,9 @@ interface CreditNoteSnapshot {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string;
+  // Optional: a note issued before receivers existed has neither (= the customer).
+  receiverName?: string | null;
+  receiverPhone?: string | null;
   regionName: string | null;
   area: string | null;
   discountCode: string | null;
@@ -235,6 +238,8 @@ export class CreditNotesService {
       customerPhone: source.customerPhone,
       customerEmail: source.customerEmail,
       customerAddress: source.customerAddress,
+      receiverName: source.receiverName ?? null,
+      receiverPhone: source.receiverPhone ?? null,
       regionName: source.regionName,
       area: source.area,
       discountCode: source.discountCode,
@@ -412,6 +417,8 @@ export class CreditNotesService {
         customerPhone: snap.customerPhone,
         customerEmail: snap.customerEmail,
         customerAddress: snap.customerAddress,
+        receiverName: snap.receiverName ?? null,
+        receiverPhone: snap.receiverPhone ?? null,
         regionName: snap.regionName,
         area: snap.area,
         createdAt: new Date(snap.orderCreatedAt),

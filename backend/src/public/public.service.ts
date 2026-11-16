@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { assertOrderWithinLimits } from '../common/order-limits';
+import { resolveOrderReceiver } from '../common/order-receiver';
 import {
   CODE_GUESS_LOCKED_MESSAGE,
   CodeGuessLimiter,
@@ -2049,6 +2050,8 @@ export class PublicService {
     idempotency: { key: string; fingerprint: string } | null,
     clientIp?: string,
   ) {
+    // A separate receiver: both or neither (400 otherwise); NULL/NULL = the customer.
+    const receiver = resolveOrderReceiver(dto);
     const outletRows = await this.db.query<(OutletRow & RowDataPacket)[]>(
       `SELECT * FROM outlet WHERE id = ? AND shopId = ? AND active = 1 LIMIT 1`,
       [dto.outletId, shop.id],
@@ -2332,12 +2335,13 @@ export class PublicService {
         `INSERT INTO \`order\` (
           shopId, ingredientsConsumedAt, consumptionRecordedAt, outletId, customerId, customerName, customerPhone, customerEmail,
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
+          receiverName, receiverPhone,
           channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
           giftCardId, giftCardCode, giftCardAmount, storeCreditAmount, total, paymentStatus, trackingToken, shopOrderNumber,
           currency, rateBaseCurrency, exchangeRate, attributionJson, addressUnverified,
           dropoffLatitude, dropoffLongitude,
           idempotencyKey, idempotencyFingerprint
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shop.id,
           ingredientsConsumed ? new Date() : null,
@@ -2356,6 +2360,8 @@ export class PublicService {
           dto.deliveryTimeSlot ?? null,
           dto.deliveryNotes ?? null,
           dto.receiverMessage ?? null,
+          receiver?.name ?? null,
+          receiver?.phone ?? null,
           'storefront',
           dto.orderType,
           dto.paymentMethod,

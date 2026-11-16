@@ -161,6 +161,23 @@ export class CreatePublicOrderDto {
   @IsString()
   receiverMessage?: string;
 
+  // A separate RECEIVER, sent only when the shopper ticked "Receiver is someone
+  // else". Both or neither (the service rejects one without the other); absent =
+  // the customer is the receiver and nothing is stored. Same phone rule as
+  // customerPhone.
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(191)
+  receiverName?: string;
+
+  @IsOptional()
+  @Matches(/^\+?[0-9][0-9\s-]{5,19}$/, {
+    message:
+      'receiverPhone must contain only digits, spaces, hyphens, and an optional leading +',
+  })
+  receiverPhone?: string;
+
   // MKT-14: first/last-touch UTM + referrer + click ids and the cookie-consent
   // state, captured client-side. Deliberately a bare object here, not a nested
   // validated DTO: attribution is untrusted marketing metadata and must never

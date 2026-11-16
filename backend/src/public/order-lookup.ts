@@ -22,6 +22,10 @@ export interface PublicOrderView {
   shopName: string;
   outletName: string;
   customerName: string;
+  // The person who gets the order when it is not the customer; both NULL = the
+  // customer is the receiver. Withheld for a legacy token, like the address.
+  receiverName: string | null;
+  receiverPhone: string | null;
   status: string;
   orderType: string | null;
   createdAt: Date;
@@ -97,7 +101,7 @@ export async function lookupOrderView(
   const rows = TRACKING_TOKEN_SHAPE.test(token)
     ? await db.query<RowDataPacket[]>(
         `SELECT o.id, o.shopId, o.shopOrderNumber, o.outletId, o.customerId,
-                o.customerName, o.customerAddress, o.regionId, o.area,
+                o.customerName, o.receiverName, o.receiverPhone, o.customerAddress, o.regionId, o.area,
                 DATE_FORMAT(o.deliveryDate, '%Y-%m-%d') AS deliveryDate,
                 o.deliveryTimeSlot, o.orderType, o.paymentMethod, o.status,
                 o.paymentStatus, o.deliveryFee, o.taxAmount, o.discountCode,
@@ -194,6 +198,8 @@ export async function lookupOrderView(
     outletName: (outlet?.name ?? '') as string,
     // Withheld for a legacy token, like the address and item notes.
     customerName: legacyToken ? '' : (order.customerName as string),
+    receiverName: legacyToken ? null : ((order.receiverName as string | null) ?? null),
+    receiverPhone: legacyToken ? null : ((order.receiverPhone as string | null) ?? null),
     status: order.status as string,
     orderType: order.orderType as string | null,
     createdAt: order.createdAt as Date,

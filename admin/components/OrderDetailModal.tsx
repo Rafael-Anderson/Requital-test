@@ -581,6 +581,23 @@ export default function OrderDetailModal({
                   )}
                 </section>
 
+                {order.receiverName && order.receiverPhone && (
+                  <section className="border border-gray-200 rounded-lg p-4 dark:border-white/10" data-testid="order-receiver">
+                    <h3 className="font-medium mb-2">Receiver</h3>
+                    <p className="text-sm font-medium">{order.receiverName}</p>
+                    <p className="text-sm text-text-muted mt-1">
+                      <a
+                        href={waLink(order.receiverPhone)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-accent-text dark:hover:text-accent hover:underline"
+                      >
+                        {order.receiverPhone}
+                      </a>
+                    </p>
+                  </section>
+                )}
+
                 {/* undefined = the detail fetch has not landed yet; null = loaded, never recorded. */}
                 {order.attribution !== undefined && <OrderSourceCard attribution={order.attribution} />}
 

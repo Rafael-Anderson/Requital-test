@@ -9,6 +9,10 @@ export interface RunSheetStop {
   orderNumber: number;
   customerName: string;
   customerPhone: string;
+  // The person who gets the order when it is not the customer. When both are set
+  // the sheet names the receiver as the contact and keeps the customer beneath.
+  receiverName?: string | null;
+  receiverPhone?: string | null;
   address: string;
   deliveryNotes: string | null;
   timeSlot: string | null;
@@ -44,7 +48,12 @@ export function renderRunSheetHtml(d: RunSheetData): string {
     .map(
       (s) => `<section class="stop">
   <div class="head"><span class="n">${esc(s.position)}</span><strong>Order #${esc(s.orderNumber)}</strong>${s.status !== 'pending' ? `<span class="tag">${esc(s.status)}</span>` : ''}${s.timeSlot ? `<span class="slot">${esc(s.timeSlot)}</span>` : ''}</div>
-  <p class="who">${esc(s.customerName)} &middot; ${esc(s.customerPhone)}</p>
+  ${
+    s.receiverName && s.receiverPhone
+      ? `<p class="who">Receiver: ${esc(s.receiverName)} &middot; ${esc(s.receiverPhone)}</p>
+  <p class="cust">Customer: ${esc(s.customerName)} &middot; ${esc(s.customerPhone)}</p>`
+      : `<p class="who">${esc(s.customerName)} &middot; ${esc(s.customerPhone)}</p>`
+  }
   <p class="addr">${esc(s.address)}</p>
   ${s.deliveryNotes ? `<p class="notes">Notes: ${esc(s.deliveryNotes)}</p>` : ''}
   ${s.items.length ? `<p class="items">${s.items.map(esc).join('; ')}</p>` : ''}
@@ -61,7 +70,7 @@ body{font:14px/1.4 -apple-system,Segoe UI,Arial,sans-serif;color:#111;margin:24p
 h1{font-size:20px;margin:0 0 4px}.meta{color:#444;margin:0 0 16px}
 .stop{border:1px solid #999;border-radius:6px;padding:10px 12px;margin:0 0 12px;break-inside:avoid}
 .head{display:flex;gap:10px;align-items:center}.n{display:inline-block;min-width:24px;height:24px;line-height:24px;text-align:center;background:#111;color:#fff;border-radius:12px}
-.tag,.slot{font-size:12px;border:1px solid #666;border-radius:4px;padding:0 6px}.who{font-weight:600;margin:6px 0 0}.addr{margin:2px 0}.notes,.items{margin:2px 0;color:#333}
+.tag,.slot{font-size:12px;border:1px solid #666;border-radius:4px;padding:0 6px}.who{font-weight:600;margin:6px 0 0}.cust{margin:2px 0;color:#444}.addr{margin:2px 0}.notes,.items{margin:2px 0;color:#333}
 .cash{margin:6px 0;font-weight:700;border:2px solid #111;padding:4px 8px;display:inline-block}
 .sign{margin-top:14px;border-top:1px solid #333;padding-top:2px;font-size:11px;color:#555}
 @media print{body{margin:8mm}}

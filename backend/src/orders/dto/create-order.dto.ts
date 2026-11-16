@@ -93,6 +93,21 @@ export class CreateOrderDto {
   @IsString()
   receiverMessage?: string;
 
+  // A separate receiver (the person who gets the order). Both or neither; see
+  // common/order-receiver.ts. Absent = the customer is the receiver.
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(191)
+  receiverName?: string;
+
+  @IsOptional()
+  @Matches(/^\+?[0-9][0-9\s-]{5,19}$/, {
+    message:
+      'receiverPhone must contain only digits, spaces, hyphens, and an optional leading +',
+  })
+  receiverPhone?: string;
+
   // A merchant manually applying an affiliate code to an order entered
   // on their behalf — same resolution as the storefront flow (see
   // AffiliateService.resolveAttribution); an unknown/expired/blocked code is

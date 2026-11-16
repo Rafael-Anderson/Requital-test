@@ -4,6 +4,8 @@ import {
   lineMinor,
   renderOrderConfirmationHtml,
   renderOrderConfirmationText,
+  renderPeopleBlockHtml,
+  renderPeopleBlockText,
   renderTrackBlockHtml,
   type OrderEmailData,
 } from './order-email';
@@ -27,6 +29,8 @@ function base(over: Partial<OrderEmailData> = {}): OrderEmailData {
     customerName: 'Sara Customer',
     customerEmail: 'sara@example.com',
     customerPhone: '0500000001',
+    receiverName: null,
+    receiverPhone: null,
     address: 'Villa 3, Palm Street',
     area: 'Jumeirah',
     regionName: 'Dubai',
@@ -444,5 +448,66 @@ describe('emailAssetUrl', () => {
     expect(emailAssetUrl('data:image/png;base64,AAAA')).toBeNull();
     expect(emailAssetUrl('/uploads/a b.png')).toBeNull();
     expect(emailAssetUrl(null)).toBeNull();
+  });
+});
+
+describe('Customer and Receiver', () => {
+  const withReceiver = { receiverName: 'Omar Receiver', receiverPhone: '+971 50 111 2222' };
+
+  it('shows a Receiver section (name, phone) and keeps the Customer when one is set', () => {
+    const html = renderOrderConfirmationHtml(base(withReceiver));
+    expect(html).toContain('Receiver');
+    expect(html).toContain('Omar Receiver');
+    expect(html).toContain('+971 50 111 2222');
+    expect(html).toContain('Sara Customer');
+    expect(html).toContain('sara@example.com');
+    const text = renderOrderConfirmationText(base(withReceiver));
+    expect(text).toContain('RECEIVER');
+    expect(text).toContain('Name: Omar Receiver');
+    expect(text).toContain('Phone: +971 50 111 2222');
+    expect(text).toContain('CUSTOMER');
+  });
+
+  it('shows NO Receiver section when none is set (the customer is the receiver)', () => {
+    const html = renderOrderConfirmationHtml(base());
+    expect(html).not.toContain('>Receiver<');
+    expect(html).not.toContain('Receiver');
+    expect(renderOrderConfirmationText(base())).not.toContain('RECEIVER');
+  });
+
+  it('needs both: a name alone prints nothing', () => {
+    expect(renderOrderConfirmationHtml(base({ receiverName: 'Omar Receiver' }))).not.toContain('Receiver');
+  });
+
+  it('escapes hostile receiver text in the HTML and keeps it inert in the text part', () => {
+    const evil = { receiverName: '<img src=x onerror=alert(1)>', receiverPhone: '"><script>x</script>' };
+    const html = renderOrderConfirmationHtml(base(evil));
+    expect(html).not.toContain('<img src=x');
+    expect(html).not.toContain('<script>x');
+    expect(html).toContain('&lt;img src=x');
+    expect(renderOrderConfirmationText(base({ receiverName: 'A\nB', receiverPhone: '1\n2' }))).toContain('Name: A B');
+  });
+
+  it('the shared people block (used by the out-for-delivery email) renders both or nothing', () => {
+    const p = { customerName: 'Sara', customerEmail: 'sara@example.com', receiverName: 'Omar', receiverPhone: '0501112222' };
+    const html = renderPeopleBlockHtml(p, 'left');
+    expect(html).toContain('Customer');
+    expect(html).toContain('sara@example.com');
+    expect(html).toContain('Receiver');
+    expect(html).toContain('0501112222');
+    expect(renderPeopleBlockText(p).join('\n')).toContain('RECEIVER');
+    const none = { ...p, receiverName: null, receiverPhone: null };
+    expect(renderPeopleBlockHtml(none, 'left')).toBe('');
+    expect(renderPeopleBlockText(none)).toEqual([]);
+  });
+
+  it('escapes the people block values', () => {
+    const html = renderPeopleBlockHtml(
+      { customerName: '<b>x</b>', customerEmail: 'a"b@x.com', receiverName: '<i>y</i>', receiverPhone: '1<2' },
+      'left',
+    );
+    expect(html).not.toContain('<b>x');
+    expect(html).not.toContain('<i>y');
+    expect(html).toContain('&lt;i&gt;y');
   });
 });

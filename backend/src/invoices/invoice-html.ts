@@ -55,6 +55,10 @@ export interface InvoiceHtmlData {
     customerPhone: string;
     customerEmail: string | null;
     customerAddress: string;
+    // The person who gets the order when it is not the customer; both NULL or
+    // absent = the customer (nothing extra is printed).
+    receiverName?: string | null;
+    receiverPhone?: string | null;
     // F9: typed address with no map pin (Maps was unavailable to the shopper).
     // Only the packing slip prints a warning for it.
     addressUnverified?: boolean;
@@ -276,6 +280,11 @@ export function renderInvoiceHtml(data: InvoiceHtmlData): string {
         ${escapeHtml(data.order.customerAddress)}<br />
         ${escapeHtml([data.order.area, data.order.regionName].filter(Boolean).join(', '))}
       </p>
+      ${
+        data.order.receiverName && data.order.receiverPhone
+          ? `<h3>Receiver</h3><p class="muted"><strong>${escapeHtml(data.order.receiverName)}</strong><br />${escapeHtml(data.order.receiverPhone)}</p>`
+          : ''
+      }
       ${
         data.type === 'PACKING_SLIP' && data.order.addressUnverified
           ? '<p class="address-unverified">Address not verified on a map, please confirm with the customer</p>'

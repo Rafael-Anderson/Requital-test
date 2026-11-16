@@ -69,7 +69,7 @@ export async function loadOrderEmailData(
 ): Promise<OrderEmailData | null> {
   const rows = await db.query<RowDataPacket[]>(
     `SELECT o.id, o.shopId, o.shopOrderNumber, o.outletId, o.customerName,
-            o.customerPhone, o.customerEmail, o.customerAddress, o.regionId,
+            o.customerPhone, o.customerEmail, o.receiverName, o.receiverPhone, o.customerAddress, o.regionId,
             o.area, DATE_FORMAT(o.deliveryDate, '%Y-%m-%d') AS deliveryDate,
             o.deliveryTimeSlot, o.deliveryNotes, o.receiverMessage,
             o.orderType, o.paymentMethod, o.paymentStatus, o.deliveryFee,
@@ -149,6 +149,8 @@ export async function loadOrderEmailData(
     customerName: o.customerName as string,
     customerEmail: o.customerEmail as string | null,
     customerPhone: o.customerPhone as string,
+    receiverName: (o.receiverName as string | null) ?? null,
+    receiverPhone: (o.receiverPhone as string | null) ?? null,
     address: o.customerAddress as string | null,
     area: o.area as string | null,
     regionName: region
@@ -216,4 +218,22 @@ export async function loadTrackUrl(
       customDomainStatus: r.customDomainStatus as string | null,
     },
   );
+}
+
+// The receiver of an order (NULL/NULL = the customer), shop-scoped, for the status
+// emails that are not built from the full OrderEmailData.
+export async function loadOrderReceiver(
+  db: Pick<DatabaseService, 'query'>,
+  shopId: number,
+  orderId: number,
+): Promise<{ receiverName: string | null; receiverPhone: string | null }> {
+  const rows = await db.query<RowDataPacket[]>(
+    `SELECT receiverName, receiverPhone FROM \`order\` WHERE id = ? AND shopId = ? LIMIT 1`,
+    [orderId, shopId],
+  );
+  const r = rows[0];
+  return {
+    receiverName: (r?.receiverName as string | null) ?? null,
+    receiverPhone: (r?.receiverPhone as string | null) ?? null,
+  };
 }

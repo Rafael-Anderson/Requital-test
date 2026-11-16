@@ -27,6 +27,7 @@ import {
   isMarketplaceChannelValue,
 } from '../channels/marketplace-channels';
 import { withTrackingToken } from '../common/token-hash';
+import { resolveOrderReceiver } from '../common/order-receiver';
 import { CustomersService } from '../customers/customers.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { ProductsService } from '../products/products.service';
@@ -148,8 +149,19 @@ export class OrdersService {
       params.push(new Date(query.dateTo));
     }
     if (searchTerm) {
-      const orParts = ['o.customerName LIKE ?', 'o.customerPhone LIKE ?'];
-      const orParams: QueryParam[] = [`%${searchTerm}%`, `%${searchTerm}%`];
+      // The receiver (the person who gets the order) is searchable like the customer.
+      const orParts = [
+        'o.customerName LIKE ?',
+        'o.customerPhone LIKE ?',
+        'o.receiverName LIKE ?',
+        'o.receiverPhone LIKE ?',
+      ];
+      const orParams: QueryParam[] = [
+        `%${searchTerm}%`,
+        `%${searchTerm}%`,
+        `%${searchTerm}%`,
+        `%${searchTerm}%`,
+      ];
       if (searchAsId !== undefined) {
         orParts.push('o.shopOrderNumber = ?');
         orParams.push(searchAsId);
@@ -296,6 +308,8 @@ export class OrdersService {
     // that predates the order limits can still be completed as it stands.
     options: { reserveStock?: boolean; sizeBaseline?: OrderSize } = {},
   ) {
+    // A separate receiver: both or neither (400 otherwise); NULL/NULL = the customer.
+    const receiver = resolveOrderReceiver(dto);
     // Branch users are always pinned to their own outlet — any outletId in
     // the request body is ignored, not just validated, so a branch account
     // can never place an order against a different branch by spoofing this
@@ -552,9 +566,10 @@ export class OrdersService {
         `INSERT INTO \`order\` (
           shopId, outletId, ingredientsConsumedAt, consumptionRecordedAt, customerId, customerName, customerPhone, customerEmail,
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
+          receiverName, receiverPhone,
           channel, orderType, deliveryFee, discountId, discountCode, discountAmount, taxAmount, total, trackingToken,
           shopOrderNumber, currency, rateBaseCurrency, exchangeRate
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ctx.shopId,
           outletId,
@@ -575,6 +590,8 @@ export class OrdersService {
           dto.deliveryTimeSlot ?? null,
           dto.deliveryNotes ?? null,
           dto.receiverMessage ?? null,
+          receiver?.name ?? null,
+          receiver?.phone ?? null,
           dto.channel ?? null,
           dto.orderType ?? null,
           deliveryFee,

@@ -22,6 +22,7 @@ import { JobsService } from '../jobs/jobs.service';
 import { scheduleProofDeletion } from './proof-photo-cleanup';
 import { generateOtp, hashOtp, newOtpSalt, otpMatches } from './otp';
 import { completeRunIfDone, poolExec } from './run-lifecycle';
+import { contactFor, type ContactRow } from '../common/order-receiver';
 import type { DeliverStopDto, FailStopDto } from './dto/driver-app.dto';
 
 const logger = createLogger('DriverAppService');
@@ -148,7 +149,7 @@ export class DriverAppService {
               (s.proofPhotoKey IS NOT NULL) AS hasPhoto,
               (s.otpHash IS NOT NULL AND s.otpExpiresAt > NOW(3) AND s.otpAttempts < ${MAX_OTP_ATTEMPTS}) AS codActive,
               s.otpSendCount, s.cashCollectedAmount, s.cashDiscrepancy,
-              o.id AS orderId, o.shopOrderNumber, o.customerName, o.customerPhone, o.customerAddress,
+              o.id AS orderId, o.shopOrderNumber, o.customerName, o.customerPhone, o.receiverName, o.receiverPhone, o.customerAddress,
               o.area, o.deliveryNotes, o.deliveryTimeSlot, o.status AS orderStatus,
               o.paymentMethod, o.total, o.giftCardAmount, o.storeCreditAmount, o.currency, o.cashCollectedAt, rg.nameEn AS regionName
          FROM deliveryrunstop s
@@ -188,6 +189,13 @@ export class DriverAppService {
           orderNumber: s.shopOrderNumber as number,
           customerName: s.customerName as string,
           customerPhone: s.customerPhone as string,
+          // The person who gets the order, when it is not the customer. contact*
+          // is who the driver should call and hand over to: the receiver, else the customer.
+          receiverName: (s.receiverName as string | null) ?? null,
+          receiverPhone: (s.receiverPhone as string | null) ?? null,
+          contactName: contactFor(s as ContactRow).name,
+          contactPhone: contactFor(s as ContactRow).phone,
+          contactIsReceiver: contactFor(s as ContactRow).isReceiver,
           address: [s.customerAddress, s.area, s.regionName]
             .filter((x): x is string => typeof x === 'string' && x.length > 0)
             .join(', '),

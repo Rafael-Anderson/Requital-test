@@ -499,6 +499,10 @@ export interface CreateOrderPayload {
   deliveryTimeSlot?: string;
   deliveryNotes?: string;
   receiverMessage?: string;
+  // A separate receiver; both or neither. Sent only when the shopper ticked
+  // "Receiver is someone else".
+  receiverName?: string;
+  receiverPhone?: string;
   // Captured from ?ref=<code> and persisted — see lib/referral.ts. An
   // unknown/expired/blocked code is silently ignored server-side, never
   // blocks checkout.
@@ -563,6 +567,9 @@ export interface OrderLookupResult {
   shopName: string;
   outletName: string;
   customerName: string;
+  // The person who gets the order when it is not the customer; both null = the customer.
+  receiverName: string | null;
+  receiverPhone: string | null;
   status: string;
   orderType: string | null;
   createdAt: string;
@@ -762,6 +769,8 @@ export interface CustomerOrderSummary {
   deliveryDate: string | null;
   deliveryTimeSlot: string | null;
   customerAddress: string;
+  receiverName?: string | null;
+  receiverPhone?: string | null;
   items: { productName: string; variantLabel: string | null; quantity: number; priceAtPurchase: string }[];
   deliveryFee: string | null;
   taxAmount: string | null;

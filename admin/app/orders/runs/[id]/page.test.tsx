@@ -93,6 +93,36 @@ describe("delivery run detail", () => {
     expect(link.getAttribute("href")).toBe("http://api.test/delivery-runs/7/stops/5/proof-photo");
   });
 
+  it("shows the receiver as the stop contact, and the customer when there is none", async () => {
+    const base = stop(5, 1, {});
+    api.getDeliveryRun.mockResolvedValue(
+      run({
+        stops: [
+          {
+            ...base,
+            order: {
+              ...base.order,
+              receiverName: "Omar Receiver",
+              receiverPhone: "+971501112222",
+              contactName: "Omar Receiver",
+              contactPhone: "+971501112222",
+              contactIsReceiver: true,
+            },
+          },
+          stop(6, 2, {}),
+        ],
+      }),
+    );
+    renderPage();
+    const marker = await screen.findByTestId("run-stop-receiver");
+    expect(marker).toHaveTextContent("Customer 5");
+    expect(screen.getByText(/#5 Omar Receiver/)).toBeInTheDocument();
+    expect(screen.getByText(/\+971501112222/)).toBeInTheDocument();
+    // Stop 6 has no receiver: the customer is the contact, with no marker.
+    expect(screen.getByText(/#6 Customer 6/)).toBeInTheDocument();
+    expect(screen.getAllByTestId("run-stop-receiver")).toHaveLength(1);
+  });
+
   it("dispatches and shows the one-time link; a draft has no link card", async () => {
     api.getDeliveryRun.mockResolvedValue(run());
     api.dispatchDeliveryRun.mockResolvedValue(

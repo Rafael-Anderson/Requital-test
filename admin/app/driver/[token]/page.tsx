@@ -89,11 +89,21 @@ function StopCard({
         <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">{stop.position}</span>
         <div className="min-w-0 flex-1">
           <div className="text-base font-semibold">
-            {stop.customerName} <span className="text-sm font-normal text-zinc-500">#{stop.orderNumber}</span>
+            {stop.contactName ?? stop.customerName} <span className="text-sm font-normal text-zinc-500">#{stop.orderNumber}</span>
           </div>
-          <a href={`tel:${stop.customerPhone}`} className="inline-block py-1 text-base font-medium text-accent-text underline">
-            {stop.customerPhone}
+          {stop.contactIsReceiver && (
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500" data-testid="driver-receiver-label">
+              Receiver
+            </p>
+          )}
+          <a href={`tel:${stop.contactPhone ?? stop.customerPhone}`} className="inline-block py-1 text-base font-medium text-accent-text underline">
+            {stop.contactPhone ?? stop.customerPhone}
           </a>
+          {stop.contactIsReceiver && (
+            <p className="text-xs text-zinc-500" data-testid="driver-customer-line">
+              Ordered by {stop.customerName} (<span dir="ltr">{stop.customerPhone}</span>)
+            </p>
+          )}
           <p className="text-sm">{stop.address}</p>
           <a href={mapsUrl(stop.address)} target="_blank" rel="noopener noreferrer" className="inline-block py-1 text-sm font-medium text-accent-text underline">
             Open in Maps

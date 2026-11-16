@@ -32,6 +32,11 @@ export interface OrderForInvoice {
   customerPhone: string;
   customerEmail: string | null;
   customerAddress: string;
+  // The person who gets the order when it is not the customer (NULL/NULL = the
+  // customer). Optional: a snapshot taken before this existed has neither, which
+  // reads as "the customer", exactly what such an order is. Frozen with the rest.
+  receiverName?: string | null;
+  receiverPhone?: string | null;
   // F9: typed address with no map pin. Optional (an older snapshot has none) and
   // read only by the live-rendered packing slip.
   addressUnverified?: boolean;
@@ -279,6 +284,8 @@ export class InvoicesService {
       customerPhone: order.customerPhone as string,
       customerEmail: order.customerEmail as string | null,
       customerAddress: order.customerAddress as string,
+      receiverName: (order.receiverName as string | null) ?? null,
+      receiverPhone: (order.receiverPhone as string | null) ?? null,
       addressUnverified: Boolean(order.addressUnverified),
       regionName: order.regionName as string | null,
       area: order.area as string | null,

@@ -57,6 +57,8 @@ function makeOrder(over: Partial<OrderLookupResult> = {}): OrderLookupResult {
     shopName: "Rose Shop",
     outletName: "Main",
     customerName: "Sara",
+    receiverName: null,
+    receiverPhone: null,
     status: "pending",
     orderType: "delivery",
     createdAt: "2026-10-13T10:00:00.000Z",
@@ -138,6 +140,20 @@ describe("order confirmation page", () => {
     lookupOrder.mockResolvedValue(makeOrder());
     await renderPage();
     expect(lookupOrder).toHaveBeenCalledWith(TOKEN, "rose");
+  });
+
+  it("shows the Receiver (name and phone) when the order has one", async () => {
+    lookupOrder.mockResolvedValue(makeOrder({ receiverName: "Omar Receiver", receiverPhone: "+971 50 111 2222" }));
+    await renderPage();
+    const box = screen.getByTestId("order-receiver");
+    expect(box.textContent).toContain("Omar Receiver");
+    expect(box.textContent).toContain("+971 50 111 2222");
+  });
+
+  it("shows no Receiver row when the customer is the receiver", async () => {
+    lookupOrder.mockResolvedValue(makeOrder());
+    await renderPage();
+    expect(screen.queryByTestId("order-receiver")).toBeNull();
   });
 
   it("shows the per-shop number, never the global id", async () => {

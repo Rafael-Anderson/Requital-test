@@ -22,7 +22,7 @@ import { FIELD_CLASS, TEXTAREA_CLASS } from "./checkout-field-styles";
 // The checkout: ONE page, two columns from the lg breakpoint, one column below it.
 //
 //   left   who you are, where it goes and when (details, fulfilment, address,
-//          date and slot, notes, gift message)
+//          receiver and gift message, date and slot, notes)
 //   right  the order: items, codes and credit, the bill, payment, Place order.
 //          A sticky card on desktop only; on a phone and a tablet it follows the
 //          details, so the total and the button are the last thing on the page.
@@ -45,6 +45,12 @@ export default function CheckoutLayout(state: CheckoutFormState) {
     setDeliveryNotes,
     receiverMessage,
     setReceiverMessage,
+    receiverIsOther,
+    setReceiverIsOther,
+    receiverName,
+    setReceiverName,
+    receiverPhone,
+    setReceiverPhone,
     deliveryDate,
     setDeliveryDate,
     deliveryTimeSlot,
@@ -72,6 +78,9 @@ export default function CheckoutLayout(state: CheckoutFormState) {
     regionId: state.regionId,
     hasRegions: (regions ?? []).length > 0,
     regionLabel: regionLabel ?? "Region",
+    receiverIsOther,
+    receiverName,
+    receiverPhone,
   });
 
   if (state.fulfilment.mode === "none") return <FulfilmentUnavailable state={state} />;
@@ -138,6 +147,62 @@ export default function CheckoutLayout(state: CheckoutFormState) {
             </h2>
             <FulfilmentSection state={state} />
             {orderType === "delivery" && <DeliveryAddressFields state={state} />}
+            {/* The receiver: who gets it, when that is not the customer. Unticked, the
+                customer above is the receiver and nothing here is stored or sent. */}
+            <div className="space-y-3" data-testid="checkout-receiver">
+              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <input
+                  id="checkout-receiver-other"
+                  type="checkbox"
+                  checked={receiverIsOther}
+                  onChange={(e) => setReceiverIsOther(e.target.checked)}
+                  className="size-4 accent-accent"
+                />
+                Receiver is someone else
+              </label>
+              {receiverIsOther && (
+                <div className="grid sm:grid-cols-2 gap-3" data-testid="checkout-receiver-fields">
+                  <div>
+                    <label htmlFor="checkout-receiver-name" className="text-sm font-medium block mb-1">Receiver name</label>
+                    <input
+                      id="checkout-receiver-name"
+                      autoComplete="off"
+                      required
+                      maxLength={191}
+                      value={receiverName}
+                      onChange={(e) => setReceiverName(e.target.value)}
+                      className={FIELD_CLASS}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="checkout-receiver-phone" className="text-sm font-medium block mb-1">Receiver phone</label>
+                    <input
+                      id="checkout-receiver-phone"
+                      autoComplete="off"
+                      required
+                      type="tel"
+                      inputMode="tel"
+                      maxLength={20}
+                      value={receiverPhone}
+                      onChange={(e) => setReceiverPhone(e.target.value)}
+                      className={FIELD_CLASS}
+                    />
+                  </div>
+                </div>
+              )}
+              {/* The gift message belongs to the receiver (order.receiverMessage), so it sits with them. */}
+              <div>
+                <label htmlFor="checkout-gift-message" className="text-sm font-medium block mb-1">Gift message (optional)</label>
+                <textarea
+                  id="checkout-gift-message"
+                  value={receiverMessage}
+                  onChange={(e) => setReceiverMessage(e.target.value)}
+                  rows={2}
+                  maxLength={500}
+                  className={TEXTAREA_CLASS}
+                />
+              </div>
+            </div>
             <div className="grid sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium block mb-1">{isPickup ? "Pickup date (optional)" : "Delivery date (optional)"}</label>
@@ -175,17 +240,6 @@ export default function CheckoutLayout(state: CheckoutFormState) {
             <div>
               <label htmlFor="checkout-notes" className="text-sm font-medium block mb-1">Notes (optional)</label>
               <textarea id="checkout-notes" value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} rows={2} className={TEXTAREA_CLASS} />
-            </div>
-            <div>
-              <label htmlFor="checkout-gift-message" className="text-sm font-medium block mb-1">Gift message (optional)</label>
-              <textarea
-                id="checkout-gift-message"
-                value={receiverMessage}
-                onChange={(e) => setReceiverMessage(e.target.value)}
-                rows={2}
-                maxLength={500}
-                className={TEXTAREA_CLASS}
-              />
             </div>
           </section>
         </div>

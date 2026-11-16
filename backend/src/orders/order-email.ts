@@ -44,6 +44,10 @@ export interface OrderEmailData {
   customerName: string;
   customerEmail: string | null;
   customerPhone: string;
+  // The person who gets the order, when it is not the customer. Both NULL = the
+  // customer; nothing extra is shown then.
+  receiverName: string | null;
+  receiverPhone: string | null;
   address: string | null;
   area: string | null;
   regionName: string | null;
@@ -277,6 +281,49 @@ export function renderTrackBlockText(url: string): string {
   return `Track your order: ${url}`;
 }
 
+// ---- Customer and Receiver --------------------------------------------------
+
+export interface PeopleInput {
+  customerName: string;
+  customerEmail: string | null;
+  receiverName: string | null;
+  receiverPhone: string | null;
+}
+
+// True only when BOTH are present (the API stores them together).
+export function hasReceiver(p: {
+  receiverName: string | null;
+  receiverPhone: string | null;
+}): boolean {
+  return Boolean((p.receiverName ?? '').trim() && (p.receiverPhone ?? '').trim());
+}
+
+// A "Customer" (name, email) and a "Receiver" (name, phone) block, shared by the
+// confirmation and the out-for-delivery emails so they cannot drift. Empty string
+// when no receiver is set: an order for the customer themselves is unchanged.
+// Every value is customer-typed, so every value is escaped.
+export function renderPeopleBlockHtml(p: PeopleInput, align: string): string {
+  if (!hasReceiver(p)) return '';
+  const customer: string[] = [detailRow('Name', userHtml(p.customerName), align)];
+  if (p.customerEmail) customer.push(detailRow('Email', userHtml(p.customerEmail), align));
+  const receiver: string[] = [
+    detailRow('Name', userHtml(p.receiverName as string), align),
+    detailRow('Phone', userHtml(p.receiverPhone as string), align),
+  ];
+  return `${sectionTitle('Customer', align)}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${customer.join('\n')}</table>
+${sectionTitle('Receiver', align)}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${receiver.join('\n')}</table>`;
+}
+
+export function renderPeopleBlockText(p: PeopleInput): string[] {
+  if (!hasReceiver(p)) return [];
+  const out = ['CUSTOMER', `Name: ${oneLine(p.customerName)}`];
+  if (p.customerEmail) out.push(`Email: ${oneLine(p.customerEmail)}`);
+  out.push('', 'RECEIVER', `Name: ${oneLine(p.receiverName as string)}`, `Phone: ${oneLine(p.receiverPhone as string)}`);
+  return out;
+}
+
 // ---- the confirmation email ------------------------------------------------
 
 function detailRow(label: string, valueHtml: string, align: string): string {
@@ -352,6 +399,12 @@ export function renderOrderConfirmationHtml(d: OrderEmailData): string {
   if (method) payment.push(detailRow('Payment method', esc(method), start));
   payment.push(detailRow('Payment status', esc(paymentStatusLabel(d)), start));
 
+  // The Receiver section (name, phone) only when one is set. The Customer section
+  // above keeps its own name, email and phone exactly as before.
+  const receiverHtml = hasReceiver(d)
+    ? `${sectionTitle('Receiver', start)}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${detailRow('Name', userHtml(d.receiverName as string), start)}${detailRow('Phone', userHtml(d.receiverPhone as string), start)}</table>`
+    : '';
   const customer: string[] = [detailRow('Name', userHtml(d.customerName), start)];
   if (d.customerEmail) customer.push(detailRow('Email', userHtml(d.customerEmail), start));
   if (d.customerPhone) customer.push(detailRow('Phone', userHtml(d.customerPhone), start));
@@ -414,6 +467,7 @@ ${sectionTitle(isPickup ? 'Pickup details' : 'Delivery details', start)}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${fulfilment.join('\n')}</table>
 ${sectionTitle('Customer', start)}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${customer.join('\n')}</table>
+${receiverHtml}
 ${contact}
 </td></tr>
 <tr><td style="padding:24px 24px 0;"><hr style="border:none;border-top:1px solid #e5e5e5;margin:0;"></td></tr>
@@ -475,6 +529,12 @@ export function renderOrderConfirmationText(d: OrderEmailData): string {
   out.push(`Name: ${oneLine(d.customerName)}`);
   if (d.customerEmail) out.push(`Email: ${oneLine(d.customerEmail)}`);
   if (d.customerPhone) out.push(`Phone: ${oneLine(d.customerPhone)}`);
+  if (hasReceiver(d)) {
+    out.push('');
+    out.push('RECEIVER');
+    out.push(`Name: ${oneLine(d.receiverName as string)}`);
+    out.push(`Phone: ${oneLine(d.receiverPhone as string)}`);
+  }
   const contactBits = [d.shopEmail, d.shopPhone].filter((v): v is string => !!v);
   if (contactBits.length) {
     out.push('');

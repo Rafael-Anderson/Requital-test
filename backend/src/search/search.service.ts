@@ -80,8 +80,13 @@ export class SearchService {
       conditions.push('outletId = ?');
       params.push(outletId);
     }
-    const orClauses = ['customerName LIKE ?', 'customerPhone LIKE ?'];
-    params.push(like, like);
+    const orClauses = [
+      'customerName LIKE ?',
+      'customerPhone LIKE ?',
+      'receiverName LIKE ?',
+      'receiverPhone LIKE ?',
+    ];
+    params.push(like, like, like, like);
     if (searchAsId !== undefined) {
       orClauses.push('shopOrderNumber = ?');
       params.push(searchAsId);

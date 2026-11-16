@@ -70,6 +70,9 @@ interface OrderWithItems extends RowDataPacket {
   deliveryDate: Date | null;
   deliveryTimeSlot: string | null;
   customerAddress: string;
+  // The person who gets the order when it is not the customer (NULL/NULL = the customer).
+  receiverName: string | null;
+  receiverPhone: string | null;
   deliveryFee: string | null;
   taxAmount: string | null;
   discountAmount: string | null;
@@ -858,6 +861,8 @@ export class CustomerAccountService {
       deliveryDate: order.deliveryDate,
       deliveryTimeSlot: order.deliveryTimeSlot,
       customerAddress: order.customerAddress,
+      receiverName: order.receiverName ?? null,
+      receiverPhone: order.receiverPhone ?? null,
       items: order.orderitem,
       deliveryFee: order.deliveryFee,
       // trimDecimal, like the public tracking route already did. Without it this

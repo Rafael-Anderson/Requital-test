@@ -219,6 +219,18 @@ export default function ManageDeliveryModal({
                   <span className="text-text-muted">Phone</span>
                   <span className="text-end">{order.customerPhone}</span>
                 </div>
+                {order.receiverName && order.receiverPhone && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-text-muted">Receiver</span>
+                      <span className="text-end">{order.receiverName}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-text-muted">Receiver phone</span>
+                      <span className="text-end" dir="ltr">{order.receiverPhone}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between text-sm gap-4">
                   <span className="text-text-muted shrink-0">Delivery Address</span>
                   <span className="text-end">{formatDeliveryAddress(order)}</span>
