@@ -192,6 +192,8 @@ describe('Order confirmation lookup (e2e)', () => {
     'paymentMethod',
     'paymentStatus',
     'pickupLocation',
+    'receiverName',
+    'receiverPhone',
     'region',
     'shopName',
     'shopOrderNumber',
@@ -255,6 +257,23 @@ describe('Order confirmation lookup (e2e)', () => {
     }
     expect(view.shopOrderNumber).toBe(o.shopOrderNumber);
     expect(view.status).toBe('pending');
+    expect(view.customerName).toBe('Confirm Customer');
+    // No receiver was sent: the customer is the receiver, so both are null (not '').
+    expect(view.receiverName).toBeNull();
+    expect(view.receiverPhone).toBeNull();
+  });
+
+  it('returns the receiver, and only the receiver, when the order has one', async () => {
+    const shop = await setupShop('cnf-recv');
+    const o = await place(shop, {
+      receiverName: 'Omar Receiver',
+      receiverPhone: '+971 50 111 2222',
+    });
+    const res = await lookup(o.trackingToken).expect(200);
+    const view = body<View>(res);
+    expect(Object.keys(view).sort()).toEqual(EXPECTED_KEYS);
+    expect(view.receiverName).toBe('Omar Receiver');
+    expect(view.receiverPhone).toBe('+971 50 111 2222');
     expect(view.customerName).toBe('Confirm Customer');
   });
 
