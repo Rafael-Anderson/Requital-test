@@ -13,6 +13,9 @@ test.describe.configure({ mode: 'serial' });
 // which runs before this file, so logging in as that admin here would be a 401.
 let seed: SeedState;
 test.beforeAll(async () => {
+  // seedShop waits out the per-IP signup and verify-email limits (bounded); the
+  // hook gets its own timeout, the file-level one is not it.
+  test.setTimeout(150_000);
   seed = await seedShop();
 });
 
