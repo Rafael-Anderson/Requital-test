@@ -1,3 +1,4 @@
+import { retryOn429 } from './retry-429';
 import { API_URL } from './urls';
 
 // Deterministic in *shape*, not in exact ids/subdomain — every run gets a
@@ -68,17 +69,21 @@ export async function api<T>(
   session?: AdminSession,
 ): Promise<T> {
   const method = (init.method ?? 'GET').toUpperCase();
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(session ? { Cookie: session.cookie } : {}),
-      ...(session && method !== 'GET' && method !== 'HEAD'
-        ? { 'X-CSRF-Token': session.csrfToken }
-        : {}),
-      ...init.headers,
-    },
-  });
+  // Per-IP throttles are live on the CI backend (see retry-429.ts): wait out a
+  // 429 (bounded) instead of failing the spec for a reason that is not under test.
+  const res = await retryOn429(() =>
+    fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session ? { Cookie: session.cookie } : {}),
+        ...(session && method !== 'GET' && method !== 'HEAD'
+          ? { 'X-CSRF-Token': session.csrfToken }
+          : {}),
+        ...init.headers,
+      },
+    }),
+  );
   if (!res.ok) {
     const text = await res.text();
     throw new Error(

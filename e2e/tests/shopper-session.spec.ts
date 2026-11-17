@@ -16,6 +16,9 @@ test.setTimeout(240_000); // includes a bounded wait for rate-limit headroom (en
 
 let seed: SeedState;
 test.beforeAll(async () => {
+  // seedShop waits out the per-IP signup and verify-email limits (bounded); the
+  // hook gets its own timeout, the file-level one is not it.
+  test.setTimeout(150_000);
   // Own shop: publishing a theme changes the shop the other specs in this run use, and the wishlist
   // heart is a theme setting (Bloom turns it on).
   seed = await seedShop();

@@ -19,6 +19,9 @@ test.setTimeout(120_000);
 
 let seed: SeedState;
 test.beforeAll(async () => {
+  // seedShop waits out the per-IP signup and verify-email limits (bounded); the
+  // hook gets its own timeout, the file-level one is not it.
+  test.setTimeout(150_000);
   seed = await seedShop();
   // A real redirect for the host-mode 301 check (proxy.ts; the path-mode proxy skips redirects).
   await api(

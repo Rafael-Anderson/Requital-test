@@ -14,6 +14,9 @@ let seed: SeedState;
 let themeId = 0;
 
 test.beforeAll(async () => {
+  // seedShop waits out the per-IP signup and verify-email limits (bounded); the
+  // hook gets its own timeout, the file-level one is not it.
+  test.setTimeout(150_000);
   // Its own shop: the shared fixture's admin password is changed by password-reset.spec.ts.
   seed = await seedShop();
 });
