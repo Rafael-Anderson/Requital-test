@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { ChevronDown } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useShop } from "@/lib/shop-context";
 import { getMenu } from "@/lib/api";
 import { editableAttrs } from "@/lib/editable-attrs";
@@ -11,6 +11,7 @@ import { resolveNavElementStyle, resolveMenuBarBackground, FONT_WEIGHT_VALUE } f
 import { resolveNavLinkStyle } from "@/lib/nav-menu-style";
 import type { MenuItem, MenuItemStyle } from "@/lib/types";
 import CollectionNav from "@/components/CollectionNav";
+import { useMenuRowOverflow } from "@/lib/use-menu-row-overflow";
 
 // Matches admin/lib/useThemeEditor.ts's HEADER_CHROME_ID by hand — nav_menu
 // is one of the header's own blocks (visibility only — see
@@ -29,14 +30,17 @@ const RADIUS_PX: Record<NonNullable<MenuItemStyle["borderRadius"]>, string> = {
 // hoverBackgroundColor can't be expressed as a static inline style (no CSS
 // :hover from JS), so it's applied via onMouseEnter/onMouseLeave swapping
 // the resolved background in local state instead.
-function useNavItemStyle(style: MenuItemStyle | null | undefined) {
-  const [hovered, setHovered] = useState(false);
-  const cssStyle: CSSProperties = {
+function navItemCss(style: MenuItemStyle | null | undefined, hovered: boolean): CSSProperties {
+  return {
     color: style?.textColor,
     background: hovered ? (style?.hoverBackgroundColor ?? style?.backgroundColor) : style?.backgroundColor,
     borderRadius: style?.borderRadius ? RADIUS_PX[style.borderRadius] : undefined,
     fontWeight: style?.fontWeight ? FONT_WEIGHT_VALUE[style.fontWeight] : undefined,
   };
+}
+function useNavItemStyle(style: MenuItemStyle | null | undefined) {
+  const [hovered, setHovered] = useState(false);
+  const cssStyle = navItemCss(style, hovered);
   const handlers = style?.hoverBackgroundColor
     ? { onMouseEnter: () => setHovered(true), onMouseLeave: () => setHovered(false) }
     : {};
@@ -45,8 +49,8 @@ function useNavItemStyle(style: MenuItemStyle | null | undefined) {
 
 // storefront-v2 Phase 1D — the mega menu flyout for a MEGA item, sized to
 // its own columns (not full-viewport-width). Still rendered via a portal to
-// document.body, not a plain absolute descendant of the nav row: the nav
-// row is `overflow-x-auto` for its horizontal item-scrolling behavior,
+// document.body, not a plain absolute descendant of the nav row: from md up
+// the nav row is `overflow-x-auto` for its horizontal item-scrolling behavior,
 // which would clip a panel that opens below/beyond it (see the CSS
 // overflow spec's "one axis auto forces the other to auto too" rule — a
 // plain descendant here would get vertically clipped as well). Position is
@@ -138,13 +142,15 @@ function MegaMenuPanel({
 // (backward-compatible default, matching every other opt-in theme feature's
 // convention in this app — no merchant is forced to configure anything).
 //
-// No hamburger/mobile-drawer navigation exists anywhere in this codebase —
-// the nav is a single always-visible horizontally-scrollable row at every
-// viewport width (see TopBar.tsx: no mobile menu toggle). So "mobile"
-// mega-menu here means: the same flyout, tap-to-open instead of hover-only,
-// with its columns wrapping (flex-wrap) onto their own lines once they no
-// longer fit the viewport width, rather than a genuine accordion-in-a-drawer
-// that has nothing to live inside.
+// From md up the row scrolls sideways when it is too long. Below md (the
+// storefront's mobile breakpoint) it never scrolls: collapsed, it shows only
+// the items that fit on one line (the rest are display:none, so neither
+// visible nor focusable), and a chevron button above the row at its start
+// corner, shown only when something does not fit, expands it into as many
+// wrapped lines as every item needs. What fits is measured from an invisible
+// zero-height copy of the row laid out with flex-wrap at the same width
+// (lib/use-menu-row-overflow.ts). Submenus open on tap exactly as before; the
+// row has no overflow clipping on a phone, so a dropdown is never clipped.
 // `inline` (theme-builder-expansion Phase 3) — rendered inside a header row
 // rather than as its own full-width bar below the header: drop the <nav>
 // wrapper's border/background/centering so the row owns the layout.
@@ -156,6 +162,12 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
   const [megaLeft, setMegaLeft] = useState(0);
   const navRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const rowId = useId();
+  const [expanded, setExpanded] = useState(false);
+  const { fitCount, overflowing } = useMenuRowOverflow(measureRef, items);
+  // Everything fits again (wider viewport, shorter menu): back to the plain row.
+  if (expanded && fitCount !== null && !overflowing) setExpanded(false);
 
   useEffect(() => {
     getMenu(shopSlug, previewToken)
@@ -179,6 +191,30 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
   }
   function cancelClose() {
     if (closeTimer.current) clearTimeout(closeTimer.current);
+  }
+  // Expand/collapse. The row's height is animated from what it was to what it now is (WAAPI, so it
+  // self-gates on reduced motion as JS animation must); content below is pushed, never covered.
+  function toggleExpanded() {
+    const row = navRef.current;
+    const from = row?.offsetHeight ?? 0;
+    flushSync(() => {
+      setOpenMegaId(null);
+      setExpanded((v) => !v);
+    });
+    if (!row || typeof row.animate !== "function") return;
+    const to = row.offsetHeight;
+    const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || from === to) return;
+    row.style.overflow = "clip";
+    const anim = row.animate([{ height: `${from}px` }, { height: `${to}px` }], {
+      duration: 220,
+      easing: "cubic-bezier(0.2, 0, 0, 1)",
+    });
+    const done = () => {
+      row.style.overflow = "";
+    };
+    anim.onfinish = done;
+    anim.oncancel = done;
   }
 
   if (items === null) return null;
@@ -217,17 +253,53 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
 
   const openItem = items.find((i) => i.id === openMegaId && i.type === "MEGA");
 
-  const itemsRow = items.map((item) => (
-    <MenuBarItem
-      key={item.id}
-      item={item}
-      linkClass={linkClass}
-      shopBasePath={shopBasePath}
-      isMegaOpen={openMegaId === item.id}
-      onMegaEnter={(el) => openMega(item.id, el)}
-      onMegaLeave={scheduleClose}
-    />
+  // A LINK without a collection renders nothing; dropping it here keeps the measuring copy's
+  // children index-aligned with the row's.
+  const shownItems = items.filter((item) => item.type !== "LINK" || item.collection);
+  const collapsed = overflowing && !expanded;
+  const hideFrom = collapsed && fitCount !== null ? fitCount : shownItems.length;
+  const itemsRow = shownItems.map((item, index) => (
+    // display:contents, so the item stays a flex child of the row; below md an item that does not
+    // fit while collapsed is display:none (not focusable, not announced).
+    <div key={item.id} data-menu-row-item className={`contents ${index >= hideFrom ? "max-md:hidden" : ""}`}>
+      <MenuBarItem
+        item={item}
+        linkClass={linkClass}
+        shopBasePath={shopBasePath}
+        isMegaOpen={openMegaId === item.id}
+        onMegaEnter={(el) => openMega(item.id, el)}
+        onMegaLeave={scheduleClose}
+      />
+    </div>
   ));
+  // The measuring copy: same items, same classes and per-item font weight, laid out with flex-wrap at
+  // the row's width, zero height, invisible and inert. In flow (not absolute) so that a header grid
+  // cell sized to its content still sizes to the WHOLE menu, not just the items shown collapsed.
+  const measureItems = shownItems.map((item) => (
+    <span
+      key={item.id}
+      className={`shrink-0 ${linkClass} ${item.type === "LINK" ? "" : "inline-flex items-center gap-0.5"}`}
+      style={navItemCss(item.style, false)}
+    >
+      {item.label}
+      {item.type !== "LINK" && <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />}
+    </span>
+  ));
+  const measureClass = "flex flex-wrap items-center gap-1 text-sm h-0 overflow-hidden invisible pointer-events-none md:hidden";
+  const toggleButton = overflowing ? (
+    <button
+      type="button"
+      data-menu-toggle
+      aria-expanded={expanded}
+      aria-controls={rowId}
+      aria-label={expanded ? "Show fewer menu items" : "Show all menu items"}
+      onClick={toggleExpanded}
+      className="md:hidden inline-flex size-11 shrink-0 items-center justify-center rounded-full cursor-pointer hover:bg-mouse-over/10 transition-colors"
+    >
+      <ChevronDown className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
+    </button>
+  ) : null;
+  const wrapClass = expanded ? "max-md:flex-wrap" : "";
   const megaPanel = openItem ? (
     <MegaMenuPanel item={openItem} top={megaTop} left={megaLeft} animation={menuAnimation} onMouseEnter={cancelClose} onMouseLeave={scheduleClose} />
   ) : null;
@@ -236,12 +308,17 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
     return (
       <>
         <div
-          ref={navRef}
-          className="flex items-center gap-1 py-1 text-sm overflow-x-auto"
+          className="min-w-0"
           style={navStyle}
           {...(navBlock ? editableAttrs(previewMode, { id: navBlock.id, sectionId: HEADER_CHROME_ID, type: "nav_menu" }) : {})}
         >
-          {itemsRow}
+          {toggleButton && <div className="flex justify-start md:hidden">{toggleButton}</div>}
+          <div ref={navRef} id={rowId} data-menu-row className={`flex items-center gap-1 py-1 text-sm md:overflow-x-auto ${wrapClass}`}>
+            {itemsRow}
+          </div>
+          <div ref={measureRef} aria-hidden="true" inert data-menu-measure className={measureClass}>
+            {measureItems}
+          </div>
         </div>
         {megaPanel}
       </>
@@ -254,8 +331,17 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
       style={navStyle}
       {...(navBlock ? editableAttrs(previewMode, { id: navBlock.id, sectionId: HEADER_CHROME_ID, type: "nav_menu" }) : {})}
     >
-      <div ref={navRef} className={`mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 py-2 text-sm overflow-x-auto ${alignClass}`}>
+      {toggleButton && <div className="theme-container px-2 sm:px-4 flex justify-start md:hidden">{toggleButton}</div>}
+      <div
+        ref={navRef}
+        id={rowId}
+        data-menu-row
+        className={`mx-auto max-w-7xl px-2 sm:px-4 flex items-center gap-1 py-2 text-sm md:overflow-x-auto ${alignClass} ${wrapClass}`}
+      >
         {itemsRow}
+      </div>
+      <div ref={measureRef} aria-hidden="true" inert data-menu-measure className={`mx-auto max-w-7xl px-2 sm:px-4 ${alignClass} ${measureClass}`}>
+        {measureItems}
       </div>
       {megaPanel}
     </nav>
@@ -278,6 +364,26 @@ function MenuBarItem({
   onMegaLeave: () => void;
 }) {
   const { cssStyle, handlers } = useNavItemStyle(item.style);
+  const groupRef = useRef<HTMLDivElement>(null);
+  const [alignEnd, setAlignEnd] = useState(false);
+  // A dropdown opens from its item's start edge; near the end of a phone-width row that would run
+  // past the viewport, so it opens from the item's end edge instead. Measured as it opens (the panel
+  // is display:none until then, so it is shown invisibly for one synchronous read).
+  function placeDropdown() {
+    const group = groupRef.current;
+    const panel = group?.querySelector<HTMLElement>("[data-dropdown-panel]");
+    if (!group || !panel) return;
+    const { display, visibility } = panel.style;
+    panel.style.visibility = "hidden";
+    panel.style.display = "block";
+    const width = panel.getBoundingClientRect().width;
+    panel.style.display = display;
+    panel.style.visibility = visibility;
+    const rect = group.getBoundingClientRect();
+    const rtl = getComputedStyle(group).direction === "rtl";
+    const viewport = document.documentElement.clientWidth;
+    setAlignEnd(rtl ? rect.right - width < 8 : rect.left + width > viewport - 8);
+  }
 
   if (item.type === "LINK") {
     return item.collection ? (
@@ -308,7 +414,7 @@ function MenuBarItem({
 
   // DROPDOWN
   return (
-    <div className="relative group shrink-0">
+    <div ref={groupRef} className="relative group shrink-0" onPointerEnter={placeDropdown} onFocusCapture={placeDropdown}>
       <button
         type="button"
         aria-haspopup="true"
@@ -322,8 +428,11 @@ function MenuBarItem({
           aria-hidden="true"
         />
       </button>
-      <div className="absolute start-0 top-full z-20 hidden group-hover:block group-focus-within:block pt-1">
-        <div className="min-w-48 rounded-lg border border-popover-border bg-popover text-popover-fg shadow-lg py-2">
+      <div
+        data-dropdown-panel
+        className={`absolute ${alignEnd ? "end-0" : "start-0"} top-full z-20 hidden group-hover:block group-focus-within:block pt-1`}
+      >
+        <div className="min-w-48 max-w-[calc(100vw-1rem)] rounded-lg border border-popover-border bg-popover text-popover-fg shadow-lg py-2">
           <span className="block px-3 pb-1 text-xs font-semibold text-popover-fg/60">{item.label}</span>
           <ul className="space-y-0.5">
             {item.collections.map((c) =>
