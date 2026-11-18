@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, type ComponentType, type ReactNode } from "react";
-import EmptyState from "@/components/ui/EmptyState";
 import ElementSettingsPanel from "./ElementSettingsPanel";
 import LogoSettings from "./theme-settings/LogoSettings";
 import ColorsSettings from "./theme-settings/ColorsSettings";
@@ -55,8 +54,9 @@ import {
   ButtonShapeSetting,
   ButtonFillSetting,
 } from "./LayoutSettings";
-import { SECTION_TYPE_LABELS, type AnnouncementBarConfig, type ThemeSectionType } from "@/lib/types";
-import { resolveLayoutEntry, type LayoutEntryId } from "@/lib/theme-builder-registry";
+import { type AnnouncementBarConfig, type ThemeSectionType } from "@/lib/types";
+import type { LayoutEntryId } from "@/lib/theme-builder-registry";
+import type { PanelEntry } from "@/lib/theme-builder-panel";
 import { schemeColorPresets } from "@/lib/scheme-color-presets";
 import { THEME_SETTINGS_CATEGORY_LABELS } from "@/lib/theme-settings-categories";
 import type { ThemeEditorState } from "@/lib/useThemeEditor";
@@ -86,7 +86,7 @@ const SECTION_SETTINGS_COMPONENTS: Record<ThemeSectionType, ComponentType<Sectio
 };
 
 // The 18 Theme Settings categories, in the confirmed spec order — keyed by
-// the same labels ThemeSettingsList.tsx renders as the left column, so
+// the same labels the Design / Settings tabs list (lib/theme-builder-panel.ts), so
 // clicking one there shows its form here, exactly like selecting a section
 // or block does in Sections mode. Each category's label is also what
 // SchemePicker's "Edit scheme" jump link (in Badges/Drawers/Popovers)
@@ -176,87 +176,51 @@ function useScrollToSetting(containerRef: React.RefObject<HTMLDivElement | null>
   }, [scrollRequest, contentKey]);
 }
 
-// Wraps every SettingsPanel branch's body, so a search result can scroll to its field.
+// Wraps every drill-in body, so a search result can scroll to its field.
 function FilterableSettingsBody({
   editor,
   contentKey,
-  heading,
   children,
 }: {
   editor: ThemeEditorState;
   contentKey: unknown;
-  heading: ReactNode;
   children: ReactNode;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   useScrollToSetting(bodyRef, editor, contentKey);
+  return <div ref={bodyRef}>{children}</div>;
+}
+
+/** The body of a Design / Settings drill-in: that entry's existing settings form, unchanged. */
+export function EntrySettingsBody({ editor, entry }: { editor: ThemeEditorState; entry: PanelEntry }) {
+  if (entry.kind === "theme") {
+    const Component = THEME_SETTINGS_COMPONENTS[entry.category];
+    return (
+      <FilterableSettingsBody editor={editor} contentKey={`theme:${entry.category}`}>
+        <Component editor={editor} />
+      </FilterableSettingsBody>
+    );
+  }
+  const Component = LAYOUT_COMPONENTS[entry.id];
   return (
-    <div className="p-4">
-      {heading}
-      <div ref={bodyRef}>{children}</div>
-    </div>
+    <FilterableSettingsBody editor={editor} contentKey={`layout:${entry.id}`}>
+      <Component editor={editor} />
+    </FilterableSettingsBody>
   );
 }
 
-// Dispatches on editorMode first (sections / theme settings / layout), then
-// — in sections mode — on the selected tree node: Header/Footer chrome, a
-// section (shared controls + that type's own settings, content fields now
-// live on blocks), a block (BlockSettingsForm's per-type dispatch), or
-// nothing selected (a hint to pick something in the tree). In theme
-// settings/layout mode, the selected category (ThemeSettingsList.tsx/
-// LayoutList.tsx's left column) dispatches the same way a tree selection
-// does.
-export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) {
+/**
+ * The body of a Sections drill-in for the selected node: the announcement bar, Header or Footer
+ * chrome, a section (its own settings form), or a block (ElementSettingsPanel). Null when nothing
+ * resolvable is selected.
+ */
+export function NodeSettingsBody({ editor }: { editor: ThemeEditorState }) {
   const { config, selection } = editor;
-  if (!config) return null;
-
-  if (editor.editorMode === "theme_settings") {
-    const category = editor.themeSettingsCategory;
-    if (!category) {
-      return (
-        <div className="flex h-full items-center justify-center">
-          <EmptyState title="No category selected" description="Select a category on the left to edit it." />
-        </div>
-      );
-    }
-    const Component = THEME_SETTINGS_COMPONENTS[category as (typeof THEME_SETTINGS_CATEGORY_LABELS)[number]];
-    return (
-      <FilterableSettingsBody editor={editor} contentKey={`theme:${category}`} heading={<h2 className="mb-4 text-sm font-semibold">{category}</h2>}>
-        <Component editor={editor} />
-      </FilterableSettingsBody>
-    );
-  }
-
-  if (editor.editorMode === "layout") {
-    // A saved or deep-linked entry that does not apply to this shop's mode falls back to the first
-    // one that does, never to a dead pane.
-    const category = resolveLayoutEntry(editor.layoutCategory, editor.builderContext);
-    if (!category) {
-      return (
-        <div className="flex h-full items-center justify-center">
-          <EmptyState title="Nothing to configure here" description="No layout settings apply to your storefront." />
-        </div>
-      );
-    }
-    const Component = LAYOUT_COMPONENTS[category];
-    return (
-      <FilterableSettingsBody editor={editor} contentKey={`layout:${category}`} heading={<h2 className="mb-4 text-sm font-semibold">{category}</h2>}>
-        <Component editor={editor} />
-      </FilterableSettingsBody>
-    );
-  }
-
-  if (!selection) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState title="No selection" description="Select a section or block on the left to edit it." />
-      </div>
-    );
-  }
+  if (!config || !selection) return null;
 
   if (selection.kind === "announcement") {
     return (
-      <FilterableSettingsBody editor={editor} contentKey="announcement" heading={<h2 className="mb-4 text-sm font-semibold">Announcement bar</h2>}>
+      <FilterableSettingsBody editor={editor} contentKey="announcement">
         <AnnouncementBarChromeSettings
           value={config.header.settings.announcementBar as AnnouncementBarConfig | undefined}
           onChange={editor.updateAnnouncementBar}
@@ -270,7 +234,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
 
   if (selection.kind === "header") {
     return (
-      <FilterableSettingsBody editor={editor} contentKey="header" heading={<h2 className="mb-4 text-sm font-semibold">Header</h2>}>
+      <FilterableSettingsBody editor={editor} contentKey="header">
         <HeaderSettings
           settings={config.header.settings}
           blocks={config.header.blocks}
@@ -284,12 +248,8 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
 
   if (selection.kind === "footer") {
     return (
-      <FilterableSettingsBody editor={editor} contentKey="footer" heading={<h2 className="mb-4 text-sm font-semibold">Footer</h2>}>
-        <FooterSettings
-          settings={config.footer.settings}
-          onUpdate={editor.updateFooterSetting}
-          onApplyPreset={editor.applyFooterPreset}
-        />
+      <FilterableSettingsBody editor={editor} contentKey="footer">
+        <FooterSettings settings={config.footer.settings} onUpdate={editor.updateFooterSetting} onApplyPreset={editor.applyFooterPreset} />
       </FilterableSettingsBody>
     );
   }
@@ -298,7 +258,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
     const { section } = selection;
     const SettingsComponent = SECTION_SETTINGS_COMPONENTS[section.type];
     return (
-      <FilterableSettingsBody editor={editor} contentKey={`section:${section.id}`} heading={<h2 className="mb-4 text-sm font-semibold">{SECTION_TYPE_LABELS[section.type]}</h2>}>
+      <FilterableSettingsBody editor={editor} contentKey={`section:${section.id}`}>
         <SettingsComponent settings={section.settings} onUpdate={(key, value) => editor.updateSectionSetting(section.id, key, value)} editor={editor} />
       </FilterableSettingsBody>
     );
@@ -306,15 +266,7 @@ export default function SettingsPanel({ editor }: { editor: ThemeEditorState }) 
 
   const { block, container } = selection;
   return (
-    <FilterableSettingsBody
-      editor={editor}
-      contentKey={`block:${block.id}`}
-      heading={
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Block settings</h2>
-        </div>
-      }
-    >
+    <FilterableSettingsBody editor={editor} contentKey={`block:${block.id}`}>
       <ElementSettingsPanel
         block={block}
         container={container}

@@ -65,7 +65,7 @@ export default function BannerHeightControl({
   }
 
   return (
-    <fieldset className="space-y-3">
+    <fieldset className="min-w-0 space-y-3">
       <legend className="mb-1 text-sm font-medium">{label}</legend>
       {row("desktop", "Desktop (px)", desktop)}
       {row("mobile", "Mobile (px)", mobile)}

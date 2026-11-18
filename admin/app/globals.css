@@ -352,3 +352,15 @@ body {
   border-radius: 0.5rem;
   animation: theme-search-highlight-fade 1.8s ease-out;
 }
+
+/* Theme builder drill-in (components/theme-builder/BuilderPanel.tsx): compact 320px panel.
+   Text fields and selects are 32px high and full width, field labels 12px. Scoped to the drill-in
+   body so no other admin page changes; the attribute/class pairs outrank the single h-9 utility. */
+.builder-drill-body :is(input[type="text"], input[type="number"], input[type="url"], input[type="email"], input:not([type]), select) {
+  height: 2rem;
+  padding-block: 0.25rem;
+  font-size: 13px;
+}
+.builder-drill-body :is(label, legend) {
+  font-size: 12px;
+}

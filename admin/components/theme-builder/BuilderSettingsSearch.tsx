@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
 import { Search, X } from "lucide-react";
 import { buildSearchIndex, searchSettings, type BuilderContext, type SearchEntry } from "@/lib/theme-builder-registry";
 
@@ -21,7 +21,20 @@ type SearchEditor = {
   goToSetting?: (target: SearchEntry["target"], settingLabel?: string) => void;
 };
 
-export default function BuilderSettingsSearch({ editor }: { editor: SearchEditor }) {
+export default function BuilderSettingsSearch({
+  editor,
+  className = "ms-auto w-56",
+  inputRef: externalInputRef,
+  onDone,
+}: {
+  editor: SearchEditor;
+  className?: string;
+  inputRef?: RefObject<HTMLInputElement | null>;
+  // Called after a result is opened or the search is dismissed (the top bar collapses its narrow form).
+  onDone?: () => void;
+}) {
+  const ownInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = externalInputRef ?? ownInputRef;
   const { settingsSearchQuery: query, setSettingsSearchQuery: setQuery, goToSetting } = editor;
   const ctx = editor.builderContext ?? EMPTY_CONTEXT;
   const listId = useId();
@@ -49,6 +62,8 @@ export default function BuilderSettingsSearch({ editor }: { editor: SearchEditor
     goToSetting?.(entry.target, entry.settingLabel);
     setQuery("");
     setOpen(false);
+    inputRef.current?.blur();
+    onDone?.();
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -66,16 +81,21 @@ export default function BuilderSettingsSearch({ editor }: { editor: SearchEditor
         choose(flat[active]);
       }
     } else if (e.key === "Escape") {
+      // Handled here: the panel's own Escape (back from a drill-in) must not also fire.
+      e.preventDefault();
+      e.nativeEvent.preventDefault();
       setQuery("");
       setOpen(false);
+      onDone?.();
     }
   }
 
   let flatIndex = -1;
   return (
-    <div ref={rootRef} className="relative ms-auto w-56">
+    <div ref={rootRef} className={`relative ${className}`}>
       <Search className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-400" />
       <input
+        ref={inputRef}
         type="text"
         role="combobox"
         aria-expanded={open && hasQuery}
@@ -112,7 +132,7 @@ export default function BuilderSettingsSearch({ editor }: { editor: SearchEditor
           id={listId}
           role="listbox"
           aria-label="Matching settings"
-          className="absolute end-0 top-full z-50 mt-1 max-h-96 w-80 overflow-y-auto rounded-xl border border-black/10 bg-surface p-1.5 shadow-lg dark:border-white/15 dark:bg-zinc-900"
+          className="absolute end-0 top-full z-50 mt-1 max-h-96 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-black/10 bg-surface p-1.5 shadow-lg dark:border-white/15 dark:bg-zinc-900"
         >
           {groups.length === 0 ? (
             <p className="px-3 py-4 text-center text-sm text-zinc-500">No settings match</p>

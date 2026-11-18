@@ -1,6 +1,10 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import PresetPicker from "@/components/PresetPicker";
+import Button from "@/components/ui/Button";
+import { listMenuItems } from "@/lib/api";
+import type { MenuItem } from "@/lib/types";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import Toggle from "@/components/ui/Toggle";
 import MenuBuilder from "@/components/MenuBuilder";
@@ -141,9 +145,55 @@ export function HomeTabSetting({ editor }: LayoutSettingProps) {
 // the menu-item CRUD it drives (backend menu/ module) powers MenuBar.tsx on
 // the storefront regardless of which homepage system is active — it's a
 // genuinely separate, still-live feature, not a dead legacy control.
+//
+// The menu editor does not fit the 320px panel (mega menu columns, links, styles), so the panel shows
+// the current items and opens the editor in a wide modal.
 export function MenuSetting(_props: LayoutSettingProps) {
-  return <MenuBuilder />;
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<MenuItem[] | null>(null);
+  const refresh = useCallback(() => {
+    listMenuItems()
+      .then(setItems)
+      .catch(() => setItems([]));
+  }, []);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-text-muted">The storefront navigation menu: links, dropdowns and mega menus.</p>
+      {items === null ? (
+        <p className="text-sm text-text-faint">Loading…</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-text-faint">No menu items yet. The storefront shows your top-level collections.</p>
+      ) : (
+        <ul className="divide-y divide-black/5 overflow-hidden rounded-lg border border-border dark:divide-white/10 dark:border-white/10" data-testid="menu-summary">
+          {items.map((item) => (
+            <li key={item.id} className="px-3 py-2">
+              <span className="block truncate text-[13px] font-medium">{item.label}</span>
+              <span className="block truncate text-xs text-text-faint">{MENU_TYPE_LABELS[item.type]}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button type="button" variant="secondary" onClick={() => setOpen(true)} className="w-full">
+        Edit menu
+      </Button>
+      {open && (
+        <MenuBuilder
+          variant="modal"
+          onClose={() => {
+            setOpen(false);
+            refresh();
+          }}
+        />
+      )}
+    </div>
+  );
 }
+
+const MENU_TYPE_LABELS: Record<MenuItem["type"], string> = { LINK: "Link", DROPDOWN: "Dropdown", MEGA: "Mega menu" };
 
 export function HomepageLayoutSetting({ editor }: LayoutSettingProps) {
   const { legacyTheme, updateLegacyTheme } = editor;

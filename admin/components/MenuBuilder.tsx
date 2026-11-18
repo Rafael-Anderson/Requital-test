@@ -31,6 +31,7 @@ import ColorPicker from "@/components/ui/ColorPicker";
 import SegmentedToggle from "@/components/ui/SegmentedToggle";
 import { useToast } from "@/components/ui/Toast";
 import Tooltip from "@/components/ui/Tooltip";
+import Modal from "@/components/ui/Modal";
 
 interface DraftCollection {
   collectionId: number;
@@ -243,7 +244,11 @@ function ColorSwatchField({
 // order, no drag) — small lists nested inside an already-open inline form,
 // not worth a second drag surface. Columns themselves ARE draggable, same
 // pattern as the top-level item rows.
-export default function MenuBuilder() {
+// `variant="modal"`: the same editor in a wide modal (the theme builder): menu items on the left with
+// their type underneath, the selected item's settings on the right, mega menu columns as cards in a
+// grid, Save / Cancel in the modal footer. Save goes through the exact same create/update calls as
+// the inline editor below.
+export default function MenuBuilder({ variant = "inline", onClose }: { variant?: "inline" | "modal"; onClose?: () => void } = {}) {
   const toast = useToast();
   const [items, setItems] = useState<MenuItem[] | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -480,14 +485,279 @@ export default function MenuBuilder() {
     });
   }
 
-  if (items === null) {
-    return <p className="text-sm text-text-faint">Loading…</p>;
-  }
-
   function itemSummary(item: MenuItem): string {
     if (item.type === "LINK") return item.collection?.name ?? "Link";
     if (item.type === "DROPDOWN") return `Dropdown · ${item.collections.length} collection${item.collections.length === 1 ? "" : "s"}`;
     return `Mega menu · ${item.columns.length} column${item.columns.length === 1 ? "" : "s"}`;
+  }
+
+  const isModal = variant === "modal";
+
+  const styleFields = (
+    <div className="space-y-3 rounded-lg border border-border dark:border-white/10 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Style</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <ColorSwatchField label="Text color" value={draftStyle.textColor} onChange={(v) => setDraftStyle((s) => ({ ...s, textColor: v }))} />
+        <ColorSwatchField
+          label="Background color"
+          value={draftStyle.backgroundColor}
+          onChange={(v) => setDraftStyle((s) => ({ ...s, backgroundColor: v }))}
+        />
+        <ColorSwatchField
+          label="Hover background"
+          value={draftStyle.hoverBackgroundColor}
+          onChange={(v) => setDraftStyle((s) => ({ ...s, hoverBackgroundColor: v }))}
+        />
+        <Select
+          label="Border radius"
+          value={draftStyle.borderRadius ?? "none"}
+          onChange={(e) => setDraftStyle((s) => ({ ...s, borderRadius: e.target.value as MenuItemStyle["borderRadius"] }))}
+        >
+          <option value="none">None</option>
+          <option value="slight">Slight</option>
+          <option value="pill">Pill</option>
+        </Select>
+        <Select
+          label="Font weight"
+          value={draftStyle.fontWeight ?? "normal"}
+          onChange={(e) => setDraftStyle((s) => ({ ...s, fontWeight: e.target.value as MenuItemStyle["fontWeight"] }))}
+        >
+          <option value="normal">Normal</option>
+          <option value="medium">Medium</option>
+          <option value="bold">Bold</option>
+        </Select>
+      </div>
+    </div>
+  );
+
+  const editorFields = (
+    <>
+      <Input label="Label" value={label} onChange={(e) => setLabel(e.target.value)} />
+      <SegmentedToggle
+        value={type}
+        options={MENU_ITEM_TYPES.map((t) => ({ value: t, label: TYPE_LABELS[t] }))}
+        onChange={setType}
+      />
+
+      {!isModal && styleFields}
+
+      {type === "LINK" && (
+        <Combobox
+          label="Collection"
+          value={linkCollectionId}
+          onChange={setLinkCollectionId}
+          placeholder="Select a collection…"
+          options={collections.map((c) => ({ value: String(c.id), label: c.name }))}
+        />
+      )}
+
+      {type === "DROPDOWN" && (
+        <div className="space-y-2">
+          {dropdownCollections.length > 0 && (
+            <ul className="space-y-1">
+              {dropdownCollections.map((c) => (
+                <li key={c.collectionId} className="flex items-center justify-between text-sm bg-black/[0.03] dark:bg-white/[0.05] rounded px-2 py-1">
+                  {c.name}
+                  <Tooltip label={`Remove ${c.name} from this dropdown`}>
+                    <button
+                      type="button"
+                      onClick={() => setDropdownCollections((prev) => prev.filter((x) => x.collectionId !== c.collectionId))}
+                      aria-label={`Remove ${c.name}`}
+                      className="text-text-faint hover:text-red-600 cursor-pointer"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </Tooltip>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Combobox
+                label="Add collection"
+                value={addDropdownCollectionId}
+                onChange={setAddDropdownCollectionId}
+                placeholder="Select a collection…"
+                options={collections.map((c) => ({ value: String(c.id), label: c.name }))}
+              />
+            </div>
+            <Button type="button" variant="secondary" onClick={addDropdownCollection} disabled={!addDropdownCollectionId}>
+              <Plus className="size-4 inline -mt-0.5 me-1" />
+              Add
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {type === "MEGA" && (
+        <div className="space-y-2">
+          {isModal && <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Columns</p>}
+          <div className={isModal ? "grid grid-cols-1 gap-3 xl:grid-cols-2" : "space-y-2"}>
+            {draftColumns.map((column, index) => (
+              <MegaColumnEditor
+                key={index}
+                column={column}
+                index={index}
+                collections={collections}
+                products={products}
+                draggedIndex={draggedColumnIndex}
+                onDragStart={() => setDraggedColumnIndex(index)}
+                onDrop={() => handleColumnDrop(index)}
+                onTitleChange={(title) => updateColumnTitle(index, title)}
+                onRemoveColumn={() => removeColumn(index)}
+                onAddLink={() => addLink(index)}
+                onChangeLink={(linkIndex, patch) => changeLink(index, linkIndex, patch)}
+                onRemoveLink={(linkIndex) => removeLink(index, linkIndex)}
+              />
+            ))}
+            {isModal ? (
+              <button
+                type="button"
+                onClick={addColumn}
+                className="flex min-h-24 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-border text-sm font-medium text-text-muted hover:border-accent hover:text-accent-text dark:border-white/15"
+              >
+                <Plus className="size-4" aria-hidden />
+                Add column
+              </button>
+            ) : (
+              <Button type="button" variant="secondary" onClick={addColumn}>
+                <Plus className="size-4 inline -mt-0.5 me-1" />
+                Add column
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isModal && styleFields}
+    </>
+  );
+
+  function itemRows(rowsItems: MenuItem[]) {
+    return rowsItems.map((item) => {
+      const selected = isModal && editingId === item.id;
+      return (
+        <div
+          key={item.id}
+          draggable
+          onDragStart={() => setDraggedId(item.id)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={() => handleDrop(item.id)}
+          className={`flex items-center gap-2 px-3 py-2 transition-colors ${
+            selected ? "bg-accent/10" : "hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+          } ${draggedId === item.id ? "opacity-40" : ""}`}
+        >
+          <span className="cursor-grab active:cursor-grabbing text-text-faint shrink-0" aria-hidden>
+            <GripVertical className="size-4" />
+          </span>
+          {isModal ? (
+            <button
+              type="button"
+              onClick={() => startEdit(item)}
+              aria-current={selected ? "true" : undefined}
+              className="min-w-0 flex-1 cursor-pointer text-start"
+            >
+              <span className="block truncate text-sm font-medium">{item.label}</span>
+              <span className="block truncate text-xs text-text-faint">{itemSummary(item)}</span>
+            </button>
+          ) : (
+            <div className="min-w-0 flex-1">
+              <span className="text-sm font-medium">{item.label}</span>
+              <span className="text-text-faint ms-2 text-xs">{itemSummary(item)}</span>
+            </div>
+          )}
+          <div className="flex gap-1 shrink-0">
+            {!isModal && (
+              <Tooltip label={`Edit ${item.label}`}>
+                <button
+                  onClick={() => startEdit(item)}
+                  className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                  aria-label={`Edit ${item.label}`}
+                >
+                  <Pencil className="size-4" />
+                </button>
+              </Tooltip>
+            )}
+            <Tooltip label={`Remove ${item.label} from the menu`} align="end">
+              <button
+                onClick={() => handleDelete(item)}
+                className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
+                aria-label={`Remove ${item.label}`}
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </Tooltip>
+          </div>
+        </div>
+      );
+    });
+  }
+
+  if (isModal) {
+    return (
+      <Modal
+        title="Menu"
+        size="lg"
+        tall
+        trapFocus
+        panelClassName="max-w-6xl"
+        onClose={() => onClose?.()}
+        footer={(requestClose) => (
+          <>
+            <Button type="button" variant="secondary" onClick={editingId !== null ? cancelEdit : requestClose}>
+              {editingId !== null ? "Cancel" : "Close"}
+            </Button>
+            <Button type="button" variant="primary" onClick={handleSave} disabled={saving || editingId === null} loading={saving}>
+              Save
+            </Button>
+          </>
+        )}
+      >
+        {items === null ? (
+          <p className="text-sm text-text-faint">Loading…</p>
+        ) : (
+          <div className="grid min-h-full grid-cols-1 gap-4 md:grid-cols-[280px_minmax(0,1fr)]">
+            <div className="flex min-w-0 flex-col gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Menu items</p>
+              {items.length === 0 ? (
+                <p className="text-sm text-text-faint">No menu items yet. The storefront falls back to an automatic list of top-level collections.</p>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-border divide-y divide-black/5 dark:border-white/10 dark:divide-white/10">
+                  {itemRows(items)}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={startCreate}
+                className={`flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed text-sm font-medium hover:border-accent hover:text-accent-text ${
+                  editingId === "new" ? "border-accent text-accent-text" : "border-border text-text-muted dark:border-white/15"
+                }`}
+              >
+                <Plus className="size-4" aria-hidden />
+                Add item
+              </button>
+            </div>
+            <div className="min-w-0">
+              {editingId === null ? (
+                <div className="flex h-full min-h-40 items-center justify-center rounded-lg border border-dashed border-border p-6 text-center text-sm text-text-faint dark:border-white/15">
+                  Select a menu item to edit it, or add a new one.
+                </div>
+              ) : (
+                <div className="space-y-3" data-testid="menu-item-editor">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{editingId === "new" ? "New menu item" : "Menu item"}</p>
+                  {editorFields}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+    );
+  }
+
+  if (items === null) {
+    return <p className="text-sm text-text-faint">Loading…</p>;
   }
 
   return (
@@ -496,170 +766,13 @@ export default function MenuBuilder() {
         <p className="text-sm text-text-faint">No menu items yet. The storefront falls back to an automatic list of top-level collections.</p>
       ) : (
         <div className="rounded-lg border border-border dark:border-white/10 divide-y divide-black/5 dark:divide-white/10 overflow-hidden">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              draggable
-              onDragStart={() => setDraggedId(item.id)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => handleDrop(item.id)}
-              className={`flex items-center gap-2 px-3 py-2 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors ${
-                draggedId === item.id ? "opacity-40" : ""
-              }`}
-            >
-              <span className="cursor-grab active:cursor-grabbing text-text-faint shrink-0" aria-hidden>
-                <GripVertical className="size-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <span className="text-sm font-medium">{item.label}</span>
-                <span className="text-text-faint ms-2 text-xs">{itemSummary(item)}</span>
-              </div>
-              <div className="flex gap-1 shrink-0">
-                <Tooltip label={`Edit ${item.label}`}>
-                  <button
-                    onClick={() => startEdit(item)}
-                    className="p-1.5 rounded text-text-muted hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                    aria-label={`Edit ${item.label}`}
-                  >
-                    <Pencil className="size-4" />
-                  </button>
-                </Tooltip>
-                <Tooltip label={`Remove ${item.label} from the menu`} align="end">
-                  <button
-                    onClick={() => handleDelete(item)}
-                    className="p-1.5 rounded text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors cursor-pointer"
-                    aria-label={`Remove ${item.label}`}
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                </Tooltip>
-              </div>
-            </div>
-          ))}
+          {itemRows(items)}
         </div>
       )}
 
       {editingId !== null ? (
         <div className="rounded-lg border border-border dark:border-white/10 p-3 space-y-3">
-          <Input label="Label" value={label} onChange={(e) => setLabel(e.target.value)} />
-          <SegmentedToggle
-            value={type}
-            options={MENU_ITEM_TYPES.map((t) => ({ value: t, label: TYPE_LABELS[t] }))}
-            onChange={setType}
-          />
-
-          <div className="space-y-3 rounded-lg border border-border dark:border-white/10 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Style</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <ColorSwatchField label="Text color" value={draftStyle.textColor} onChange={(v) => setDraftStyle((s) => ({ ...s, textColor: v }))} />
-              <ColorSwatchField
-                label="Background color"
-                value={draftStyle.backgroundColor}
-                onChange={(v) => setDraftStyle((s) => ({ ...s, backgroundColor: v }))}
-              />
-              <ColorSwatchField
-                label="Hover background"
-                value={draftStyle.hoverBackgroundColor}
-                onChange={(v) => setDraftStyle((s) => ({ ...s, hoverBackgroundColor: v }))}
-              />
-              <Select
-                label="Border radius"
-                value={draftStyle.borderRadius ?? "none"}
-                onChange={(e) => setDraftStyle((s) => ({ ...s, borderRadius: e.target.value as MenuItemStyle["borderRadius"] }))}
-              >
-                <option value="none">None</option>
-                <option value="slight">Slight</option>
-                <option value="pill">Pill</option>
-              </Select>
-              <Select
-                label="Font weight"
-                value={draftStyle.fontWeight ?? "normal"}
-                onChange={(e) => setDraftStyle((s) => ({ ...s, fontWeight: e.target.value as MenuItemStyle["fontWeight"] }))}
-              >
-                <option value="normal">Normal</option>
-                <option value="medium">Medium</option>
-                <option value="bold">Bold</option>
-              </Select>
-            </div>
-          </div>
-
-          {type === "LINK" && (
-            <Combobox
-              label="Collection"
-              value={linkCollectionId}
-              onChange={setLinkCollectionId}
-              placeholder="Select a collection…"
-              options={collections.map((c) => ({ value: String(c.id), label: c.name }))}
-            />
-          )}
-
-          {type === "DROPDOWN" && (
-            <div className="space-y-2">
-              {dropdownCollections.length > 0 && (
-                <ul className="space-y-1">
-                  {dropdownCollections.map((c) => (
-                    <li key={c.collectionId} className="flex items-center justify-between text-sm bg-black/[0.03] dark:bg-white/[0.05] rounded px-2 py-1">
-                      {c.name}
-                      <Tooltip label={`Remove ${c.name} from this dropdown`}>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDropdownCollections((prev) => prev.filter((x) => x.collectionId !== c.collectionId))
-                          }
-                          aria-label={`Remove ${c.name}`}
-                          className="text-text-faint hover:text-red-600 cursor-pointer"
-                        >
-                          <X className="size-3.5" />
-                        </button>
-                      </Tooltip>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Combobox
-                    label="Add collection"
-                    value={addDropdownCollectionId}
-                    onChange={setAddDropdownCollectionId}
-                    placeholder="Select a collection…"
-                    options={collections.map((c) => ({ value: String(c.id), label: c.name }))}
-                  />
-                </div>
-                <Button type="button" variant="secondary" onClick={addDropdownCollection} disabled={!addDropdownCollectionId}>
-                  <Plus className="size-4 inline -mt-0.5 me-1" />
-                  Add
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {type === "MEGA" && (
-            <div className="space-y-2">
-              {draftColumns.map((column, index) => (
-                <MegaColumnEditor
-                  key={index}
-                  column={column}
-                  index={index}
-                  collections={collections}
-                  products={products}
-                  draggedIndex={draggedColumnIndex}
-                  onDragStart={() => setDraggedColumnIndex(index)}
-                  onDrop={() => handleColumnDrop(index)}
-                  onTitleChange={(title) => updateColumnTitle(index, title)}
-                  onRemoveColumn={() => removeColumn(index)}
-                  onAddLink={() => addLink(index)}
-                  onChangeLink={(linkIndex, patch) => changeLink(index, linkIndex, patch)}
-                  onRemoveLink={(linkIndex) => removeLink(index, linkIndex)}
-                />
-              ))}
-              <Button type="button" variant="secondary" onClick={addColumn}>
-                <Plus className="size-4 inline -mt-0.5 me-1" />
-                Add column
-              </Button>
-            </div>
-          )}
-
+          {editorFields}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={cancelEdit}>
               Cancel

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
   closestCenter,
@@ -9,6 +9,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -17,13 +18,13 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronRight, GripVertical, Layout, Megaphone, PanelBottom, Plus, Trash2 } from "lucide-react";
-import Toggle from "@/components/ui/Toggle";
+import { ChevronRight, GripVertical, Plus } from "lucide-react";
 import TreeNode from "./TreeNode";
+import VisibilityButton from "./VisibilityButton";
 import AddSectionModal from "./AddSectionModal";
 import AddBlockModal from "./AddBlockModal";
 import { findNodeInTree } from "@/lib/theme-tree";
-import { SECTION_TYPE_LABELS, type ThemeSection } from "@/lib/types";
+import { SECTION_TYPE_LABELS, type AnnouncementBarConfig, type ThemeSection } from "@/lib/types";
 import { ANNOUNCEMENT_CHROME_ID, HEADER_CHROME_ID, FOOTER_CHROME_ID, type BlockContainerRef, type ThemeEditorState } from "@/lib/useThemeEditor";
 
 export { ANNOUNCEMENT_CHROME_ID, HEADER_CHROME_ID, FOOTER_CHROME_ID };
@@ -34,41 +35,92 @@ interface AddBlockRequest {
   types: string[];
 }
 
+type GroupKey = "header" | "template" | "footer";
+const COLLAPSED_STORAGE_KEY = "requital.themeBuilder.collapsedGroups";
+
+function readCollapsed(): Set<GroupKey> {
+  try {
+    const raw = window.localStorage.getItem(COLLAPSED_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? (parsed.filter((g) => g === "header" || g === "template" || g === "footer") as GroupKey[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeCollapsed(groups: Set<GroupKey>) {
+  try {
+    window.localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify([...groups]));
+  } catch {
+    // Storage unavailable (private window, blocked site data): the panel still works.
+  }
+}
+
+// An 11px uppercase group label that collapses its group.
+function GroupLabel({ label, collapsed, onToggle }: { label: string; collapsed: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      aria-label={`${label} group`}
+      className="flex h-8 w-full cursor-pointer items-center gap-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-text-faint hover:text-text-muted"
+    >
+      <ChevronRight className={`size-3 transition-transform ${collapsed ? "" : "rotate-90"}`} aria-hidden />
+      {label}
+    </button>
+  );
+}
+
+function Expander({ expanded, onToggle, label }: { expanded: boolean; onToggle: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={expanded ? `Collapse ${label}` : `Expand ${label}`}
+      aria-expanded={expanded}
+      className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-text-faint hover:text-text-muted"
+    >
+      <ChevronRight className={`size-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
+    </button>
+  );
+}
+
+// A fixed (not draggable) row: the announcement bar, Header, Footer.
 function ChromeRow({
+  rowId,
   label,
-  Icon,
   selected,
-  expanded,
   onSelect,
-  onToggleExpand,
-  hideExpander,
+  expander,
+  trailing,
+  dimmed,
 }: {
+  rowId: string;
   label: string;
-  Icon: typeof Layout;
   selected: boolean;
-  expanded: boolean;
   onSelect: () => void;
-  onToggleExpand: () => void;
-  // A row with no child blocks to expand (the announcement bar) shows no chevron.
-  hideExpander?: boolean;
+  expander?: ReactNode;
+  trailing?: ReactNode;
+  dimmed?: boolean;
 }) {
   return (
     <div
-      className={`flex items-center gap-1.5 rounded-lg border px-2 py-2 ${
-        selected ? "border-accent bg-accent/5" : "border-transparent hover:bg-black/5 dark:hover:bg-white/10"
+      data-section-row={rowId}
+      className={`group flex h-[34px] items-center gap-1 rounded-md pe-1 ps-1 ${
+        selected ? "bg-accent-tint text-accent-text" : "hover:bg-black/5 dark:hover:bg-white/10"
       }`}
     >
-      {hideExpander ? (
-        <span className="size-3.5 shrink-0" aria-hidden />
-      ) : (
-        <button type="button" onClick={onToggleExpand} aria-label={expanded ? "Collapse" : "Expand"} className="shrink-0 text-zinc-400">
-          <ChevronRight className={`size-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
-        </button>
-      )}
-      <button type="button" onClick={onSelect} className="flex flex-1 items-center gap-2 truncate text-start text-sm font-medium">
-        <Icon className="size-4 text-zinc-400" />
+      {expander ?? <span className="size-5 shrink-0" aria-hidden />}
+      <span className="size-4 shrink-0" aria-hidden />
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`min-w-0 flex-1 cursor-pointer truncate text-start text-[13px] font-medium ${dimmed ? "opacity-60" : ""}`}
+      >
         {label}
       </button>
+      {trailing}
     </div>
   );
 }
@@ -77,56 +129,71 @@ function SortableSectionRow({
   section,
   selected,
   expanded,
+  dropLine,
   onSelect,
   onToggleVisible,
   onToggleExpand,
-  onRemove,
 }: {
   section: ThemeSection;
   selected: boolean;
   expanded: boolean;
+  dropLine: "before" | "after" | null;
   onSelect: () => void;
   onToggleVisible: () => void;
   onToggleExpand: () => void;
-  onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.id });
+  const name = SECTION_TYPE_LABELS[section.type];
 
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={isDragging ? "opacity-50" : ""}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`relative ${isDragging ? "opacity-50" : ""}`}>
+      {dropLine && (
+        <span
+          aria-hidden
+          data-drop-indicator
+          className={`pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-accent ${dropLine === "before" ? "-top-px" : "-bottom-px"}`}
+        />
+      )}
       <div
-        className={`group flex items-center gap-1.5 rounded-lg border px-2 py-2 ${
-          selected ? "border-accent bg-accent/5" : "border-transparent hover:bg-black/5 dark:hover:bg-white/10"
+        data-section-row={section.id}
+        className={`group flex h-[34px] items-center gap-1 rounded-md pe-1 ps-1 ${
+          selected ? "bg-accent-tint text-accent-text" : "hover:bg-black/5 dark:hover:bg-white/10"
         }`}
       >
-        <button type="button" onClick={onToggleExpand} aria-label={expanded ? "Collapse" : "Expand"} className="shrink-0 text-zinc-400">
-          <ChevronRight className={`size-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
-        </button>
-        <button type="button" {...attributes} {...listeners} aria-label="Drag to reorder" className="shrink-0 cursor-grab touch-none text-zinc-400 active:cursor-grabbing">
+        <Expander expanded={expanded} onToggle={onToggleExpand} label={name} />
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label={`Drag to reorder ${name}`}
+          className="flex size-4 shrink-0 cursor-grab touch-none items-center justify-center text-text-faint active:cursor-grabbing"
+        >
           <GripVertical className="size-4" />
         </button>
-        <button type="button" onClick={onSelect} className="flex-1 truncate text-start text-sm font-medium">
-          {SECTION_TYPE_LABELS[section.type]}
+        <button
+          type="button"
+          onClick={onSelect}
+          className={`min-w-0 flex-1 cursor-pointer truncate text-start text-[13px] font-medium ${section.visible ? "" : "opacity-60"}`}
+        >
+          {name}
         </button>
-        <button type="button" onClick={onRemove} aria-label="Remove section" className="hidden shrink-0 text-zinc-400 hover:text-red-500 group-hover:block">
-          <Trash2 className="size-3.5" />
-        </button>
-        <Toggle checked={section.visible} onChange={onToggleVisible} />
+        <VisibilityButton visible={section.visible} name={name} onToggle={onToggleVisible} />
       </div>
     </div>
   );
 }
 
-// Thin composition over TreeNode: Header (static, expandable) -> sortable
-// list of body sections (each expandable to its own block tree) -> Footer
-// (static, expandable). Replaces the old flat list + Phase 6's
-// ElementDragZone entirely — every block/sub-block level renders through
-// the one recursive TreeNode component instead.
+// The Sections tab: HEADER (announcement bar, Header with its blocks), TEMPLATE (the page's sections,
+// drag to reorder, "+ Add section") and FOOTER, each group collapsible. Clicking a row opens its
+// settings in the same panel (the drill-in); the eye toggles visibility without opening it.
 export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
-  const { config, selectedId, selectNode, toggleSectionVisibility, reorderSections, addSection, removeSection, toggleBlockVisibility, removeBlock, reorderBlocks, addBlock, setIsDragging } = editor;
+  const { config, selectedId, selectNode, toggleSectionVisibility, reorderSections, addSection, toggleBlockVisibility, removeBlock, reorderBlocks, addBlock, setIsDragging } = editor;
   const [addSectionOpen, setAddSectionOpen] = useState(false);
   const [addBlockRequest, setAddBlockRequest] = useState<AddBlockRequest | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  // The tree only mounts in the browser, after the editor has loaded, so storage can be read here.
+  const [collapsed, setCollapsed] = useState<Set<GroupKey>>(() => (typeof window === "undefined" ? new Set() : readCollapsed()));
+  const [drag, setDrag] = useState<{ activeId: string; overId: string | null } | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -134,31 +201,36 @@ export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const prevSelectedIdRef = useRef<string | null>(null);
 
-  // Syncs the tree to a selection made elsewhere — specifically, a
-  // double-click in the live preview (PreviewInteraction.tsx ->
-  // PreviewFrame.tsx -> selectNode) — by expanding the block's containing
-  // section (or Header/Footer) if collapsed and scrolling it into view.
-  // Doesn't re-run for a selection the tree's own click already made (same
-  // id twice in a row is a no-op here, harmless either way).
+  // A selection made elsewhere (a preview click, a search result) expands the group and the row that
+  // contains it, so Back lands on a tree that shows where the item lives.
   useEffect(() => {
     if (!config || !selectedId || selectedId === prevSelectedIdRef.current) return;
     prevSelectedIdRef.current = selectedId;
 
     let containingId: string | null = null;
-    if (selectedId === HEADER_CHROME_ID || findNodeInTree(config.header.blocks, selectedId)) {
-      containingId = HEADER_CHROME_ID;
+    let group: GroupKey = "template";
+    if (selectedId === ANNOUNCEMENT_CHROME_ID) {
+      group = "header";
+    } else if (selectedId === HEADER_CHROME_ID || findNodeInTree(config.header.blocks, selectedId)) {
+      containingId = selectedId === HEADER_CHROME_ID ? null : HEADER_CHROME_ID;
+      group = "header";
     } else if (selectedId === FOOTER_CHROME_ID || findNodeInTree(config.footer.blocks, selectedId)) {
-      containingId = FOOTER_CHROME_ID;
+      containingId = selectedId === FOOTER_CHROME_ID ? null : FOOTER_CHROME_ID;
+      group = "footer";
     } else {
-      containingId = config.sections.find((s) => s.id === selectedId || findNodeInTree(s.blocks, selectedId))?.id ?? null;
+      containingId = config.sections.find((s) => findNodeInTree(s.blocks, selectedId))?.id ?? null;
     }
-    if (!containingId) return;
-
-    const resolvedId = containingId;
-    setExpandedIds((prev) => (prev.has(resolvedId) ? prev : new Set(prev).add(resolvedId)));
-    requestAnimationFrame(() => {
-      containerRef.current?.querySelector(`[data-section-row="${window.CSS.escape(resolvedId)}"]`)?.scrollIntoView({ block: "nearest" });
+    setCollapsed((prev) => {
+      if (!prev.has(group)) return prev;
+      const next = new Set(prev);
+      next.delete(group);
+      writeCollapsed(next);
+      return next;
     });
+    if (containingId) {
+      const resolvedId = containingId;
+      setExpandedIds((prev) => (prev.has(resolvedId) ? prev : new Set(prev).add(resolvedId)));
+    }
   }, [selectedId, config]);
 
   if (!config) return null;
@@ -172,20 +244,40 @@ export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
     });
   }
 
+  function toggleGroup(group: GroupKey) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      writeCollapsed(next);
+      return next;
+    });
+  }
+
   const ordered = [...config.sections].sort((a, b) => a.order - b.order);
+  const orderedIds = ordered.map((s) => s.id);
+
+  function handleDragOver(event: DragOverEvent) {
+    setDrag({ activeId: String(event.active.id), overId: event.over ? String(event.over.id) : null });
+  }
 
   function handleDragEnd(event: DragEndEvent) {
     setIsDragging(false);
+    setDrag(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const ids = ordered.map((s) => s.id);
-    const oldIndex = ids.indexOf(String(active.id));
-    const newIndex = ids.indexOf(String(over.id));
+    const oldIndex = orderedIds.indexOf(String(active.id));
+    const newIndex = orderedIds.indexOf(String(over.id));
     if (oldIndex === -1 || newIndex === -1) return;
-    const next = [...ids];
+    const next = [...orderedIds];
     next.splice(oldIndex, 1);
     next.splice(newIndex, 0, String(active.id));
     reorderSections(next);
+  }
+
+  function dropLineFor(id: string): "before" | "after" | null {
+    if (!drag || !drag.overId || drag.overId !== id || drag.overId === drag.activeId) return null;
+    return orderedIds.indexOf(drag.overId) < orderedIds.indexOf(drag.activeId) ? "before" : "after";
   }
 
   function treeNodeFor(container: BlockContainerRef, containerKind: "header" | "footer" | ThemeSection["type"], blocks: ThemeSection["blocks"]) {
@@ -200,88 +292,107 @@ export default function SectionTree({ editor }: { editor: ThemeEditorState }) {
         onSelect={selectNode}
         onToggleVisibility={(id) => toggleBlockVisibility(container, id)}
         onRemove={(id) => removeBlock(container, id)}
-        onReorder={(parentBlockId, orderedIds) => reorderBlocks(container, parentBlockId, orderedIds)}
+        onReorder={(parentBlockId, ids) => reorderBlocks(container, parentBlockId, ids)}
         onAddBlock={(parentBlockId, types) => setAddBlockRequest({ container, parentBlockId, types })}
         onDragActiveChange={setIsDragging}
       />
     );
   }
 
+  const announcement = config.header.settings.announcementBar as AnnouncementBarConfig | undefined;
+  const announcementOn = !!announcement?.enabled;
+
   return (
-    <div ref={containerRef} className="flex h-full flex-col gap-3 p-3">
-      <div data-section-row={ANNOUNCEMENT_CHROME_ID}>
-        <ChromeRow
-          label="Announcement bar"
-          Icon={Megaphone}
-          selected={selectedId === ANNOUNCEMENT_CHROME_ID}
-          expanded={false}
-          onSelect={() => selectNode(ANNOUNCEMENT_CHROME_ID)}
-          onToggleExpand={() => selectNode(ANNOUNCEMENT_CHROME_ID)}
-          hideExpander
-        />
-      </div>
+    <div ref={containerRef} className="flex flex-col gap-1 p-2">
+      <section aria-label="Header">
+        <GroupLabel label="Header" collapsed={collapsed.has("header")} onToggle={() => toggleGroup("header")} />
+        {!collapsed.has("header") && (
+          <div className="space-y-0.5">
+            <ChromeRow
+              rowId={ANNOUNCEMENT_CHROME_ID}
+              label="Announcement bar"
+              selected={selectedId === ANNOUNCEMENT_CHROME_ID}
+              onSelect={() => selectNode(ANNOUNCEMENT_CHROME_ID)}
+              dimmed={!announcementOn}
+              trailing={
+                <VisibilityButton visible={announcementOn} name="Announcement bar" onToggle={() => editor.setAnnouncementEnabled(!announcementOn)} />
+              }
+            />
+            <ChromeRow
+              rowId={HEADER_CHROME_ID}
+              label="Header"
+              selected={selectedId === HEADER_CHROME_ID}
+              onSelect={() => selectNode(HEADER_CHROME_ID)}
+              expander={<Expander expanded={expandedIds.has(HEADER_CHROME_ID)} onToggle={() => toggleExpanded(HEADER_CHROME_ID)} label="Header" />}
+            />
+            {expandedIds.has(HEADER_CHROME_ID) && treeNodeFor({ kind: "header" }, "header", config.header.blocks)}
+          </div>
+        )}
+      </section>
 
-      <div data-section-row={HEADER_CHROME_ID}>
-        <ChromeRow
-          label="Header"
-          Icon={Layout}
-          selected={selectedId === HEADER_CHROME_ID}
-          expanded={expandedIds.has(HEADER_CHROME_ID)}
-          onSelect={() => selectNode(HEADER_CHROME_ID)}
-          onToggleExpand={() => toggleExpanded(HEADER_CHROME_ID)}
-        />
-      </div>
-      {expandedIds.has(HEADER_CHROME_ID) && treeNodeFor({ kind: "header" }, "header", config.header.blocks)}
+      <section aria-label="Template">
+        <GroupLabel label="Template" collapsed={collapsed.has("template")} onToggle={() => toggleGroup("template")} />
+        {!collapsed.has("template") && (
+          <div className="space-y-0.5">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={(e) => {
+                setIsDragging(true);
+                setDrag({ activeId: String(e.active.id), overId: null });
+              }}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => {
+                setIsDragging(false);
+                setDrag(null);
+              }}
+            >
+              <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
+                {ordered.map((section) => (
+                  <div key={section.id}>
+                    <SortableSectionRow
+                      section={section}
+                      selected={selectedId === section.id}
+                      expanded={expandedIds.has(section.id)}
+                      dropLine={dropLineFor(section.id)}
+                      onSelect={() => selectNode(section.id)}
+                      onToggleVisible={() => toggleSectionVisibility(section.id)}
+                      onToggleExpand={() => toggleExpanded(section.id)}
+                    />
+                    {expandedIds.has(section.id) &&
+                      treeNodeFor({ kind: "section", sectionId: section.id, sectionType: section.type }, section.type, section.blocks)}
+                  </div>
+                ))}
+              </SortableContext>
+            </DndContext>
+            <button
+              type="button"
+              onClick={() => setAddSectionOpen(true)}
+              className="mt-1 flex h-[34px] w-full cursor-pointer items-center justify-center gap-1.5 rounded-md border border-dashed border-border text-[13px] font-medium text-text-muted hover:border-accent hover:text-accent-text dark:border-white/15"
+            >
+              <Plus className="size-4" aria-hidden />
+              Add section
+            </button>
+          </div>
+        )}
+      </section>
 
-      <div className="flex-1 space-y-1.5 overflow-y-auto">
-        <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Template</p>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={() => setIsDragging(true)}
-          onDragEnd={handleDragEnd}
-          onDragCancel={() => setIsDragging(false)}
-        >
-          <SortableContext items={ordered.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-            {ordered.map((section) => (
-              <div key={section.id} data-section-row={section.id}>
-                <SortableSectionRow
-                  section={section}
-                  selected={selectedId === section.id}
-                  expanded={expandedIds.has(section.id)}
-                  onSelect={() => selectNode(section.id)}
-                  onToggleVisible={() => toggleSectionVisibility(section.id)}
-                  onToggleExpand={() => toggleExpanded(section.id)}
-                  onRemove={() => removeSection(section.id)}
-                />
-                {expandedIds.has(section.id) &&
-                  treeNodeFor({ kind: "section", sectionId: section.id, sectionType: section.type }, section.type, section.blocks)}
-              </div>
-            ))}
-          </SortableContext>
-        </DndContext>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setAddSectionOpen(true)}
-        className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-black/15 py-2 text-sm font-medium text-zinc-500 hover:border-black/30 hover:text-zinc-700 dark:border-white/15 dark:hover:border-white/30 dark:hover:text-zinc-300"
-      >
-        <Plus className="size-4" />
-        Add section
-      </button>
-
-      <div data-section-row={FOOTER_CHROME_ID}>
-        <ChromeRow
-          label="Footer"
-          Icon={PanelBottom}
-          selected={selectedId === FOOTER_CHROME_ID}
-          expanded={expandedIds.has(FOOTER_CHROME_ID)}
-          onSelect={() => selectNode(FOOTER_CHROME_ID)}
-          onToggleExpand={() => toggleExpanded(FOOTER_CHROME_ID)}
-        />
-      </div>
-      {expandedIds.has(FOOTER_CHROME_ID) && treeNodeFor({ kind: "footer" }, "footer", config.footer.blocks)}
+      <section aria-label="Footer">
+        <GroupLabel label="Footer" collapsed={collapsed.has("footer")} onToggle={() => toggleGroup("footer")} />
+        {!collapsed.has("footer") && (
+          <div className="space-y-0.5">
+            <ChromeRow
+              rowId={FOOTER_CHROME_ID}
+              label="Footer"
+              selected={selectedId === FOOTER_CHROME_ID}
+              onSelect={() => selectNode(FOOTER_CHROME_ID)}
+              expander={<Expander expanded={expandedIds.has(FOOTER_CHROME_ID)} onToggle={() => toggleExpanded(FOOTER_CHROME_ID)} label="Footer" />}
+            />
+            {expandedIds.has(FOOTER_CHROME_ID) && treeNodeFor({ kind: "footer" }, "footer", config.footer.blocks)}
+          </div>
+        )}
+      </section>
 
       {addSectionOpen && (
         <AddSectionModal

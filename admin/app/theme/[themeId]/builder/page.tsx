@@ -7,24 +7,25 @@ import { getShop } from "@/lib/api";
 import type { Shop } from "@/lib/types";
 import PageLoader from "@/components/ui/PageLoader";
 import BuilderTopBar from "@/components/theme-builder/BuilderTopBar";
-import ModeSwitcher from "@/components/theme-builder/ModeSwitcher";
-import SectionTree from "@/components/theme-builder/SectionTree";
-import ThemeSettingsList from "@/components/theme-builder/ThemeSettingsList";
-import LayoutList from "@/components/theme-builder/LayoutList";
-import PreviewFrame from "@/components/theme-builder/PreviewFrame";
-import SettingsPanel from "@/components/theme-builder/SettingsPanel";
+import BuilderPanel from "@/components/theme-builder/BuilderPanel";
+import PreviewFrame, { PreviewPageSelector } from "@/components/theme-builder/PreviewFrame";
+import SegmentedToggle from "@/components/ui/SegmentedToggle";
+import type { DevicePreview } from "@/lib/useThemeEditor";
 
-// Full-viewport three-panel editor — reached via AppChrome.tsx's
-// FULL_BLEED_PATTERN, which skips TopBar/banners/the standard p-6 <main>
-// padding for this exact route shape.
+// The panel is a fixed column from 1024px up and a slide-over drawer below it.
+const WIDE_QUERY = "(min-width: 1024px)";
+
+// Full-viewport editor, reached via AppChrome.tsx's FULL_BLEED_PATTERN (no admin chrome around it):
+// a top bar, ONE 320px left panel (Sections / Design / Settings, with drill-in) and the preview,
+// which takes all the remaining width.
 export default function ThemeBuilderPage() {
   const params = useParams<{ themeId: string }>();
   const themeId = Number(params.themeId);
   const editor = useThemeEditor(themeId);
-  // Full Shop, not just its subdomain — PreviewFrame needs domainType/
-  // customDomain too, to build the real per-shop preview address (see its
-  // own comment).
+  // Full Shop, not just its subdomain: PreviewFrame needs domainType/customDomain too, to build the
+  // real per-shop preview address (see its own comment).
   const [shop, setShop] = useState<Shop | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     getShop()
@@ -32,28 +33,59 @@ export default function ThemeBuilderPage() {
       .catch(() => {});
   }, []);
 
+  // On a narrow screen, selecting something (in the preview, or by a deep link) opens the drawer on
+  // its settings. Adjusted during render when the selection changes (React's "store information from
+  // previous renders" pattern), not in an effect.
+  const { selectedId } = editor;
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(selectedId);
+  if (selectedId !== lastSelectedId) {
+    setLastSelectedId(selectedId);
+    if (selectedId && typeof window !== "undefined" && typeof window.matchMedia === "function" && !window.matchMedia(WIDE_QUERY).matches) {
+      setDrawerOpen(true);
+    }
+  }
+
   if (editor.loading || !editor.config || !shop) {
     return <PageLoader />;
   }
 
   return (
-    <div className="flex h-screen flex-col">
-      <BuilderTopBar editor={editor} />
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex w-64 shrink-0 flex-col overflow-hidden border-e border-border dark:border-white/10">
-          <ModeSwitcher mode={editor.editorMode} onChange={editor.setEditorMode} />
-          <div className="flex-1 overflow-y-auto">
-            {editor.editorMode === "sections" && <SectionTree editor={editor} />}
-            {editor.editorMode === "theme_settings" && <ThemeSettingsList editor={editor} />}
-            {editor.editorMode === "layout" && <LayoutList editor={editor} />}
-          </div>
-        </div>
-        <div className="min-w-0 flex-1">
+    <div className="flex h-dvh flex-col overflow-hidden bg-page">
+      <BuilderTopBar
+        editor={editor}
+        shopName={shop.displayName?.trim() || shop.name}
+        panelOpen={drawerOpen}
+        onTogglePanel={() => setDrawerOpen((v) => !v)}
+      />
+      {/* Below 768px the page selector and device toggle do not fit in the bar: their own row. */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-surface px-2 py-1.5 dark:border-white/10 dark:bg-zinc-900 md:hidden">
+        <PreviewPageSelector previewPath={editor.previewPath} setPreviewPath={editor.setPreviewPath} />
+        <SegmentedToggle<DevicePreview>
+          value={editor.device}
+          options={[
+            { value: "desktop", label: "Desktop" },
+            { value: "tablet", label: "Tablet" },
+            { value: "mobile", label: "Mobile" },
+          ]}
+          onChange={editor.setDevice}
+        />
+      </div>
+      <div className="relative flex min-h-0 flex-1">
+        {drawerOpen && (
+          <div aria-hidden className="absolute inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setDrawerOpen(false)} />
+        )}
+        <aside
+          aria-label="Theme builder panel"
+          data-testid="builder-panel"
+          className={`absolute inset-y-0 start-0 z-40 w-[min(320px,88vw)] border-e border-border shadow-xl transition-transform dark:border-white/10 lg:static lg:z-auto lg:w-[320px] lg:shrink-0 lg:shadow-none ${
+            drawerOpen ? "" : "max-lg:invisible max-lg:-translate-x-full max-lg:rtl:translate-x-full"
+          }`}
+        >
+          <BuilderPanel editor={editor} />
+        </aside>
+        <main className="min-w-0 flex-1">
           <PreviewFrame editor={editor} shop={shop} />
-        </div>
-        <div className="w-80 shrink-0 overflow-y-auto border-s border-border dark:border-white/10">
-          <SettingsPanel editor={editor} />
-        </div>
+        </main>
       </div>
     </div>
   );

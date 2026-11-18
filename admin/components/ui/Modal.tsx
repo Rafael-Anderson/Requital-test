@@ -17,7 +17,7 @@
 // splitting the footer into a separate DOM region outside it (which would
 // break `type="submit"`). The `footer` prop is only for non-form modals
 // (confirm dialogs) that don't need that.
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import Tooltip from "./Tooltip";
@@ -44,6 +44,7 @@ export default function Modal({
   bodyClassName = "",
   panelClassName = "",
   tall = false,
+  trapFocus = false,
 }: {
   onClose: () => void;
   size?: ModalSize;
@@ -55,9 +56,48 @@ export default function Modal({
   // A long form: the panel takes ~90% of the viewport height instead of hugging its content,
   // so the body scrolls inside it and the footer stays in its own row.
   tall?: boolean;
+  // Keep Tab / Shift+Tab inside the dialog, focus it on open and give focus back on close. Opt-in so
+  // existing modals keep their current behaviour.
+  trapFocus?: boolean;
 }) {
   const [closing, setClosing] = useState(false);
   const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!trapFocus) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const selector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusables = () => Array.from(panel.querySelectorAll<HTMLElement>(selector)).filter((el) => el.offsetParent !== null || el === document.activeElement);
+    // Start in the body (the first field), not on the header's close button.
+    const bodyFirst = panel.querySelector<HTMLElement>(`.modal-scroll :is(${selector})`);
+    (bodyFirst ?? focusables()[0] ?? panel).focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !panel!.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (document.activeElement === last || !panel!.contains(document.activeElement))) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      previouslyFocused?.focus?.();
+    };
+  }, [trapFocus]);
 
   function requestClose() {
     setClosing(true);
@@ -87,6 +127,8 @@ export default function Modal({
       className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 ${closing ? "" : "backdrop-in"}`}
     >
       <div
+        ref={panelRef}
+        tabIndex={trapFocus ? -1 : undefined}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title !== undefined ? titleId : undefined}
