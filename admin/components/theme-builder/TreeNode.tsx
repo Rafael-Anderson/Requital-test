@@ -17,8 +17,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronRight, GripVertical, Plus, Trash2 } from "lucide-react";
-import Toggle from "@/components/ui/Toggle";
+import { ChevronRight, GripVertical, Plus } from "lucide-react";
+import VisibilityButton from "./VisibilityButton";
 import { BLOCK_TYPE_LABELS, MAX_BLOCK_DEPTH, allowedBlockTypesFor, type BlockContainer, type ThemeBlock } from "@/lib/types";
 
 interface TreeNodeListProps {
@@ -30,7 +30,8 @@ interface TreeNodeListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onToggleVisibility: (id: string) => void;
-  onRemove: (id: string) => void;
+  // Kept for callers; removing a block now happens from its drill-in footer.
+  onRemove?: (id: string) => void;
   onReorder: (parentBlockId: string | null, orderedIds: string[]) => void;
   onAddBlock: (parentBlockId: string | null, allowedTypes: string[]) => void;
   onDragActiveChange: (active: boolean) => void;
@@ -52,10 +53,11 @@ function BlockRow({
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={isDragging ? "opacity-50" : ""}>
       <div
-        className={`group flex items-center gap-1.5 rounded-lg border px-2 py-1.5 ${
-          selected ? "border-accent bg-accent/5" : "border-transparent hover:bg-black/5 dark:hover:bg-white/10"
+        data-tree-row={block.id}
+        className={`group flex h-[34px] items-center gap-1.5 rounded-md pe-1 ${
+          selected ? "bg-accent-tint text-accent-text" : "hover:bg-black/5 dark:hover:bg-white/10"
         }`}
-        style={{ paddingInlineStart: 8 + props.depth * 16 }}
+        style={{ paddingInlineStart: 4 + props.depth * 14 }}
       >
         {canExpand ? (
           <button
@@ -88,18 +90,18 @@ function BlockRow({
             <GripVertical className="size-3.5" />
           </button>
         )}
-        <button type="button" onClick={() => props.onSelect(block.id)} className="flex-1 truncate text-start text-sm">
-          {BLOCK_TYPE_LABELS[block.type] ?? block.type}
-        </button>
         <button
           type="button"
-          onClick={() => props.onRemove(block.id)}
-          aria-label="Remove block"
-          className="hidden shrink-0 text-zinc-400 hover:text-red-500 group-hover:block"
+          onClick={() => props.onSelect(block.id)}
+          className={`min-w-0 flex-1 truncate text-start text-[13px] ${block.visible ? "" : "opacity-60"}`}
         >
-          <Trash2 className="size-3.5" />
+          {BLOCK_TYPE_LABELS[block.type] ?? block.type}
         </button>
-        <Toggle checked={block.visible} onChange={() => props.onToggleVisibility(block.id)} />
+        <VisibilityButton
+          visible={block.visible}
+          name={BLOCK_TYPE_LABELS[block.type] ?? block.type}
+          onToggle={() => props.onToggleVisibility(block.id)}
+        />
       </div>
       {canExpand && expanded && (
         <TreeNode
@@ -160,8 +162,8 @@ export default function TreeNode(props: TreeNodeListProps) {
         <button
           type="button"
           onClick={() => props.onAddBlock(props.parentBlockId, allowedTypes)}
-          className="flex items-center gap-1 text-xs font-medium text-zinc-400 hover:text-accent"
-          style={{ paddingInlineStart: 8 + (props.depth + 1) * 16 }}
+          className="flex h-7 items-center gap-1 text-xs font-medium text-text-muted hover:text-accent-text"
+          style={{ paddingInlineStart: 4 + (props.depth + 1) * 14 }}
         >
           <Plus className="size-3" /> Add block
         </button>

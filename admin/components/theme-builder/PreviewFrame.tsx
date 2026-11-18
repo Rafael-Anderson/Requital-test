@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Search, X, ChevronDown, Check } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronDown, Copy, EyeOff, Eye, Minus, Plus } from "lucide-react";
 import { STOREFRONT_URL, storefrontUrlFor, getThemePreviewToken, listCollections, listProducts } from "@/lib/api";
 import SelectionActionBar from "./SelectionActionBar";
 import DropdownMenu from "@/components/ui/DropdownMenu";
 import type { Shop, Collection, Product } from "@/lib/types";
-import BuilderSettingsSearch from "./BuilderSettingsSearch";
 import {
   HEADER_CHROME_ID,
   FOOTER_CHROME_ID,
@@ -14,13 +13,40 @@ import {
   type ThemeEditorState,
   type DevicePreview,
 } from "@/lib/useThemeEditor";
-import type { ThemeConfig } from "@/lib/types";
+import { SECTION_TYPE_LABELS, type ThemeConfig } from "@/lib/types";
 
-const DEVICE_WIDTH: Record<DevicePreview, string> = {
-  desktop: "100%",
-  tablet: "768px",
-  mobile: "390px",
+// Fixed device widths in CSS pixels; desktop fills the stage (divided by the zoom, so zooming out
+// shows a wider desktop viewport).
+const DEVICE_WIDTH_PX: Record<Exclude<DevicePreview, "desktop">, number> = {
+  tablet: 768,
+  mobile: 390,
 };
+
+export const ZOOM_STEPS = [25, 50, 67, 75, 90, 100, 110, 125, 150] as const;
+// The stage's inner padding around the preview card, per side.
+const STAGE_PAD = 16;
+
+/**
+ * The preview card's geometry for a stage size, device and zoom. "fit" = the largest zoom (at most
+ * 100%) at which the device width fits the stage. The card is the visible (scaled) box; the iframe
+ * inside it is laid out at frameWidth x frameHeight and scaled by `scale`, so the storefront's own
+ * scrollbar is the only vertical scrollbar.
+ */
+export function previewGeometry(
+  stage: { width: number; height: number },
+  device: DevicePreview,
+  zoom: number | "fit",
+): { scale: number; frameWidth: number; frameHeight: number; cardWidth: number; cardHeight: number } {
+  const availW = Math.max(0, stage.width - STAGE_PAD * 2);
+  const availH = Math.max(0, stage.height - STAGE_PAD * 2);
+  const deviceW = device === "desktop" ? null : DEVICE_WIDTH_PX[device];
+  const fit = deviceW ? Math.min(1, availW / deviceW) : 1;
+  const scale = zoom === "fit" ? fit : zoom / 100;
+  const frameWidth = deviceW ?? (scale > 0 ? availW / scale : availW);
+  const cardWidth = frameWidth * scale;
+  const cardHeight = availH;
+  return { scale, frameWidth, frameHeight: scale > 0 ? cardHeight / scale : cardHeight, cardWidth, cardHeight };
+}
 
 const POST_DEBOUNCE_MS = 150;
 
@@ -137,14 +163,12 @@ function resolvePreviewUrl(
 // those two options (rather than linking to a slug that 404s).
 // The settings search lives in BuilderSettingsSearch.tsx (it searches the whole builder).
 
-function PageSwitcher({
+export function PreviewPageSelector({
   previewPath,
   setPreviewPath,
-  editor,
 }: {
   previewPath: string;
   setPreviewPath: (path: string) => void;
-  editor: ThemeEditorState;
 }) {
   // Bug 4's ask: show the actual collection/product being previewed by
   // name, with a picker when more than one exists - fetch the full lists
@@ -194,19 +218,19 @@ function PageSwitcher({
   }
 
   return (
-    <div className="flex items-center gap-2 border-b border-black/10 bg-white px-4 py-2 dark:border-white/10 dark:bg-zinc-900">
-      <span className="text-xs font-medium text-zinc-500">Preview page</span>
-      <DropdownMenu
+    <DropdownMenu
         align="left"
         panelClassName="min-w-[240px] max-h-96 overflow-y-auto"
         trigger={({ toggle }) => (
           <button
             type="button"
             onClick={toggle}
-            className="flex h-8 items-center gap-2 rounded-lg border border-black/10 bg-surface px-2 text-sm dark:border-white/15 dark:bg-zinc-900"
+            aria-label={`Preview page: ${currentLabel}`}
+            className="flex h-8 max-w-56 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 text-[13px] dark:border-white/15 dark:bg-zinc-900"
           >
-            <span className="max-w-40 truncate">{currentLabel}</span>
-            <ChevronDown className="size-3.5 shrink-0 text-zinc-400" />
+            <span className="shrink-0 text-text-muted">Page:</span>
+            <span className="truncate font-medium">{currentLabel}</span>
+            <ChevronDown className="size-3.5 shrink-0 text-text-faint" />
           </button>
         )}
       >
@@ -245,9 +269,7 @@ function PageSwitcher({
             )}
           </>
         )}
-      </DropdownMenu>
-      <BuilderSettingsSearch editor={editor} />
-    </div>
+    </DropdownMenu>
   );
 }
 
@@ -272,7 +294,23 @@ export default function PreviewFrame({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const legacyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, reorderSections, publishVersion, isDragging, previewPath, setPreviewPath } = editor;
+  const { theme, config, legacyTheme, device, selectNode, setEditorMode, setThemeSettingsCategory, reorderBlocks, reorderSections, publishVersion, isDragging, previewPath } = editor;
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [stage, setStage] = useState({ width: 0, height: 0 });
+  const [zoom, setZoom] = useState<number | "fit">("fit");
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const measure = () => setStage({ width: el.clientWidth, height: el.clientHeight });
+    // ResizeObserver reports the initial size too (asynchronously); rAF covers environments without it.
+    if (typeof ResizeObserver === "undefined") {
+      const id = requestAnimationFrame(measure);
+      return () => cancelAnimationFrame(id);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // The reverse-channel listener below reads this instead of closing over
   // `config` directly, so that effect doesn't need `config` in its
   // dependency array — without this, the listener would tear down and
@@ -284,6 +322,11 @@ export default function PreviewFrame({
   useEffect(() => {
     configRef.current = config;
   }, [config]);
+  // What is selected right now, for the deselect handler below (same no-resubscribe reasoning).
+  const selectionKindRef = useRef(editor.selection?.kind ?? null);
+  useEffect(() => {
+    selectionKindRef.current = editor.selection?.kind ?? null;
+  }, [editor.selection?.kind]);
 
   // Session-cookie migration (security audit finding #1), phase 2 — fetches
   // the short-lived theme_preview token resolvePreviewUrl needs (see that
@@ -504,9 +547,13 @@ export default function PreviewFrame({
         return;
       }
       if (data.type === "element-deselected") {
+        // The preview deselects an ELEMENT (a block): on its own navigation, on a click on empty
+        // space, on its toolbar's close. It must not close a section, header, footer or announcement
+        // drill-in that the merchant opened from the panel, a search result or a deep link (the
+        // preview sends this every time its document mounts).
         // eslint-disable-next-line no-console
         console.log("[PREVIEW-DIAG:admin] handled: element-deselected");
-        selectNode(null);
+        if (selectionKindRef.current === "block") selectNode(null);
         return;
       }
       // Top-level section drag (SectionWrapper.tsx, preview-mode only) —
@@ -616,31 +663,98 @@ export default function PreviewFrame({
 
   if (!theme) return null;
 
+  const geo = previewGeometry(stage, device, zoom);
+  const percent = Math.round(geo.scale * 100);
+  const selectedSection = editor.selection?.kind === "section" ? editor.selection.section : null;
+  const orderedIds = config ? [...config.sections].sort((a, b) => a.order - b.order).map((sec) => sec.id) : [];
+  const selectedIndex = selectedSection ? orderedIds.indexOf(selectedSection.id) : -1;
+
+  function stepZoom(direction: 1 | -1) {
+    const current = Math.round(geo.scale * 100);
+    const steps = ZOOM_STEPS as readonly number[];
+    const next =
+      direction === 1 ? steps.find((z) => z > current) ?? steps[steps.length - 1] : [...steps].reverse().find((z) => z < current) ?? steps[0];
+    setZoom(next);
+  }
+
+  function moveSelected(delta: -1 | 1) {
+    if (!selectedSection) return;
+    const updated = editor.moveSection(selectedSection.id, delta);
+    if (updated) postConfigImmediate(updated);
+  }
+
   return (
-    <div className="flex h-full flex-col bg-zinc-100 dark:bg-zinc-950">
-      <PageSwitcher
-        previewPath={previewPath}
-        setPreviewPath={setPreviewPath}
-        editor={editor}
-      />
-      <div className="flex flex-1 items-start justify-center overflow-auto p-4">
+    <div className="relative flex h-full min-h-0 flex-col bg-zinc-100 dark:bg-zinc-950">
+      <div
+        ref={stageRef}
+        data-testid="preview-stage"
+        className={`flex min-h-0 flex-1 justify-center overflow-y-hidden ${geo.cardWidth > stage.width ? "overflow-x-auto" : "overflow-x-hidden"}`}
+        style={{ padding: STAGE_PAD }}
+      >
         {src ? (
-          <iframe
-            ref={iframeRef}
-            key={`${theme.id}-${publishVersion}`}
-            title="Storefront preview"
-            src={src}
-            onLoad={handleIframeLoad}
-            style={{ width: DEVICE_WIDTH[device], maxWidth: "100%", pointerEvents: isDragging ? "none" : undefined }}
-            className="h-full min-h-[600px] rounded-lg border border-black/10 bg-white shadow-sm dark:border-white/10"
-          />
+          <div
+            dir="ltr"
+            data-testid="preview-card"
+            className="relative shrink-0 overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm dark:border-white/10"
+            style={{ width: geo.cardWidth || undefined, height: geo.cardHeight || undefined }}
+          >
+            <iframe
+              ref={iframeRef}
+              key={`${theme.id}-${publishVersion}`}
+              title="Storefront preview"
+              src={src}
+              onLoad={handleIframeLoad}
+              style={{
+                width: geo.frameWidth || "100%",
+                height: geo.frameHeight || "100%",
+                transform: geo.scale !== 1 ? `scale(${geo.scale})` : undefined,
+                transformOrigin: "0 0",
+                pointerEvents: isDragging ? "none" : undefined,
+              }}
+              className="block border-0 bg-white"
+            />
+            {selectedSection && (
+              <>
+                <span
+                  data-testid="preview-selection-chip"
+                  className="pointer-events-none absolute start-2 top-2 z-10 rounded-md bg-accent px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm"
+                >
+                  {SECTION_TYPE_LABELS[selectedSection.type]}
+                </span>
+                <div
+                  data-testid="preview-selection-toolbar"
+                  className="absolute end-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-black/10 bg-surface p-0.5 shadow-md dark:border-white/15 dark:bg-zinc-900"
+                >
+                  <ToolbarButton label="Move section up" disabled={selectedIndex <= 0} onClick={() => moveSelected(-1)}>
+                    <ArrowUp className="size-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton
+                    label="Move section down"
+                    disabled={selectedIndex < 0 || selectedIndex >= orderedIds.length - 1}
+                    onClick={() => moveSelected(1)}
+                  >
+                    <ArrowDown className="size-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton label="Duplicate section" onClick={() => editor.duplicateSection(selectedSection.id)}>
+                    <Copy className="size-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton
+                    label={selectedSection.visible ? "Hide section" : "Show section"}
+                    onClick={() => editor.toggleSectionVisibility(selectedSection.id)}
+                  >
+                    {selectedSection.visible ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                  </ToolbarButton>
+                </div>
+              </>
+            )}
+          </div>
         ) : null}
         {/* Additive-only (storefront-v2 Phase 4C) — see SelectionActionBar's
             own comment for why this doesn't touch the iframe's own
             click-to-select/drag code (owned by fix/theme-builder-dnd-select). */}
         <SelectionActionBar editor={editor} iframeRef={iframeRef} previewOrigin={previewOrigin} />
         {!src && (
-          <div className="flex h-full min-h-[600px] w-full max-w-2xl flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-black/15 bg-white text-center dark:border-white/15 dark:bg-zinc-900">
+          <div className="flex h-full w-full max-w-2xl flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-black/15 bg-white text-center dark:border-white/15 dark:bg-zinc-900">
             <p className="text-sm font-medium">Preview unavailable</p>
             <p className="max-w-sm text-xs text-zinc-500">
               This store&apos;s storefront address could not be resolved. Check the storefront URL configuration for this environment.
@@ -648,6 +762,58 @@ export default function PreviewFrame({
           </div>
         )}
       </div>
+      <div
+        role="group"
+        aria-label="Preview zoom"
+        className="absolute bottom-4 end-4 z-20 flex items-center gap-0.5 rounded-full border border-black/10 bg-surface p-1 text-[12px] shadow-md dark:border-white/15 dark:bg-zinc-900"
+      >
+        <ToolbarButton label="Zoom out" round disabled={percent <= ZOOM_STEPS[0]} onClick={() => stepZoom(-1)}>
+          <Minus className="size-3.5" />
+        </ToolbarButton>
+        <span className="w-11 text-center font-medium tabular-nums" aria-live="polite" data-testid="preview-zoom-value">
+          {percent}%
+        </span>
+        <ToolbarButton label="Zoom in" round disabled={percent >= ZOOM_STEPS[ZOOM_STEPS.length - 1]} onClick={() => stepZoom(1)}>
+          <Plus className="size-3.5" />
+        </ToolbarButton>
+        <button
+          type="button"
+          onClick={() => setZoom("fit")}
+          aria-pressed={zoom === "fit"}
+          className={`h-7 cursor-pointer rounded-full px-2.5 font-medium ${zoom === "fit" ? "bg-accent-tint text-accent-text" : "hover:bg-black/5 dark:hover:bg-white/10"}`}
+        >
+          Fit
+        </button>
+      </div>
     </div>
+  );
+}
+
+function ToolbarButton({
+  label,
+  onClick,
+  disabled,
+  round,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  round?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={`flex size-7 cursor-pointer items-center justify-center text-text-muted hover:bg-black/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30 dark:hover:bg-white/10 ${
+        round ? "rounded-full" : "rounded-md"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

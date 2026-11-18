@@ -3,7 +3,7 @@
 // composed of theme sections so it needs its own global category), in the
 // confirmed spec order — the
 // single source of truth for both the left-column category list
-// (components/theme-builder/ThemeSettingsList.tsx) and the right panel's
+// (lib/theme-builder-panel.ts, the Design / Settings tabs) and the drill-in
 // label-to-form dispatch (components/theme-builder/SettingsPanel.tsx), so
 // the two can never drift out of order with each other.
 export const THEME_SETTINGS_CATEGORY_LABELS = [

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { fireEvent, render, waitFor } from "@testing-library/react";
-import PreviewFrame from "./PreviewFrame";
+import { render, waitFor } from "@testing-library/react";
+import PreviewFrame, { previewGeometry } from "./PreviewFrame";
 import { HEADER_CHROME_ID, type ThemeEditorState } from "@/lib/useThemeEditor";
 import type { Shop, Theme, ThemeConfig, ThemeSectionType } from "@/lib/types";
 
@@ -86,8 +86,8 @@ describe("PreviewFrame — incoming postMessage routing", () => {
     );
   });
 
-  it("routes element-deselected to selectNode(null)", async () => {
-    const editor = fixtureEditor();
+  it("routes element-deselected to selectNode(null) while a block is selected", async () => {
+    const editor = fixtureEditor({ selection: { kind: "block" } as ThemeEditorState["selection"] });
     render(<PreviewFrame editor={editor} shop={shop} />);
     await waitFor(() => expect(document.querySelector("iframe")).toBeInTheDocument());
 
@@ -95,6 +95,20 @@ describe("PreviewFrame — incoming postMessage routing", () => {
       { type: "element-deselected" },
       () => expect(editor.selectNode).toHaveBeenCalledWith(null),
     );
+  });
+
+  it("ignores element-deselected while a section is open (the preview sends it every time it mounts)", async () => {
+    const config = fixtureConfig();
+    const editor = fixtureEditor({ config, selection: { kind: "section", section: config.sections[0] } });
+    render(<PreviewFrame editor={editor} shop={shop} />);
+    await waitFor(() => expect(document.querySelector("iframe")).toBeInTheDocument());
+    // Prove the listener is live first, then send the deselect.
+    await postFromPreviewUntil({ type: "theme-section-selected", sectionId: "sec-hero" }, () =>
+      expect(editor.selectNode).toHaveBeenCalledWith("sec-hero"),
+    );
+    postFromPreview({ type: "element-deselected" });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(editor.selectNode).not.toHaveBeenCalledWith(null);
   });
 
   it("routes element-moved to editor.reorderBlocks with a resolved section container and the given order", async () => {
@@ -143,23 +157,49 @@ describe("PreviewFrame — incoming postMessage routing", () => {
   });
 });
 
-describe("PreviewFrame — settings search box (moved into the toolbar, next to Preview page)", () => {
-  it("renders the search input in the same toolbar row as the Preview page selector", () => {
+describe("PreviewFrame — the stage", () => {
+  it("no longer carries the settings search or its own page toolbar (both moved to the top bar)", () => {
     const editor = fixtureEditor();
-    const { getByPlaceholderText, getByText } = render(<PreviewFrame editor={editor} shop={shop} />);
-
-    const toolbarRow = getByText("Preview page").closest("div");
-    const input = getByPlaceholderText("Search settings...");
-    expect(toolbarRow).toContainElement(input);
+    const { queryByPlaceholderText, queryByText } = render(<PreviewFrame editor={editor} shop={shop} />);
+    expect(queryByPlaceholderText("Search settings...")).not.toBeInTheDocument();
+    expect(queryByText("Preview page")).not.toBeInTheDocument();
   });
 
-  it("typing in the search box updates editor.settingsSearchQuery", async () => {
+  it("has a zoom pill: minus, percentage, plus and Fit", () => {
     const editor = fixtureEditor();
-    const { getByPlaceholderText } = render(<PreviewFrame editor={editor} shop={shop} />);
+    const { getByRole, getByText } = render(<PreviewFrame editor={editor} shop={shop} />);
+    const pill = getByRole("group", { name: "Preview zoom" });
+    expect(pill).toContainElement(getByRole("button", { name: "Zoom out" }));
+    expect(pill).toContainElement(getByRole("button", { name: "Zoom in" }));
+    expect(pill).toContainElement(getByText("Fit"));
+    expect(pill).toHaveTextContent("100%");
+  });
+});
 
-    const input = getByPlaceholderText("Search settings...");
-    fireEvent.change(input, { target: { value: "colo" } });
+describe("previewGeometry", () => {
+  const stage = { width: 1032, height: 832 };
 
-    await waitFor(() => expect(editor.setSettingsSearchQuery).toHaveBeenCalledWith("colo"));
+  it("desktop at Fit fills the stage at 100% (the card height is the stage, the iframe scrolls itself)", () => {
+    const g = previewGeometry(stage, "desktop", "fit");
+    expect(g.scale).toBe(1);
+    expect(g.cardWidth).toBe(1000);
+    expect(g.cardHeight).toBe(800);
+    expect(g.frameHeight).toBe(800);
+  });
+
+  it("a device wider than the stage is scaled down to fit at Fit", () => {
+    const g = previewGeometry({ width: 532, height: 832 }, "tablet", "fit");
+    expect(g.scale).toBeCloseTo(500 / 768);
+    expect(g.frameWidth).toBe(768);
+    expect(g.cardWidth).toBeCloseTo(500);
+    expect(g.frameHeight).toBeCloseTo(800 / (500 / 768));
+  });
+
+  it("an explicit zoom scales the frame and keeps the card exactly the scaled size", () => {
+    const g = previewGeometry(stage, "mobile", 50);
+    expect(g.scale).toBe(0.5);
+    expect(g.frameWidth).toBe(390);
+    expect(g.cardWidth).toBe(195);
+    expect(g.frameHeight).toBe(1600);
   });
 });

@@ -24,6 +24,16 @@ import type {
 import { useToast } from "@/components/ui/Toast";
 import { HEADER_PRESETS, FOOTER_PRESETS } from "@/lib/header-footer-presets";
 import type { BuilderContext, SearchTarget } from "@/lib/theme-builder-registry";
+import {
+  parseEntryKey,
+  queryToView,
+  tabForEntry,
+  viewToQuery,
+  viewForSearchTarget,
+  type BuilderTab,
+  type PanelEntry,
+  type PanelView,
+} from "@/lib/theme-builder-panel";
 import { adoptLegacyAnnouncement } from "@/lib/announcement-adopt";
 import type { AnnouncementBarConfig } from "@/lib/types";
 
@@ -37,6 +47,9 @@ export const HEADER_CHROME_ID = "__header__";
 export const FOOTER_CHROME_ID = "__footer__";
 // The persistent announcement bar above the header: a fixed chrome row of the Sections tab.
 export const ANNOUNCEMENT_CHROME_ID = "__announcement__";
+const CHROME_ID_LIST = [ANNOUNCEMENT_CHROME_ID, HEADER_CHROME_ID, FOOTER_CHROME_ID];
+// The query keys that carry the builder panel's view (see the URL sync in useThemeEditor).
+const PANEL_KEYS = ["panel", "node", "open"] as const;
 
 const AUTOSAVE_INTERVAL_MS = 30_000;
 
@@ -211,14 +224,13 @@ export function useThemeEditor(themeId: number) {
   const [legacyTheme, setLegacyTheme] = useState<ThemeSettings | null>(null);
   const [legacyThemeSaving, setLegacyThemeSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [editorMode, setEditorMode] = useState<EditorMode>("sections");
-  // Which of the 18 Theme Settings categories is selected — lives here
-  // (not local component state) so a "Edit scheme" jump link anywhere in
-  // the tree can switch both editorMode and the selected category
-  // together, the same way selecting a section/block does.
-  const [themeSettingsCategory, setThemeSettingsCategory] = useState<string | null>(null);
-  // Same idea as themeSettingsCategory, for Layout mode's own category list.
-  const [layoutCategory, setLayoutCategory] = useState<string | null>(null);
+  // The single left panel (Sections / Design / Settings) and what is drilled into. In the
+  // Sections tab the drill-in is the selected tree node (selectedId); in Design and Settings it is
+  // the open entry (a Theme settings category or a Layout entry, see lib/theme-builder-panel.ts).
+  // editorMode / themeSettingsCategory / layoutCategory below are DERIVED from these, kept so every
+  // existing caller ("Edit scheme" jump links, the preview's product-cards sentinel) still works.
+  const [panelTab, setPanelTab] = useState<BuilderTab>("sections");
+  const [openEntry, setOpenEntry] = useState<PanelEntry | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // True for the duration of any section/block drag (both SectionTree.tsx's
   // own DndContext and every nested TreeNode.tsx one report through this
@@ -275,6 +287,9 @@ export function useThemeEditor(themeId: number) {
   // the legacy themesettings row the first time the builder opens (see the
   // seed effect below).
   const heroBackfillDoneRef = useRef(false);
+  // The URL's panel view (a deep link) is applied once, when the config first loads; the URL is
+  // only written back after that.
+  const deepLinkAppliedRef = useRef(false);
   useEffect(() => {
     configRef.current = config;
   }, [config]);
@@ -309,15 +324,33 @@ export function useThemeEditor(themeId: number) {
       setTheme(t);
       // Best effort: whether ANY theme is published decides which storefront mode we are in.
       // Falls back to this theme's own flag when the list cannot be read.
+      let published = t.isPublished;
       try {
         const all = await listThemes();
-        setShopHasPublishedTheme(all.some((x) => x.isPublished) || t.isPublished);
+        published = all.some((x) => x.isPublished) || t.isPublished;
       } catch {
-        setShopHasPublishedTheme(t.isPublished);
+        // keep this theme's own flag
       }
+      setShopHasPublishedTheme(published);
       setConfig(t.config);
       setDirty(false);
-      setSelectedId(null);
+      if (!deepLinkAppliedRef.current && typeof window !== "undefined") {
+        deepLinkAppliedRef.current = true;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("panel")) {
+          const view = queryToView(
+            params,
+            t.config,
+            { sectionsMode: published, sectionTypesPresent: new Set(t.config.sections.map((sec) => sec.type)) },
+            CHROME_ID_LIST,
+          );
+          setPanelTab(view.tab);
+          if (view.tab === "sections") setSelectedId(view.nodeId);
+          else setOpenEntry(view.entry);
+        }
+      }
+      // The selection is NOT reset here: a deep link may already have opened a drill-in, and in dev
+      // StrictMode this load runs twice. discard() resets it explicitly.
       heroBackfillDoneRef.current = false;
       historyStackRef.current = [t.config];
       historyIndexRef.current = 0;
@@ -555,6 +588,64 @@ export function useThemeEditor(themeId: number) {
 
   function selectNode(id: string | null) {
     setSelectedId(id);
+    // Selecting a node (tree, preview click, search) always shows it: the Sections tab.
+    if (id) setPanelTab("sections");
+  }
+
+  // --- Panel routing (compat layer over panelTab / openEntry) ---
+  const editorMode: EditorMode =
+    panelTab === "sections" ? "sections" : openEntry?.kind === "layout" ? "layout" : "theme_settings";
+  const themeSettingsCategory = openEntry?.kind === "theme" ? openEntry.category : null;
+  const layoutCategory = openEntry?.kind === "layout" ? openEntry.id : null;
+
+  function setEditorMode(mode: EditorMode) {
+    // "sections" is a tab of its own; the other two modes are decided by the entry a caller opens
+    // next (setThemeSettingsCategory / setLayoutCategory), which also picks Design or Settings.
+    if (mode === "sections") setPanelTab("sections");
+  }
+
+  function openPanelEntry(entry: PanelEntry | null) {
+    setOpenEntry(entry);
+    if (entry) setPanelTab(tabForEntry(entry));
+  }
+
+  function setThemeSettingsCategory(category: string | null) {
+    openPanelEntry(category ? parseEntryKey(`theme:${category}`) : null);
+  }
+
+  function setLayoutCategory(id: string | null) {
+    openPanelEntry(id ? parseEntryKey(`layout:${id}`) : null);
+  }
+
+  // Switching tabs returns to that tab's list (the drill-in belongs to the tab it was opened in).
+  function switchTab(tab: BuilderTab) {
+    setPanelTab(tab);
+    if (tab === "sections") setOpenEntry(null);
+    else {
+      setSelectedId(null);
+      setOpenEntry((cur) => (cur && tabForEntry(cur) === tab ? cur : null));
+    }
+  }
+
+  // Back from a drill-in to the tab's list.
+  function closeDrillIn() {
+    if (panelTab === "sections") setSelectedId(null);
+    else setOpenEntry(null);
+  }
+
+  const panelView: PanelView =
+    panelTab === "sections" ? { tab: "sections", nodeId: selectedId } : { tab: panelTab, entry: openEntry };
+
+  // Apply a whole view at once (URL deep link, browser back/forward).
+  function applyPanelView(view: PanelView) {
+    setPanelTab(view.tab);
+    if (view.tab === "sections") {
+      setOpenEntry(null);
+      setSelectedId(view.nodeId);
+    } else {
+      setSelectedId(null);
+      setOpenEntry(view.entry);
+    }
   }
 
   function updateGlobalSettingsCategory<K extends keyof GlobalThemeSettings>(
@@ -688,6 +779,58 @@ export function useThemeEditor(themeId: number) {
     if (selectedId === id) setSelectedId(null);
   }
 
+  // A copy of a section (fresh ids for the section and every nested block), placed right after the
+  // original and selected. Same config shape as any added section; persists immediately like a
+  // reorder does.
+  function duplicateSection(id: string) {
+    const current = configRef.current;
+    const original = current?.sections.find((s) => s.id === id);
+    if (!current || !original) return;
+    const cloneBlocks = (blocks: ThemeBlock[] | undefined): ThemeBlock[] | undefined =>
+      blocks?.map((b) => ({
+        ...b,
+        id: generateId("blk"),
+        settings: structuredClone(b.settings),
+        ...(b.blocks ? { blocks: cloneBlocks(b.blocks) } : {}),
+      }));
+    const copy: ThemeSection = {
+      ...original,
+      id: generateId("sec"),
+      settings: structuredClone(original.settings),
+      blocks: cloneBlocks(original.blocks) ?? [],
+    };
+    const ordered = [...current.sections].sort((a, b) => a.order - b.order);
+    const at = ordered.findIndex((s) => s.id === id);
+    ordered.splice(at + 1, 0, copy);
+    updateConfig((prev) => ({ ...prev, sections: ordered.map((s, i) => ({ ...s, order: i })) }));
+    setSelectedId(copy.id);
+    setPanelTab("sections");
+    void save();
+  }
+
+  // Move a section one place up (-1) or down (+1) in the template, through the same reorder path
+  // the tree and the in-preview drag use.
+  function moveSection(id: string, delta: -1 | 1): ThemeConfig | null {
+    const current = configRef.current;
+    if (!current) return null;
+    const ids = [...current.sections].sort((a, b) => a.order - b.order).map((s) => s.id);
+    const from = ids.indexOf(id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= ids.length) return null;
+    ids.splice(from, 1);
+    ids.splice(to, 0, id);
+    return reorderSections(ids);
+  }
+
+  // The Announcement bar row's eye: the same stored on/off value as its own On/Off control.
+  function setAnnouncementEnabled(enabled: boolean) {
+    const currentBar = (configRef.current?.header.settings.announcementBar as AnnouncementBarConfig | undefined) ?? {
+      enabled: false,
+      messages: [],
+    };
+    updateAnnouncementBar({ ...currentBar, enabled });
+  }
+
   function toggleSectionVisibility(id: string) {
     updateConfig((prev) => ({
       ...prev,
@@ -814,6 +957,7 @@ export function useThemeEditor(themeId: number) {
 
   async function discard() {
     await load();
+    setSelectedId(null);
     toast("Changes discarded", "success");
   }
 
@@ -823,24 +967,75 @@ export function useThemeEditor(themeId: number) {
     sectionsMode: shopHasPublishedTheme,
     sectionTypesPresent: new Set(config?.sections.map((sec) => sec.type) ?? []),
   };
+  const builderContextRef = useRef(builderContext);
+  useEffect(() => {
+    builderContextRef.current = builderContext;
+  });
 
-  // Open the panel a search result points at, then ask SettingsPanel to scroll to the field.
-  function goToSetting(target: SearchTarget, settingLabel?: string) {
-    setEditorMode(target.mode);
-    if (target.mode === "theme_settings") {
-      setThemeSettingsCategory(target.category);
-    } else if (target.mode === "layout") {
-      setLayoutCategory(target.category);
-    } else if (target.kind === "announcement") {
-      setSelectedId(ANNOUNCEMENT_CHROME_ID);
-    } else if (target.kind === "header") {
-      setSelectedId(HEADER_CHROME_ID);
-    } else if (target.kind === "footer") {
-      setSelectedId(FOOTER_CHROME_ID);
-    } else {
-      const section = config?.sections.find((sec) => sec.type === target.sectionType);
-      if (section) setSelectedId(section.id);
+  // --- URL sync: the panel view lives in the query string (?panel=&node=|open=), so a drill-in is
+  // a deep link and the browser's back button returns to the list. Opening a drill-in from a list
+  // pushes a history entry; moving between drill-ins or tabs replaces it. ---
+  const drillPushedRef = useRef(false);
+  const isDrilled = panelView.tab === "sections" ? !!panelView.nodeId : !!panelView.entry;
+  const viewQueryString = new URLSearchParams(viewToQuery(panelView)).toString();
+
+  useEffect(() => {
+    if (!deepLinkAppliedRef.current || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const current = new URLSearchParams();
+    for (const k of PANEL_KEYS) {
+      const v = url.searchParams.get(k);
+      if (v !== null) current.set(k, v);
     }
+    if (current.toString() === viewQueryString) return;
+    const wasDrilled = !!(current.get("node") || current.get("open"));
+    for (const k of PANEL_KEYS) url.searchParams.delete(k);
+    new URLSearchParams(viewQueryString).forEach((v, k) => url.searchParams.set(k, v));
+    if (isDrilled && !wasDrilled) {
+      window.history.pushState(null, "", url.toString());
+      drillPushedRef.current = true;
+    } else {
+      window.history.replaceState(null, "", url.toString());
+      if (!isDrilled) drillPushedRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewQueryString]);
+
+  // Browser back / forward: show whatever the URL now says.
+  useEffect(() => {
+    function onPop() {
+      const current = configRef.current;
+      if (!current) return;
+      const view = queryToView(new URLSearchParams(window.location.search), current, builderContextRef.current, CHROME_ID_LIST);
+      drillPushedRef.current = false;
+      applyPanelView(view);
+    }
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Back from a drill-in (the Back button, Escape): undo our own history entry when we pushed one,
+  // so the browser's history does not keep a stale drill-in; otherwise just close it.
+  function requestDrillBack() {
+    if (drillPushedRef.current && typeof window !== "undefined") {
+      drillPushedRef.current = false;
+      window.history.back();
+      return;
+    }
+    closeDrillIn();
+  }
+
+  // Open the panel a search result points at (tab + drill-in), then ask the panel to scroll to and
+  // highlight the field.
+  function goToSetting(target: SearchTarget, settingLabel?: string) {
+    if (!config) return;
+    const view = viewForSearchTarget(target, config, builderContext, {
+      announcement: ANNOUNCEMENT_CHROME_ID,
+      header: HEADER_CHROME_ID,
+      footer: FOOTER_CHROME_ID,
+    });
+    applyPanelView(view);
     setScrollRequest((prev) => ({ label: settingLabel, nonce: (prev?.nonce ?? 0) + 1 }));
   }
 
@@ -864,6 +1059,17 @@ export function useThemeEditor(themeId: number) {
     setThemeSettingsCategory,
     layoutCategory,
     setLayoutCategory,
+    panelTab,
+    panelView,
+    openEntry,
+    openPanelEntry,
+    switchTab,
+    closeDrillIn,
+    requestDrillBack,
+    applyPanelView,
+    duplicateSection,
+    moveSection,
+    setAnnouncementEnabled,
     selectedId,
     selectNode,
     selection,
