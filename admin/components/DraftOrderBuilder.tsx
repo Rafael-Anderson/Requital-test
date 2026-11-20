@@ -21,7 +21,6 @@ import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 import Combobox from "@/components/ui/Combobox";
 import Tooltip from "@/components/ui/Tooltip";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
 import Money from "@/components/Money";
 
@@ -418,7 +417,7 @@ export default function DraftOrderBuilder({ draft }: { draft?: DraftOrder }) {
         {discountPreview && (
           <p className={`text-xs ${discountPreview.valid ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
             {discountPreview.valid
-              ? `Applies: -${formatMoney(discountPreview.discountAmount, currency)}`
+              ? <>Applies: -<Money amount={discountPreview.discountAmount} currency={currency} /></>
               : discountPreview.message ?? "This code cannot be applied"}
           </p>
         )}

@@ -32,6 +32,7 @@ import Toggle from "@/components/ui/Toggle";
 import { useToast } from "@/components/ui/Toast";
 import Tooltip from "@/components/ui/Tooltip";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import CurrencySymbol from "@/components/CurrencySymbol";
 
 // One per parsed OCR line — starts from the server's ScanPreviewItem but is
 // fully editable before commit, since Tesseract's accuracy is nowhere near
@@ -498,7 +499,7 @@ export default function ScanToStockPage() {
                           })()}
 
                         <div>
-                          <label className="text-xs text-text-muted block mb-1">Cost price ({currency})</label>
+                          <label className="text-xs text-text-muted block mb-1">Cost price (<CurrencySymbol code={currency} />)</label>
                           <input
                             type="number"
                             min="0"
@@ -539,7 +540,7 @@ export default function ScanToStockPage() {
                         {row.matchedId === null && row.targetType === "product" && (
                           <>
                             <div>
-                              <label className="text-xs text-text-muted block mb-1">New product price ({currency})</label>
+                              <label className="text-xs text-text-muted block mb-1">New product price (<CurrencySymbol code={currency} />)</label>
                               <input
                                 type="number"
                                 min="0"

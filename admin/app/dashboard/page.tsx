@@ -20,7 +20,6 @@ import Card from "@/components/ui/Card";
 import PageShell from "@/components/ui/PageShell";
 import EmptyState from "@/components/ui/EmptyState";
 import LoadFailed from "@/components/ui/LoadFailed";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
 import Money from "@/components/Money";
 
@@ -157,7 +156,7 @@ export default function DashboardPage() {
           <>
             <StatCard
               label="Avg Basket Value"
-              value={formatMoney(summary.avgBasketValue.current, currency)}
+              value={<Money amount={summary.avgBasketValue.current} currency={currency} />}
               icon={<Wallet className="size-4" />}
               change={{ pct: summary.avgBasketValue.changePct }}
             />
@@ -184,7 +183,7 @@ export default function DashboardPage() {
             />
             <StatCard
               label="Total Revenue"
-              value={formatMoney(summary.revenue.current, currency)}
+              value={<Money amount={summary.revenue.current} currency={currency} />}
               icon={<Banknote className="size-4" />}
               change={{ pct: summary.revenue.changePct }}
             />

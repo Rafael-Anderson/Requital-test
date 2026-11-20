@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { Ban, PackageCheck, Pencil, ScanBarcode, Send } from "lucide-react";
 import { cancelPurchaseOrder, getPurchaseOrder, sendPurchaseOrder } from "@/lib/api";
 import type { PurchaseOrderDetail } from "@/lib/types";
-import { formatMoney } from "@/lib/money";
 import BackButton from "@/components/ui/BackButton";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -141,7 +140,7 @@ export default function PurchaseOrderDetailPage() {
             <dl className="mt-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
               <Field label="Currency" value={po.currency} />
               <Field label="Expected delivery" value={po.expectedAt} />
-              <Field label="Total" value={formatMoney(po.total, po.currency)} />
+              <Field label="Total" value={<Money amount={po.total} currency={po.currency} />} />
               {po.notes && (
                 <div className="sm:col-span-3">
                   <Field label="Notes" value={po.notes} />
@@ -221,7 +220,7 @@ export default function PurchaseOrderDetailPage() {
   );
 }
 
-function Field({ label, value }: { label: string; value: string | null }) {
+function Field({ label, value }: { label: string; value: ReactNode | null }) {
   return (
     <div>
       <dt className="text-[13px] font-medium text-text-secondary dark:text-zinc-400">{label}</dt>

@@ -31,6 +31,7 @@ import {
 import { PRODUCT_STATUSES, type ProductFormState } from "@/lib/useProductForm";
 import { useShopCurrency } from "@/lib/useShopCurrency";
 import { MetafieldsSection } from "@/components/MetafieldsFields";
+import Money from "@/components/Money";
 
 export default function ProductFormStepOrganization({
   form,
@@ -104,7 +105,7 @@ export default function ProductFormStepOrganization({
         <Thumbnail src={sortedImages[0]?.url} size="size-14" />
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{form.name || "Untitled product"}</p>
-          <p className="text-sm text-text-muted">{form.price ? `${currency ?? ""} ${form.price}`.trim() : "No price set"}</p>
+          <p className="text-sm text-text-muted">{form.price ? <Money amount={form.price} currency={currency} /> : "No price set"}</p>
         </div>
       </Card>
 

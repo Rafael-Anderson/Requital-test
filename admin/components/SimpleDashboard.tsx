@@ -9,8 +9,8 @@ import { defaultDateRange } from "@/components/ui/DateRangePicker";
 import StatCard from "@/components/ui/StatCard";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 // Simple-mode counterpart to the full DashboardPage (see admin/app/dashboard/
 // page.tsx) — CLAUDE.md documents this as already shipped, but the file
@@ -83,7 +83,7 @@ export default function SimpleDashboard() {
         <>
           <StatCard
             label="Revenue Today"
-            value={formatMoney(summary.revenue.current, currency)}
+            value={<Money amount={summary.revenue.current} currency={currency} />}
             icon={<Wallet className="size-4" />}
           />
           <StatCard label="Orders Today" value={String(summary.totalOrders)} icon={<ClipboardList className="size-4" />} />

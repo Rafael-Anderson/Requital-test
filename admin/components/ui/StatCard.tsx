@@ -17,7 +17,7 @@ export default function StatCard({
   subtext,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   icon?: ReactNode;
   change?: { pct: number | null };
   subtext?: string;

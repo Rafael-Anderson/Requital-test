@@ -12,6 +12,8 @@ import {
   type DriverRunView,
   type DriverStop,
 } from "@/lib/driver-api";
+import Money from "@/components/Money";
+import CurrencySymbol from "@/components/CurrencySymbol";
 
 // The driver's own page, reached by a magic link. No account, no admin chrome
 // (see RequireAuth and AppChrome for the /driver bypass). It shows only the stops
@@ -113,7 +115,7 @@ function StopCard({
           {stop.items.length > 0 && <p className="text-sm text-zinc-600 dark:text-zinc-400">{stop.items.join(", ")}</p>}
           {stop.cod && (
             <p className="mt-1 inline-block rounded-lg border-2 border-zinc-900 px-2 py-1 text-sm font-bold dark:border-zinc-100">
-              {stop.cod.alreadyCollected ? "Cash already collected" : `Collect ${stop.cod.amount} ${stop.cod.currency}`}
+              {stop.cod.alreadyCollected ? "Cash already collected" : <>Collect <Money amount={stop.cod.amount} currency={stop.cod.currency} /></>}
             </p>
           )}
         </div>
@@ -182,7 +184,7 @@ function StopCard({
           )}
           {needsCash && stop.cod && (
             <label className="block text-sm font-medium">
-              Cash collected ({stop.cod.currency})
+              Cash collected (<CurrencySymbol code={stop.cod.currency} />)
               <input className={`${field} mt-1`} inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value)} />
             </label>
           )}

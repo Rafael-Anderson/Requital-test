@@ -12,6 +12,7 @@ import { SettingsLoadFailed } from "@/components/SettingsContentSkeleton";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
 import ColorPicker from "@/components/ui/ColorPicker";
+import { DirhamSymbol } from "@/components/CurrencySymbol";
 
 export default function ThemeAppearanceColorPage() {
   const toast = useToast();
@@ -190,7 +191,7 @@ export default function ThemeAppearanceColorPage() {
                   Sample Product
                 </p>
                 <p className="text-xs mb-2" style={{ color: priceColor }}>
-                  49.00 AED
+                  49.00 <DirhamSymbol />
                 </p>
                 <button
                   type="button"

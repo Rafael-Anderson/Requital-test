@@ -19,6 +19,14 @@ import {
 } from "@/lib/api";
 import NomodExtras from "./NomodExtras";
 
+// The innermost element whose text (the Dirham symbol is an SVG, so it adds none) matches and that
+// draws the Dirham symbol: AED amounts render as "<amount> <svg aria-label=AED>", not "AED".
+function withDirham(match: (text: string) => boolean) {
+  const norm = (el: Element) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const hit = (el: Element) => match(norm(el)) && !!el.querySelector('[data-currency-symbol="AED"]');
+  return (_: string, el: Element | null) => !!el && hit(el) && !Array.from(el.children).some(hit);
+}
+
 const PATH = `/payments/webhook/nomod/${"a".repeat(64)}`;
 
 afterEach(cleanup);
@@ -91,7 +99,7 @@ describe("NomodExtras", () => {
     ]);
     vi.mocked(recheckNomodCheckout).mockResolvedValue({ outcome: "unpaid" });
     render(<NomodExtras webhookPath={PATH} hasApiKey onChanged={() => {}} />);
-    expect(await screen.findByText(/Order #12, 50.00 AED/)).toBeInTheDocument();
+    expect(await screen.findByText(withDirham((t) => t.startsWith("Order #12, 50.00 :")))).toBeInTheDocument();
     expect(screen.getByText(/did not match the order, not marked paid/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Check with Nomod" }));
     await waitFor(() => expect(recheckNomodCheckout).toHaveBeenCalledWith(7));

@@ -11,7 +11,6 @@ import Button from "@/components/ui/Button";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatCard from "@/components/ui/StatCard";
 import StatusBadge from "@/components/StatusBadge";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
 import Money from "@/components/Money";
 
@@ -89,19 +88,19 @@ export default function GeneralReportView({
             />
             <StatCard
               label="Grand Total"
-              value={formatMoney(summary.grandTotal, currency)}
+              value={<Money amount={summary.grandTotal} currency={currency} />}
               icon={<Wallet className="size-4" />}
               subtext="Grand total from orders."
             />
             <StatCard
               label="Total Payments"
-              value={formatMoney(summary.totalPayments, currency)}
+              value={<Money amount={summary.totalPayments} currency={currency} />}
               icon={<CreditCard className="size-4" />}
               subtext="Total payments without delivery fee."
             />
             <StatCard
               label="Total Delivery Fee"
-              value={formatMoney(summary.totalDeliveryFee, currency)}
+              value={<Money amount={summary.totalDeliveryFee} currency={currency} />}
               icon={<Truck className="size-4" />}
               subtext="Total delivery fee with orders."
             />

@@ -17,10 +17,10 @@ import {
   type SliderQuoteVehicle,
 } from "@/lib/platform-api";
 import { confirmSuspend, startImpersonation } from "@/lib/impersonation";
-import { formatMoney } from "@/lib/money";
 import StaffTwoFactorCard from "@/components/platform/StaffTwoFactorCard";
 import ChannelConnectionsCard from "@/components/platform/ChannelConnectionsCard";
 import BillingCard from "@/components/platform/BillingCard";
+import Money from "@/components/Money";
 
 const SLIDER_STATUS_STYLES: Record<string, string> = {
   connected: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -271,7 +271,7 @@ export default function PlatformShopDetailPage() {
                 <ul className="space-y-1">
                   {dispatchResult.vehicles.map((v) => (
                     <li key={v.vehicleType}>
-                      {v.vehicleType}: {formatMoney(v.deliveryFee, dispatchResult.currency)} {v.isAvailable ? "" : "(unavailable)"}
+                      {v.vehicleType}: <Money amount={v.deliveryFee} currency={dispatchResult.currency} /> {v.isAvailable ? "" : "(unavailable)"}
                     </li>
                   ))}
                 </ul>

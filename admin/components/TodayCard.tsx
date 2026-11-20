@@ -8,8 +8,8 @@ import { useOutletFilter } from "@/lib/outlet-context";
 import Card from "@/components/ui/Card";
 import Skeleton from "@/components/ui/Skeleton";
 import LoadFailed from "@/components/ui/LoadFailed";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 // ANL-9. Reads the live endpoint, not the nightly rollups: the rollup job runs
 // at 01:00 for YESTERDAY, so a rollup-backed card would be empty all day and
@@ -21,7 +21,7 @@ const REFRESH_MS = 20_000;
 export default function TodayCard() {
   const { selectedOutletId } = useOutletFilter();
   const currency = useShopCurrency();
-  const fmt = (value: number) => formatMoney(value, currency);
+  const fmt = (value: number) => <Money amount={value} currency={currency} />;
   const [snapshot, setSnapshot] = useState<TodaySnapshot | null>(null);
   const [error, setError] = useState(false);
 

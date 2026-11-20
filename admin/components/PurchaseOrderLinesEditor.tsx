@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { listIngredients, listProducts } from "@/lib/api";
-import { formatMoney } from "@/lib/money";
 import { newDraft, type LineDraft } from "@/lib/purchase-order-lines";
 import Button from "@/components/ui/Button";
 import Combobox, { type ComboboxOption } from "@/components/ui/Combobox";
@@ -111,7 +110,7 @@ export default function PurchaseOrderLinesEditor({
             </div>
             <div className="flex items-end justify-between gap-2 sm:col-span-2">
               <div className="pb-2 text-sm font-semibold text-text-primary dark:text-zinc-100">
-                {known[i] !== null && currency ? formatMoney(known[i], currency) : ""}
+                {known[i] !== null && currency ? <Money amount={known[i]} currency={currency} /> : ""}
               </div>
               <Tooltip label={`Remove line ${i + 1}`} align="end">
                 <button
