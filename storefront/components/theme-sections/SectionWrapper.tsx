@@ -7,6 +7,7 @@ import { useShop } from "@/lib/shop-context";
 import { resolveImageUrl } from "@/lib/api";
 import { isTrustedAdminOrigin } from "@/lib/theme-preview-origin";
 import { resolveScheme } from "@/lib/theme-color-scheme";
+import { sectionRect } from "@/lib/preview-section-selection";
 import type { SectionSettings } from "@/lib/theme-config-types";
 
 // Bug 9 fix: Header/Footer (ThemeDrivenHeader.tsx/ThemeDrivenFooter.tsx)
@@ -154,7 +155,9 @@ export default function SectionWrapper({
 
   function handleClick() {
     if (!previewMode || !document.referrer) return;
-    postToAdmin({ type: "theme-section-selected", sectionId });
+    // The section's box (in the iframe's viewport) rides along with its id; the outline itself is
+    // drawn by PreviewSectionOutline once the admin confirms the selection.
+    postToAdmin({ type: "theme-section-selected", sectionId, rect: sectionRef.current ? sectionRect(sectionRef.current) : null });
   }
 
   function handleHandlePointerDown(e: ReactPointerEvent<HTMLButtonElement>) {

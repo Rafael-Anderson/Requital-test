@@ -61,6 +61,17 @@ const POST_DEBOUNCE_MS = 150;
 // SchemePicker.tsx already uses elsewhere in this app.
 const PRODUCT_CARDS_SENTINEL_ID = "__product-cards__";
 
+// The preview's section outline protocol (mirrored by hand in storefront/lib/preview-section-selection.ts).
+export const PREVIEW_SELECT_SECTION = "preview-select-section";
+export const PREVIEW_SELECTION_REQUEST = "preview-selection-request";
+
+// The builder's own accent, so the outline matches the panel's selected row (not the shop's colours).
+function builderAccent(): string {
+  if (typeof window === "undefined") return "#0f766e";
+  const v = getComputedStyle(document.documentElement).getPropertyValue("--color-accent").trim();
+  return /^#[0-9a-fA-F]{3,8}$/.test(v) ? v : "#0f766e";
+}
+
 // Mirrors storefront/lib/is-local-host.ts by hand — same no-shared-package
 // convention as every other cross-app helper in this codebase.
 function isLocalHost(hostname: string): boolean {
@@ -327,6 +338,24 @@ export default function PreviewFrame({
   useEffect(() => {
     selectionKindRef.current = editor.selection?.kind ?? null;
   }, [editor.selection?.kind]);
+  // The selected SECTION as the preview draws it (outline + name chip, storefront
+  // PreviewSectionOutline.tsx). The admin is the one source of truth: a click in the preview comes
+  // back here as theme-section-selected, and this sends the resulting selection down again, so the
+  // tree and the preview always agree.
+  const selectedSectionForOutline = editor.selection?.kind === "section" ? editor.selection.section : null;
+  const outlineMessage = selectedSectionForOutline
+    ? {
+        type: PREVIEW_SELECT_SECTION,
+        sectionId: selectedSectionForOutline.id,
+        label: SECTION_TYPE_LABELS[selectedSectionForOutline.type] ?? "",
+        color: builderAccent(),
+      }
+    : { type: PREVIEW_SELECT_SECTION, sectionId: null };
+  const outlineKey = selectedSectionForOutline ? `${selectedSectionForOutline.id}|${selectedSectionForOutline.type}` : "";
+  const outlineMessageRef = useRef(outlineMessage);
+  useEffect(() => {
+    outlineMessageRef.current = outlineMessage;
+  });
 
   // Session-cookie migration (security audit finding #1), phase 2 — fetches
   // the short-lived theme_preview token resolvePreviewUrl needs (see that
@@ -422,6 +451,10 @@ export default function PreviewFrame({
   // false on every src change (navigation just started, not loaded yet),
   // set true once handleIframeLoad's `load` event actually fires.
   const iframeReadyRef = useRef(false);
+  useEffect(() => {
+    if (!previewOrigin || !iframeReadyRef.current) return;
+    iframeRef.current?.contentWindow?.postMessage(outlineMessageRef.current, previewOrigin);
+  }, [outlineKey, previewOrigin]);
   useEffect(() => {
     iframeReadyRef.current = false;
   }, [src]);
@@ -546,6 +579,11 @@ export default function PreviewFrame({
         selectNode(data.elementId);
         return;
       }
+      if (data.type === PREVIEW_SELECTION_REQUEST) {
+        // The preview (re)mounted and asks what to outline.
+        (event.source as Window | null)?.postMessage(outlineMessageRef.current, previewOrigin);
+        return;
+      }
       if (data.type === "element-deselected") {
         // The preview deselects an ELEMENT (a block): on its own navigation, on a click on empty
         // space, on its toolbar's close. It must not close a section, header, footer or announcement
@@ -659,6 +697,7 @@ export default function PreviewFrame({
     if (legacyTheme) {
       iframeRef.current?.contentWindow?.postMessage({ type: "legacy-theme-update", legacyTheme }, previewOrigin);
     }
+    iframeRef.current?.contentWindow?.postMessage(outlineMessageRef.current, previewOrigin);
   }
 
   if (!theme) return null;
@@ -715,12 +754,6 @@ export default function PreviewFrame({
             />
             {selectedSection && (
               <>
-                <span
-                  data-testid="preview-selection-chip"
-                  className="pointer-events-none absolute start-2 top-2 z-10 rounded-md bg-accent px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm"
-                >
-                  {SECTION_TYPE_LABELS[selectedSection.type]}
-                </span>
                 <div
                   data-testid="preview-selection-toolbar"
                   className="absolute end-2 top-2 z-10 flex items-center gap-0.5 rounded-lg border border-black/10 bg-surface p-0.5 shadow-md dark:border-white/15 dark:bg-zinc-900"
