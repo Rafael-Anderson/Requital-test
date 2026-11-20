@@ -12,6 +12,8 @@ import { resolveNavLinkStyle } from "@/lib/nav-menu-style";
 import type { MenuItem, MenuItemStyle } from "@/lib/types";
 import CollectionNav from "@/components/CollectionNav";
 import { useMenuRowOverflow } from "@/lib/use-menu-row-overflow";
+import { useMinWidth } from "@/lib/use-min-width";
+import { MEGA_COLUMN_GAP, MEGA_ROW_GAP, MEGA_TRACK_MIN, megaColumnOffset, megaColumns, packMegaGroups } from "@/lib/mega-menu-layout";
 
 // Matches admin/lib/useThemeEditor.ts's HEADER_CHROME_ID by hand — nav_menu
 // is one of the header's own blocks (visibility only — see
@@ -57,7 +59,162 @@ function useNavItemStyle(style: MenuItemStyle | null | undefined) {
 // `fixed`, computed from the triggering item's own bounding rect (left)
 // and the nav row's bottom (top) — `left` is clamped in the effect below
 // so the panel never overflows the right edge of the viewport.
-function MegaMenuPanel({
+type MegaPanelProps = {
+  item: MenuItem;
+  top: number;
+  left: number;
+  animation: "fade" | "slide" | "none";
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+};
+
+// From md up the mega menu is the full-width panel below; under md (phones) it stays the compact
+// flyout it always was.
+function MegaMenuPanel(props: MegaPanelProps) {
+  const wide = useMinWidth(768);
+  return wide ? <WideMegaMenuPanel {...props} /> : <CompactMegaMenuPanel {...props} />;
+}
+
+function megaLinkHref(link: MenuItem["columns"][number]["links"][number], shopBasePath: string) {
+  return link.linkType === "COLLECTION" && link.collection
+    ? `${shopBasePath}/collections/${link.collection.slug}`
+    : link.linkType === "PRODUCT" && link.product
+      ? `${shopBasePath}/products/${link.product.slug}`
+      : (link.customUrl ?? "#");
+}
+
+type WideLayout = { track: number; placements: { col: number; top: number }[]; height: number };
+
+function sameLayout(a: WideLayout | null, b: WideLayout) {
+  return (
+    !!a &&
+    a.track === b.track &&
+    a.height === b.height &&
+    a.placements.length === b.placements.length &&
+    a.placements.every((p, i) => p.col === b.placements[i].col && p.top === b.placements[i].top)
+  );
+}
+
+// The desktop mega menu: edge to edge across the viewport directly under the nav row, its groups
+// starting at the header's content edge (the .theme-container edge plus px-4) so they line up with
+// the logo, and running to the viewport's end gutter. Groups
+// are laid out by lib/mega-menu-layout.ts (as many 220 to 280px tracks as fit, each group into the
+// shortest column), measured in a layout effect so the packed layout is what first paints. The DOM
+// keeps the merchant's order, so Tab and screen readers follow it whatever column a group lands in.
+// It only scrolls inside when it is taller than the space left under the header.
+function WideMegaMenuPanel({ item, top, animation, onMouseEnter, onMouseLeave }: MegaPanelProps) {
+  const { shopBasePath } = useShop();
+  const areaRef = useRef<HTMLDivElement>(null);
+  const groupRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [layout, setLayout] = useState<WideLayout | null>(null);
+  const columnCount = item.columns.length;
+
+  useLayoutEffect(() => {
+    const area = areaRef.current;
+    if (!area) return;
+    let cancelled = false;
+    const measure = () => {
+      if (cancelled) return;
+      const { cols, track } = megaColumns(area.clientWidth);
+      const groups = groupRefs.current.slice(0, columnCount);
+      // Heights depend on the track width, so set it before reading them (one synchronous layout).
+      for (const g of groups) if (g) g.style.width = `${track}px`;
+      const heights = groups.map((g) => (g ? g.getBoundingClientRect().height : 0));
+      const packed = packMegaGroups(heights, cols, MEGA_ROW_GAP);
+      const next = { track, placements: packed.placements, height: Math.ceil(packed.height) };
+      setLayout((prev) => (sameLayout(prev, next) ? prev : next));
+    };
+    measure();
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    if (ro) {
+      ro.observe(area);
+      for (const g of groupRefs.current.slice(0, columnCount)) if (g) ro.observe(g);
+    }
+    window.addEventListener("resize", measure);
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    fonts?.ready.then(measure).catch(() => undefined);
+    fonts?.addEventListener?.("loadingdone", measure);
+    return () => {
+      cancelled = true;
+      ro?.disconnect();
+      window.removeEventListener("resize", measure);
+      fonts?.removeEventListener?.("loadingdone", measure);
+    };
+  }, [item.id, columnCount]);
+
+  const animationClass =
+    animation === "none" ? "" : animation === "slide" ? "theme-mega-panel-slide" : "theme-mega-panel-fade";
+  return createPortal(
+    <div
+      data-mega-panel
+      data-mega-layout="wide"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      style={{
+        top,
+        maxHeight: `calc(100dvh - ${Math.max(0, Math.round(top))}px)`,
+        borderColor: "var(--color-popover-border)",
+        boxShadow: "0 8px 24px rgba(15,23,22,0.08)",
+      }}
+      className={`fixed inset-x-0 z-40 overflow-y-auto overflow-x-hidden border-y bg-popover text-popover-fg ${animationClass}`}
+    >
+      {/* The groups start where the header's content starts (the .theme-container edge plus its
+          px-4, so they line up with the logo) and run to the viewport's end gutter, so a wider screen
+          gets more columns instead of a fixed 80rem block. Logical padding, so RTL mirrors it. */}
+      <div
+        className="py-6"
+        style={{
+          paddingInlineStart: "max(1rem, calc((100% - var(--theme-max-width, 80rem)) / 2 + 1rem))",
+          paddingInlineEnd: "1rem",
+        }}
+      >
+        <div
+          ref={areaRef}
+          data-mega-groups
+          className={layout ? "relative" : "flex flex-wrap items-start"}
+          style={layout ? { height: layout.height } : { columnGap: MEGA_COLUMN_GAP, rowGap: MEGA_ROW_GAP }}
+        >
+          {item.columns.map((column, i) => {
+            const place = layout?.placements[i];
+            return (
+              <div
+                key={column.id}
+                ref={(el) => {
+                  groupRefs.current[i] = el;
+                }}
+                data-mega-group
+                className={`min-w-0 [overflow-wrap:anywhere] ${place ? "absolute" : ""}`}
+                style={{
+                  width: layout?.track ?? MEGA_TRACK_MIN,
+                  ...(place && layout ? { top: place.top, insetInlineStart: megaColumnOffset(place.col, layout.track) } : {}),
+                }}
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide text-popover-fg/60 mb-2">{column.title}</p>
+                <ul className="space-y-1.5">
+                  {column.links.map((link) => (
+                    <li key={link.id}>
+                      <Link
+                        href={megaLinkHref(link, shopBasePath)}
+                        className={`block text-sm transition-colors hover:underline ${
+                          link.featured ? "text-accent-text font-medium" : "text-popover-fg"
+                        }`}
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function CompactMegaMenuPanel({
   item,
   top,
   left,
@@ -95,6 +252,8 @@ function MegaMenuPanel({
   return createPortal(
     <div
       ref={panelRef}
+      data-mega-panel
+      data-mega-layout="compact"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       style={{ top, left: adjustedLeft, borderColor: "var(--color-popover-border)", boxShadow: "0 8px 24px rgba(15,23,22,0.08)" }}
@@ -168,6 +327,31 @@ export default function MenuBar({ inline = false }: { inline?: boolean } = {}) {
   const { fitCount, overflowing } = useMenuRowOverflow(measureRef, items);
   // Everything fits again (wider viewport, shorter menu): back to the plain row.
   if (expanded && fitCount !== null && !overflowing) setExpanded(false);
+
+  // An open mega panel closes on Escape (focus returns to its trigger) and on a press anywhere
+  // outside both the nav row and the panel.
+  useEffect(() => {
+    if (openMegaId === null) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      const trigger = navRef.current?.querySelector<HTMLElement>(`[data-mega-trigger="${openMegaId}"]`);
+      setOpenMegaId(null);
+      trigger?.focus();
+    }
+    function onPointerDown(e: PointerEvent) {
+      const t = e.target;
+      if (!(t instanceof Node)) return;
+      if (navRef.current?.contains(t)) return;
+      if (t instanceof Element && t.closest("[data-mega-panel]")) return;
+      setOpenMegaId(null);
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [openMegaId]);
 
   useEffect(() => {
     getMenu(shopSlug, previewToken)
@@ -399,6 +583,7 @@ function MenuBarItem({
         type="button"
         aria-haspopup="true"
         aria-expanded={isMegaOpen}
+        data-mega-trigger={item.id}
         onMouseEnter={(e) => onMegaEnter(e.currentTarget)}
         onMouseLeave={onMegaLeave}
         onClick={(e) => (isMegaOpen ? onMegaLeave() : onMegaEnter(e.currentTarget))}
