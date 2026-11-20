@@ -203,3 +203,45 @@ describe("previewGeometry", () => {
     expect(g.frameHeight).toBe(1600);
   });
 });
+
+describe("PreviewFrame — section outline protocol", () => {
+  it("answers the preview's selection request with the selected section's id, name and the builder accent", async () => {
+    const config = fixtureConfig();
+    const editor = fixtureEditor({ config, selection: { kind: "section", section: config.sections[0] } });
+    render(<PreviewFrame editor={editor} shop={shop} />);
+    await waitFor(() => expect(document.querySelector("iframe")).toBeInTheDocument());
+    const frameWindow = (document.querySelector("iframe") as HTMLIFrameElement).contentWindow!;
+    const post = vi.spyOn(frameWindow, "postMessage").mockImplementation(() => {});
+
+    await waitFor(() => {
+      window.dispatchEvent(new MessageEvent("message", { data: { type: "preview-selection-request" }, origin: PREVIEW_ORIGIN, source: frameWindow }));
+      expect(post).toHaveBeenCalledWith(
+        { type: "preview-select-section", sectionId: "sec-hero", label: "Hero", color: "#0f766e" },
+        PREVIEW_ORIGIN,
+      );
+    });
+  });
+
+  it("answers with a clear when no section is selected, and ignores a request from another origin", async () => {
+    const editor = fixtureEditor({ selection: { kind: "block" } as ThemeEditorState["selection"] });
+    render(<PreviewFrame editor={editor} shop={shop} />);
+    await waitFor(() => expect(document.querySelector("iframe")).toBeInTheDocument());
+    const frameWindow = (document.querySelector("iframe") as HTMLIFrameElement).contentWindow!;
+    const post = vi.spyOn(frameWindow, "postMessage").mockImplementation(() => {});
+
+    window.dispatchEvent(new MessageEvent("message", { data: { type: "preview-selection-request" }, origin: "https://evil.example.com", source: frameWindow }));
+    await waitFor(() => {
+      window.dispatchEvent(new MessageEvent("message", { data: { type: "preview-selection-request" }, origin: PREVIEW_ORIGIN, source: frameWindow }));
+      expect(post).toHaveBeenCalledWith({ type: "preview-select-section", sectionId: null }, PREVIEW_ORIGIN);
+    });
+    expect(post.mock.calls.every((c) => (c[1] as unknown) === PREVIEW_ORIGIN)).toBe(true);
+  });
+
+  it("no longer draws its own name chip on the card (the preview draws it on the section)", async () => {
+    const config = fixtureConfig();
+    const editor = fixtureEditor({ config, selection: { kind: "section", section: config.sections[0] } });
+    const { queryByTestId } = render(<PreviewFrame editor={editor} shop={shop} />);
+    await waitFor(() => expect(document.querySelector("iframe")).toBeInTheDocument());
+    expect(queryByTestId("preview-selection-chip")).toBeNull();
+  });
+});

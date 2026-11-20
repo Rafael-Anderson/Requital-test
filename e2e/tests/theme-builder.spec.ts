@@ -1,5 +1,5 @@
 import { test, expect, type APIResponse, type Page } from '@playwright/test';
-import { ADMIN_URL, API_URL } from '../urls';
+import { ADMIN_URL, API_URL, STOREFRONT_URL } from '../urls';
 import { seedShop, type SeedState } from '../seed';
 
 // The theme builder shell in a real browser: one left panel (Sections / Design / Settings) whose
@@ -51,6 +51,23 @@ async function sectionIdOf(page: Page, type: string): Promise<string> {
   return section.id;
 }
 
+// The selected section's outline is drawn inside the preview, exactly over the section (an overlay,
+// so it never moves the layout), with the section's name in the chip.
+async function expectOutlineAround(page: Page, sectionId: string, label: string) {
+  const frame = page.frameLocator('iframe');
+  const outline = frame.getByTestId('preview-section-outline');
+  await expect(outline).toHaveAttribute('data-section-id', sectionId);
+  await expect(frame.getByTestId('preview-section-chip')).toHaveText(label);
+  // The outline follows the section once a frame, so poll until it has caught up.
+  await expect
+    .poll(async () => {
+      const [o, sec] = await Promise.all([outline.boundingBox(), frame.locator(`[data-requital-section-id="${sectionId}"]`).boundingBox()]);
+      if (!o || !sec) return Infinity;
+      return Math.max(...(['x', 'y', 'width', 'height'] as const).map((k) => Math.abs(o[k] - sec[k])));
+    }, { message: 'outline sits exactly over the section' })
+    .toBeLessThanOrEqual(2);
+}
+
 async function openBuilder(page: Page, query = '') {
   await page.goto(`${ADMIN_URL}/theme/${themeId}/builder${query}`);
   await expect(page.getByRole('tab', { name: 'Sections' })).toBeVisible({ timeout: 90_000 });
@@ -84,8 +101,11 @@ test('a section opens in the same drill-in from the tree, from a preview click a
   await expect(drillIn(page).getByRole('heading', { name: 'Rich Text' })).toBeVisible();
   await expect(drillIn(page)).toContainText(/Template · Section \d+ of \d+/);
   await expect(page).toHaveURL(new RegExp(`node=${richTextId}`));
+  // The preview outlines the section the tree selected, with its name chip.
+  await expectOutlineAround(page, richTextId, 'Rich Text');
   await drillIn(page).getByRole('button', { name: 'Back' }).click();
   await expect(drillIn(page)).toHaveCount(0);
+  await expect(page.frameLocator('iframe').getByTestId('preview-section-outline')).toHaveCount(0);
 
   // 2. From a click on the section in the preview (away from its drag handle and its blocks).
   const target = page.frameLocator('iframe').locator(`[data-requital-section-id="${richTextId}"]`);
@@ -95,8 +115,8 @@ test('a section opens in the same drill-in from the tree, from a preview click a
   await target.click({ position: { x: box.width - 12, y: 12 } });
   await expect(drillIn(page).getByRole('heading', { name: 'Rich Text' })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`node=${richTextId}`));
-  // The selected section gets a name chip and a toolbar on the preview.
-  await expect(page.getByTestId('preview-selection-chip')).toHaveText('Rich Text');
+  // The selected section gets an outline and a name chip in the preview, and the toolbar on the card.
+  await expectOutlineAround(page, richTextId, 'Rich Text');
   await expect(page.getByTestId('preview-selection-toolbar')).toBeVisible();
   // Focus is inside the preview after that click; Escape is the admin's, so focus the panel first.
   await drillIn(page).getByRole('button', { name: 'Back' }).focus();
@@ -112,6 +132,42 @@ test('a section opens in the same drill-in from the tree, from a preview click a
   await expect(drillIn(page).getByRole('heading', { name: 'Rich Text' })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`node=${richTextId}`));
   await expect(page.locator('.theme-search-highlight')).toContainText('Content width', { timeout: 3000 });
+});
+
+test('the section outline follows device width, zoom and RTL, and is absent on the public storefront', async ({ page }) => {
+  await loginAdmin(page);
+  const richTextId = await sectionIdOf(page, 'rich_text');
+  await openBuilder(page, `?panel=sections&node=${richTextId}`);
+  await expectOutlineAround(page, richTextId, 'Rich Text');
+
+  for (const device of ['Tablet', 'Mobile', 'Desktop']) {
+    await page.getByRole('button', { name: device, exact: true }).first().click();
+    await page.frameLocator('iframe').locator(`[data-requital-section-id="${richTextId}"]`).scrollIntoViewIfNeeded();
+    await expectOutlineAround(page, richTextId, 'Rich Text');
+  }
+
+  await page.getByRole('button', { name: 'Zoom out' }).click();
+  await expect(page.getByTestId('preview-zoom-value')).not.toHaveText('100%');
+  await expectOutlineAround(page, richTextId, 'Rich Text');
+
+  // RTL: the chip moves to the start (right) edge of the outline.
+  const preview = page.frames().find((f) => f.url().includes('preview'))!;
+  await preview.evaluate(() => {
+    document.documentElement.dir = 'rtl';
+  });
+  await expectOutlineAround(page, richTextId, 'Rich Text');
+  const frame = page.frameLocator('iframe');
+  const [o, chip] = await Promise.all([frame.getByTestId('preview-section-outline').boundingBox(), frame.getByTestId('preview-section-chip').boundingBox()]);
+  if (!o || !chip) throw new Error('outline or chip has no box');
+  expect(Math.abs(o.x + o.width - (chip.x + chip.width)), 'chip at the start (right) edge in RTL').toBeLessThanOrEqual(2);
+
+  // The public storefront carries none of it.
+  const shopPage = await page.context().newPage();
+  await shopPage.goto(`${STOREFRONT_URL}/${seed.subdomain}`);
+  await expect(shopPage.locator('header').first()).toBeVisible({ timeout: 120_000 });
+  await expect(shopPage.getByTestId('preview-section-outline')).toHaveCount(0);
+  await expect(shopPage.locator('[data-requital-section-id]')).toHaveCount(0);
+  await shopPage.close();
 });
 
 test('Back (and the browser back button) returns to the tree with its scroll position kept', async ({ page }) => {

@@ -28,6 +28,7 @@ import RouteTransition from "@/components/RouteTransition";
 import CookieConsentBanner from "@/components/CookieConsentBanner";
 import Analytics from "@/components/Analytics";
 import PreviewInteraction from "@/components/PreviewInteraction";
+import PreviewSectionOutline from "@/components/PreviewSectionOutline";
 import PreviewImageDragGuard from "@/components/PreviewImageDragGuard";
 import type { Shop } from "@/lib/types";
 import type { ShopInitialData } from "@/lib/shop-initial-data";
@@ -263,6 +264,7 @@ function Body({ children }: { children: React.ReactNode }) {
         <>
           <PreviewImageDragGuard />
           <PreviewInteraction />
+          <PreviewSectionOutline />
         </>
       )}
     </>
