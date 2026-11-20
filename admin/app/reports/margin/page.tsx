@@ -18,8 +18,8 @@ import Card from "@/components/ui/Card";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import ReportsFilterBar from "@/components/ReportsFilterBar";
 import PageShell from "@/components/ui/PageShell";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 const DIMENSIONS: { value: MarginDimension; label: string }[] = [
   { value: "product", label: "Product" },
@@ -35,7 +35,7 @@ function percent(value: number | null) {
 
 export default function MarginReportPage() {
   const currency = useShopCurrency();
-  const fmt = (value: number) => formatMoney(value, currency);
+  const fmt = (value: number) => <Money amount={value} currency={currency} />;
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [draftFilters, setDraftFilters] = useState<ReportsFilters>({});
   const [appliedFilters, setAppliedFilters] = useState<ReportsFilters>({});

@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { deleteSupplierContact, deleteSupplierItem, getSupplier } from "@/lib/api";
 import type { SupplierContact, SupplierDetail, SupplierItem } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
-import { formatMoney } from "@/lib/money";
 import BackButton from "@/components/ui/BackButton";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -23,6 +22,7 @@ import StatusBadge from "@/components/StatusBadge";
 import SupplierFormModal from "@/components/SupplierFormModal";
 import SupplierContactFormModal from "@/components/SupplierContactFormModal";
 import SupplierItemFormModal from "@/components/SupplierItemFormModal";
+import Money from "@/components/Money";
 
 const ICON_BTN =
   "p-1.5 rounded text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer";
@@ -99,7 +99,7 @@ export default function SupplierDetailPage() {
               <Field label="Currency" value={supplier.currency} />
               <Field
                 label="Minimum order"
-                value={supplier.minimumOrderAmount && supplier.currency ? formatMoney(supplier.minimumOrderAmount, supplier.currency) : null}
+                value={supplier.minimumOrderAmount && supplier.currency ? <Money amount={supplier.minimumOrderAmount} currency={supplier.currency} /> : null}
               />
               <div className="sm:col-span-2">
                 <Field label="Notes" value={supplier.notes} />
@@ -200,7 +200,7 @@ export default function SupplierDetailPage() {
                       {i.ingredientName} <span className="font-normal text-text-muted">({i.ingredientUnit})</span>
                     </div>
                     <div className="mt-0.5 text-[13.5px] font-bold text-text-primary dark:text-zinc-100">
-                      {i.unitCost !== null && i.currency ? formatMoney(i.unitCost, i.currency) : <span className="font-normal text-text-muted">No price</span>}
+                      {i.unitCost !== null && i.currency ? <Money amount={i.unitCost} currency={i.currency} /> : <span className="font-normal text-text-muted">No price</span>}
                     </div>
                     <div className="mt-0.5 text-xs text-text-muted">
                       {i.supplierSku ?? "No SKU"} · min {i.minOrderQty ?? "not set"} · {i.leadTimeDays === null ? "lead time not set" : `${i.leadTimeDays} d lead`}
@@ -228,7 +228,7 @@ export default function SupplierDetailPage() {
                         </td>
                         <td className="p-2">{i.supplierSku ?? <span className="text-text-muted">Not set</span>}</td>
                         <td className="p-2 text-end">
-                          {i.unitCost !== null && i.currency ? formatMoney(i.unitCost, i.currency) : <span className="text-text-muted">Not set</span>}
+                          {i.unitCost !== null && i.currency ? <Money amount={i.unitCost} currency={i.currency} /> : <span className="text-text-muted">Not set</span>}
                         </td>
                         <td className="p-2 text-end">{i.minOrderQty ?? "Not set"}</td>
                         <td className="p-2 text-end">{i.leadTimeDays === null ? "Not set" : `${i.leadTimeDays} d`}</td>
@@ -286,7 +286,7 @@ export default function SupplierDetailPage() {
   );
 }
 
-function Field({ label, value }: { label: string; value: string | null }) {
+function Field({ label, value }: { label: string; value: ReactNode | null }) {
   return (
     <div>
       <dt className="text-[13px] font-medium text-text-secondary dark:text-zinc-400">{label}</dt>

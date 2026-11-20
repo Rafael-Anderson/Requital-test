@@ -21,7 +21,6 @@ import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatusBadge from "@/components/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
 import PageShell from "@/components/ui/PageShell";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
 import CustomerTagsCard from "@/components/customers/CustomerTagsCard";
 import CustomerNotesCard from "@/components/customers/CustomerNotesCard";
@@ -126,7 +125,7 @@ export default function CustomerDetailPage() {
               <StatCard label="Orders" value={String(customer.orderCount)} icon={<ClipboardList className="size-4" />} />
               <StatCard
                 label="Lifetime Value"
-                value={formatMoney(customer.lifetimeValue, currency)}
+                value={<Money amount={customer.lifetimeValue} currency={currency} />}
                 icon={<Wallet className="size-4" />}
                 subtext="Excludes cancelled orders"
               />

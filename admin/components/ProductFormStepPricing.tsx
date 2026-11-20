@@ -13,6 +13,7 @@ import ProductFeatureSection from "@/components/ProductFeatureSection";
 import { WEIGHT_UNITS, type WeightUnit } from "@/lib/types";
 import type { ProductFormState } from "@/lib/useProductForm";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import CurrencySymbol from "@/components/CurrencySymbol";
 
 // Quick presets for the per-product delivery-time override — same
 // preset-Select-plus-custom-inputs juxtaposition OutletDeliveryTab.tsx's
@@ -46,7 +47,7 @@ export default function ProductFormStepPricing({ form }: { form: ProductFormStat
             {form.isGiftCard ? (
               <div>
                 <label className="text-sm font-medium text-text-secondary dark:text-zinc-400 block mb-1.5">
-                  Denominations ({currency})
+                  Denominations (<CurrencySymbol code={currency} />)
                 </label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {form.giftCardDenominations.map((value) => (

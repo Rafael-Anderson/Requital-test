@@ -10,11 +10,11 @@ import {
   listCreditNotesForOrder,
   listInvoicesForOrder,
 } from "@/lib/api";
-import { formatMoney } from "@/lib/money";
 import type { CreditNote, Invoice, InvoiceType, OrderReturn } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
+import Money from "@/components/Money";
 
 const TYPE_LABEL: Record<InvoiceType, string> = {
   INVOICE: "Invoice",
@@ -186,7 +186,7 @@ export default function OrderInvoiceTab({ orderId }: { orderId: number }) {
                 size="sm"
                 onClick={() => setSelectedCn(cn)}
               >
-                {cn.number} ({formatMoney(cn.total, cn.currency)})
+                {cn.number} (<Money amount={cn.total} currency={cn.currency} />)
               </Button>
             ))}
           </div>

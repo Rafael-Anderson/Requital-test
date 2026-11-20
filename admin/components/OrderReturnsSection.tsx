@@ -10,6 +10,7 @@ import Select from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { formatAmount } from "@/lib/money";
 import Money from "@/components/Money";
+import CurrencySymbol from "@/components/CurrencySymbol";
 
 const RETURN_REASONS: { value: OrderReturn["reason"]; label: string }[] = [
   { value: "damaged", label: "Damaged" },
@@ -205,7 +206,7 @@ export default function OrderReturnsSection({
               }}
               className="h-8 w-28 rounded-md border border-border dark:border-white/15 bg-surface dark:bg-zinc-900 px-2 text-sm text-end outline-none focus:border-accent"
             />
-            {order.currency}
+            <CurrencySymbol code={order.currency} />
           </label>
 
           {order.customerId != null && (

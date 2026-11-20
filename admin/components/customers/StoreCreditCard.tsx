@@ -12,6 +12,9 @@ import LoadFailed from "@/components/ui/LoadFailed";
 import Skeleton from "@/components/ui/Skeleton";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import { useToast } from "@/components/ui/Toast";
+import Money from "@/components/Money";
+import CurrencySymbol from "@/components/CurrencySymbol";
+import { formatAmount } from "@/lib/money";
 
 const CURRENCIES = ["AED", "SAR", "KWD", "QAR", "BHD", "OMR", "USD"];
 
@@ -102,7 +105,7 @@ export default function StoreCreditCard({ customerId, canEdit }: { customerId: n
             {data.balances.map((b) => (
               <div key={b.currency}>
                 <div className="text-xl font-semibold">
-                  {b.balance} <span className="text-sm font-normal text-text-muted">{b.currency}</span>
+                  {formatAmount(b.balance, b.currency)} <span className="text-sm font-normal text-text-muted"><CurrencySymbol code={b.currency} /></span>
                 </div>
                 <div className="text-xs text-text-faint">balance</div>
               </div>
@@ -156,7 +159,7 @@ export default function StoreCreditCard({ customerId, canEdit }: { customerId: n
                     </span>
                     <span className={Number(e.amount) < 0 ? "text-red-600" : "text-green-700"}>
                       {Number(e.amount) > 0 ? "+" : ""}
-                      {e.amount} {e.currency}
+                      <Money amount={e.amount} currency={e.currency} />
                     </span>
                   </li>
                 ))}

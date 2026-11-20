@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Package, ClipboardList, Users, Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { globalSearch, type GlobalSearchResult } from "@/lib/api";
-import { formatMoney } from "@/lib/money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
+import Money from "@/components/Money";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -14,7 +14,7 @@ interface FlatResult {
   key: string;
   type: "product" | "order" | "customer";
   label: string;
-  sublabel: string;
+  sublabel: ReactNode;
   href: string;
 }
 
@@ -30,14 +30,14 @@ function flatten(
       key: `product-${p.id}`,
       type: "product" as const,
       label: p.name,
-      sublabel: `${p.sku} · ${formatMoney(p.price, currency)}`,
+      sublabel: <>{p.sku} · <Money amount={p.price} currency={currency} /></>,
       href: `/products/${p.id}/edit`,
     })),
     ...result.orders.map((o) => ({
       key: `order-${o.id}`,
       type: "order" as const,
       label: `Order #${o.shopOrderNumber} · ${o.customerName}`,
-      sublabel: `${o.status.replace(/_/g, " ")} · ${formatMoney(o.total, currency)}`,
+      sublabel: <>{o.status.replace(/_/g, " ")} · <Money amount={o.total} currency={currency} /></>,
       href: `/orders/${o.id}`,
     })),
     ...result.customers.map((c) => ({

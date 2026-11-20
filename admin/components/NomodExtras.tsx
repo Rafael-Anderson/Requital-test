@@ -14,6 +14,7 @@ import type { NomodPendingCheckout } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
+import Money from "@/components/Money";
 
 // Everything about Nomod that is not a credential field: the webhook address to
 // paste into Nomod, a connection test, the partial refund warning and the list of
@@ -182,7 +183,7 @@ export default function NomodExtras({
             {pending.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-2 text-xs">
                 <span>
-                  Order #{p.shopOrderNumber}, {p.amount} {p.currency}:{" "}
+                  Order #{p.shopOrderNumber}, <Money amount={p.amount} currency={p.currency} />:{" "}
                   {p.disputed
                     ? "dispute opened"
                     : p.status === "review"

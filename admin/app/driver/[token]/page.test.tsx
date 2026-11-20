@@ -26,6 +26,14 @@ vi.mock("next/navigation", () => ({ useParams: () => ({ token: "T".repeat(43) })
 
 import Page from "./page";
 
+// The innermost element whose text (the Dirham symbol is an SVG, so it adds none) matches and that
+// draws the Dirham symbol: AED amounts render as "<amount> <svg aria-label=AED>", not "AED".
+function withDirham(match: (text: string) => boolean) {
+  const norm = (el: Element) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const hit = (el: Element) => match(norm(el)) && !!el.querySelector('[data-currency-symbol="AED"]');
+  return (_: string, el: Element | null) => !!el && hit(el) && !Array.from(el.children).some(hit);
+}
+
 const stop = (over: Record<string, unknown> = {}) => ({
   id: 5,
   position: 1,
@@ -101,7 +109,7 @@ describe("driver page", () => {
     api.driverGetRun.mockResolvedValue(view([stop({ cod: { amount: "100.00", currency: "AED", alreadyCollected: false } })]));
     api.driverDeliver.mockResolvedValue({ status: "delivered", runCompleted: false });
     render(<Page />);
-    await screen.findByText("Collect 100.00 AED");
+    await screen.findByText(withDirham((t) => t === "Collect 100.00"));
     await userEvent.type(screen.getByLabelText(/Cash collected/), "100.00");
     await userEvent.type(screen.getByLabelText("Customer code"), "123456");
     await userEvent.click(screen.getByRole("button", { name: "Mark delivered" }));

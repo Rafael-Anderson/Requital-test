@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { listAuditLog, listAuditLogActors } from "@/lib/api";
 import type { AuditLogEntry } from "@/lib/types";
 import { Table, THead, TBody, TH, TR, TD } from "@/components/ui/Table";
@@ -11,7 +11,8 @@ import Button from "@/components/ui/Button";
 import BackButton from "@/components/ui/BackButton";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import PageShell from "@/components/ui/PageShell";
-import { formatAmount, formatMoney } from "@/lib/money";
+import { formatAmount } from "@/lib/money";
+import Money from "@/components/Money";
 import { useShopCurrency } from "@/lib/useShopCurrency";
 
 const PAGE_SIZE = 25;
@@ -33,14 +34,19 @@ const ENTITY_TYPES = ["auth", "product", "order", "collection", "discount", "bio
 
 // currency is a parameter, not a hook: describe() is pure and module-level, and
 // an audit entry stores only the before/after values, no currency.
-function describe(entry: AuditLogEntry, currency: string | null): string {
+function describe(entry: AuditLogEntry, currency: string | null): ReactNode {
   const before = entry.before as Record<string, unknown> | null;
   const after = entry.after as Record<string, unknown> | null;
   const metadata = entry.metadata as Record<string, unknown> | null;
 
   switch (entry.action) {
     case "product.price_changed":
-      return `${formatAmount(before?.price as string, currency) || "?"} → ${formatMoney(after?.price as string, currency) || "?"}`;
+      return (
+        <>
+          {formatAmount(before?.price as string, currency) || "?"} →{" "}
+          {after?.price != null && after.price !== "" ? <Money amount={after.price as string} currency={currency} /> : "?"}
+        </>
+      );
     case "product.status_changed":
       return `${before?.status ?? "?"} → ${after?.status ?? "?"}`;
     case "product.deleted":

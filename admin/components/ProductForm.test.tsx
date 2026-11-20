@@ -6,6 +6,14 @@ import { ToastProvider } from "@/components/ui/Toast";
 import type { Product } from "@/lib/types";
 import { getShop } from "@/lib/api";
 
+// The innermost element whose text (the Dirham symbol is an SVG, so it adds none) matches and that
+// draws the Dirham symbol: AED amounts render as "<amount> <svg aria-label=AED>", not "AED".
+function withDirham(match: (text: string) => boolean) {
+  const norm = (el: Element) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+  const hit = (el: Element) => match(norm(el)) && !!el.querySelector('[data-currency-symbol="AED"]');
+  return (_: string, el: Element | null) => !!el && hit(el) && !Array.from(el.children).some(hit);
+}
+
 // Mocking the module rather than wrapping in a provider, matching how this
 // suite already handles auth-context/outlet-context (see OutletSwitcher.test.tsx).
 vi.mock("@/lib/useShopCurrency", () => ({
@@ -140,7 +148,7 @@ describe("ProductForm wizard", () => {
 
     await waitFor(() => expect(screen.getByText("Create product")).toBeInTheDocument());
     expect(screen.getByText("New Product")).toBeInTheDocument();
-    expect(screen.getByText("AED 50")).toBeInTheDocument();
+    expect(screen.getByText(withDirham((t) => t === "50.00"))).toBeInTheDocument();
   });
 
   it("toggling 'This is a gift card' hides Price/SKU and reveals a denomination editor", async () => {
@@ -156,7 +164,7 @@ describe("ProductForm wizard", () => {
     // unwrapped <div> + <Toggle> + <span> shape, not a clickable <label>).
     await user.click(screen.getAllByRole("switch")[0]);
     expect(screen.queryByLabelText("Price (AED)")).not.toBeInTheDocument();
-    expect(screen.getByText("Denominations (AED)")).toBeInTheDocument();
+    expect(screen.getByText(withDirham((t) => t === "Denominations ()"))).toBeInTheDocument();
 
     const draftInput = screen.getByPlaceholderText("e.g. 100");
     await user.type(draftInput, "100");
@@ -184,13 +192,13 @@ describe("ProductForm wizard", () => {
     await user.click(screen.getByText("Pricing & Inventory"));
     await waitFor(() => expect(screen.getByText("Price (AED)")).toBeInTheDocument());
     await user.click(screen.getAllByRole("switch")[0]);
-    await waitFor(() => expect(screen.getByText("Denominations (AED)")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(withDirham((t) => t === "Denominations ()"))).toBeInTheDocument());
 
     await user.click(screen.getByText("Organization"));
     await waitFor(() => expect(screen.getByText("Save changes")).toBeInTheDocument());
     await user.click(screen.getByText("Save changes"));
 
-    await waitFor(() => expect(screen.getByText("Denominations (AED)")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(withDirham((t) => t === "Denominations ()"))).toBeInTheDocument());
     expect(screen.getByText("Add at least one denomination")).toBeInTheDocument();
   });
 
