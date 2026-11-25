@@ -106,6 +106,8 @@ async function openMega(page: Page, label: string) {
   await page.locator('[data-mega-panel]').waitFor();
   // The layout is measured before first paint; give a font swap a moment to re-pack.
   await page.waitForTimeout(150);
+  // Still open after the wait (a click that closed it again would make the reads below see nothing).
+  await expect(page.locator('[data-mega-panel]')).toHaveCount(1);
 }
 
 async function open(page: Page, width: number, dir: 'ltr' | 'rtl') {
@@ -221,6 +223,18 @@ test('a two-group mega menu sits side by side across the full width', async ({ p
     await page.mouse.click(5, 880);
     await expect(page.locator('[data-mega-panel]')).toHaveCount(0);
   }
+});
+
+test('a mouse click after hover keeps the mega panel open', async ({ page }) => {
+  await open(page, 1440, 'ltr');
+  const trigger = page.getByRole('button', { name: 'Flowers', exact: true });
+  await trigger.hover();
+  await page.locator('[data-mega-panel]').waitFor();
+  await page.waitForTimeout(50);
+  await trigger.click();
+  // The old toggle closed it 100ms after the click.
+  await page.waitForTimeout(300);
+  await expect(page.locator('[data-mega-panel]')).toHaveCount(1);
 });
 
 test('on a phone the mega menu keeps its compact flyout', async ({ browser }) => {
