@@ -586,7 +586,14 @@ function MenuBarItem({
         data-mega-trigger={item.id}
         onMouseEnter={(e) => onMegaEnter(e.currentTarget)}
         onMouseLeave={onMegaLeave}
-        onClick={(e) => (isMegaOpen ? onMegaLeave() : onMegaEnter(e.currentTarget))}
+        onClick={(e) => {
+          // A mouse click always lands after hover has opened the panel (mouseleave closes it), so
+          // it must keep it open; toggling closed here made hover-then-click shut the menu. Touch
+          // and keyboard still toggle.
+          const pointerType = (e.nativeEvent as PointerEvent).pointerType;
+          if (pointerType === "mouse" || !isMegaOpen) onMegaEnter(e.currentTarget);
+          else onMegaLeave();
+        }}
         className={`${linkClass} inline-flex items-center gap-0.5 cursor-pointer shrink-0`}
         style={cssStyle}
         {...handlers}
