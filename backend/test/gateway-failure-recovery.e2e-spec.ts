@@ -747,7 +747,7 @@ describe('Gateway failure recovery and idempotent checkout (e2e)', () => {
       expect(jobs).toHaveLength(1);
       const payload = jobs[0].payload as { body: string };
       expect(payload.body).toMatch(
-        /^Payment received for cancelled order #\d+\. Refund it in the payment provider\.$/,
+        /^Payment received for cancelled order #\d+\. Fulfil it or refund it in the payment provider\.$/,
       );
 
       // The same event again, and a second payment event: no second alert.

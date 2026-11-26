@@ -7,6 +7,8 @@ import { createLogger } from '../common/logging/logger';
 import { PaymentsService } from './payments.service';
 import { PaymentProviderRegistry } from './payment-provider.registry';
 import { PaymentSettingsService } from './payment-settings.service';
+import { OrdersService } from '../orders/orders.service';
+import type { CheckoutSessionOutcome } from './payment-provider.interface';
 
 const logger = createLogger('PaymentReconciliation');
 
@@ -40,6 +42,17 @@ export const MAX_PER_TICK = 50;
 // Hard-coded in SQL so the SELECT and the claim use the exact same number.
 export const RECHECK_MINUTES = { young: 10, live: 60, late: 720 } as const;
 const YOUNG_UNDER_MINUTES = 120;
+
+// Abandoned card payments. A card order (storefront checkout or a custom order's
+// pay link) still unpaid this many hours after its LATEST provider session was
+// created is asked about once more and, if the provider says it is not paid,
+// cancelled so the stock it reserved goes back. Stripe Checkout sessions live 24h.
+export const ABANDONED_PAYMENT_HOURS = 24;
+// Gateways the sweep can ask (both implement retrieveSessionOutcome). Anything
+// else (BNPL, PayPal, ...) is never auto-cancelled.
+export const ABANDONED_PAYMENT_GATEWAYS = ['stripe', 'nomod'] as const;
+// Channels whose card orders hold stock while pending.
+const ABANDONED_PAYMENT_CHANNELS = ['storefront', 'draft_order'] as const;
 const LIVE_UNDER_MINUTES = 24 * 60;
 const WINDOW_SQL = `(CASE
             WHEN TIMESTAMPDIFF(MINUTE, o.createdAt, NOW()) < ${YOUNG_UNDER_MINUTES} THEN ${RECHECK_MINUTES.young}
@@ -54,6 +67,7 @@ export class PaymentReconciliationService {
     private readonly paymentsService: PaymentsService,
     private readonly providerRegistry: PaymentProviderRegistry,
     private readonly paymentSettingsService: PaymentSettingsService,
+    private readonly ordersService: OrdersService,
   ) {}
 
   // Every 10 minutes, wrapped in the same cross-instance advisory lock every
@@ -66,6 +80,7 @@ export class PaymentReconciliationService {
       600,
       async () => {
         await this.runSweep();
+        await this.runAbandonedSweep();
       },
     );
   }
@@ -190,6 +205,21 @@ export class PaymentReconciliationService {
       return false;
     }
 
+    await this.applyPaidOutcome(orderId, gateway, sessionId, outcome);
+    logger.warn('order marked paid by reconciliation, not by webhook', {
+      orderId,
+      shopId,
+      gateway,
+    });
+    return true;
+  }
+
+  private async applyPaidOutcome(
+    orderId: number,
+    gateway: string,
+    sessionId: string,
+    outcome: Extract<CheckoutSessionOutcome, { status: 'paid' }>,
+  ): Promise<void> {
     // Applied through the SAME method the real webhook uses, not a parallel
     // mark-as-paid path: same transaction, same unique-index idempotency guard,
     // same affiliate sync, same CAS status advancement (so a reconciled card
@@ -211,12 +241,115 @@ export class PaymentReconciliationService {
       // reconciled payment reserves stock the same way a delivered one does.
       advanceOrderStatus: 'confirmed',
     });
+  }
 
-    logger.warn('order marked paid by reconciliation, not by webhook', {
-      orderId,
-      shopId,
-      gateway,
-    });
-    return true;
+  // ABANDONED card payments: a pending, unpaid card order whose latest provider
+  // session is older than ABANDONED_PAYMENT_HOURS. Shares this service's lock with
+  // reconciliation (one tick runs both), and its order of operations is fixed:
+  //   1. ask the provider FIRST;
+  //   2. paid -> applied through applyWebhookResult (the idempotent path, amount
+  //      guard included: Nomod answers "paid" only after the amount check), and the
+  //      order is NOT cancelled;
+  //   3. definitely not paid -> cancelled through the staff cancel's transaction
+  //      body (stock, discount, credit, gift card back; draft back to link sent),
+  //      only while it is still on the session that was asked about;
+  //   4. anything uncertain (provider unreachable, no credentials, unknown session,
+  //      parked for review) -> skipped this run. Never cancels on uncertainty.
+  // An order whose session start was never recorded (it predates the column) is
+  // cancelled only on a definite "expired": the customer may be paying on a
+  // session minted moments ago. A payment that arrives after the cancel is parked
+  // and the merchant alerted by applyWebhookResult (raiseLatePayment); the order
+  // is never reopened. Nothing is sent to the customer. `shopId` scopes one run to
+  // one shop (tests); the cron runs every shop.
+  async runAbandonedSweep(
+    opts: { shopId?: number } = {},
+  ): Promise<{ cancelled: number; paid: number; skipped: number }> {
+    const gateways = ABANDONED_PAYMENT_GATEWAYS.map(() => '?').join(', ');
+    const channels = ABANDONED_PAYMENT_CHANNELS.map(() => '?').join(', ');
+    const candidates = await this.db.query<RowDataPacket[]>(
+      `SELECT o.id, o.shopId, o.paymentSessionId, o.paymentSessionGateway,
+              o.paymentSessionStartedAt IS NOT NULL AS startKnown
+         FROM \`order\` o
+        WHERE o.status = 'pending' AND o.paymentStatus = 'unpaid'
+          AND o.paymentMethod = 'card_online'
+          AND o.channel IN (${channels})
+          AND o.paymentSessionId IS NOT NULL
+          AND o.paymentSessionGateway IN (${gateways})
+          AND o.paymentSessionClaimToken IS NULL
+          AND COALESCE(o.paymentSessionStartedAt, o.paymentSessionAt, o.createdAt)
+              < DATE_SUB(NOW(3), INTERVAL ? HOUR)
+          ${opts.shopId !== undefined ? 'AND o.shopId = ?' : ''}
+        ORDER BY o.id ASC
+        LIMIT ?`,
+      [
+        ...ABANDONED_PAYMENT_CHANNELS,
+        ...ABANDONED_PAYMENT_GATEWAYS,
+        ABANDONED_PAYMENT_HOURS,
+        ...(opts.shopId !== undefined ? [opts.shopId] : []),
+        MAX_PER_TICK,
+      ],
+    );
+    const result = { cancelled: 0, paid: 0, skipped: 0 };
+    for (const row of candidates) {
+      const orderId = row.id as number;
+      const shopId = row.shopId as number;
+      const gateway = row.paymentSessionGateway as string;
+      const sessionId = row.paymentSessionId as string;
+      let outcome: CheckoutSessionOutcome | null;
+      try {
+        const provider = this.providerRegistry.get(gateway);
+        if (!provider.retrieveSessionOutcome) {
+          result.skipped += 1;
+          continue;
+        }
+        const credentials =
+          await this.paymentSettingsService.resolveCredentials(shopId, gateway);
+        outcome = await provider.retrieveSessionOutcome(sessionId, credentials);
+      } catch (err) {
+        logger.warn('abandoned-payment check skipped: provider not reachable', {
+          orderId,
+          shopId,
+          gateway,
+          error: err instanceof Error ? err.name : 'non-error',
+        });
+        result.skipped += 1;
+        continue;
+      }
+      try {
+        if (!outcome) {
+          result.skipped += 1;
+        } else if (outcome.status === 'paid') {
+          await this.applyPaidOutcome(orderId, gateway, sessionId, outcome);
+          result.paid += 1;
+        } else if (outcome.status === 'expired' || row.startKnown) {
+          const done = await this.ordersService.cancelAbandonedPayment(
+            shopId,
+            orderId,
+            sessionId,
+            gateway,
+          );
+          if (done) {
+            result.cancelled += 1;
+            logger.warn('order cancelled: card payment not completed', {
+              orderId,
+              shopId,
+              gateway,
+            });
+          } else {
+            result.skipped += 1;
+          }
+        } else {
+          result.skipped += 1;
+        }
+      } catch (err) {
+        logger.error('abandoned-payment sweep failed for order', {
+          orderId,
+          shopId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        result.skipped += 1;
+      }
+    }
+    return result;
   }
 }

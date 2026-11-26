@@ -597,7 +597,7 @@ ${renderPeopleBlockHtml(people, 'left')}
       orderId,
       `order:${orderId}:late-payment`,
       (n) =>
-        `Payment received for cancelled order #${n}. Refund it in the payment provider.`,
+        `Payment received for cancelled order #${n}. Fulfil it or refund it in the payment provider.`,
     );
   }
 

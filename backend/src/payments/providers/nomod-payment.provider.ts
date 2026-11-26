@@ -101,6 +101,9 @@ export class NomodPaymentProvider implements PaymentProvider {
     credentials?: Record<string, string> | null,
   ): Promise<CheckoutSessionOutcome | null> {
     if (!this.payments) return null;
+    // No usable credentials means Nomod was never asked: that is "unknown", not
+    // "unpaid" (the abandoned-payment sweep must never cancel on it).
+    if (!nomodCredentials(credentials ?? null)) return null;
     const row = await this.payments.findByCheckoutId(sessionId);
     if (!row) return null;
     const verdict = await this.payments.inspect(row, credentials ?? null);
@@ -111,6 +114,10 @@ export class NomodPaymentProvider implements PaymentProvider {
       case 'expired':
       case 'cancelled':
         return { status: 'expired' };
+      case 'review':
+        // Parked for a human (amount or currency mismatch): not a verdict the
+        // sweeps may act on either way.
+        return null;
       default:
         return { status: 'unpaid' };
     }

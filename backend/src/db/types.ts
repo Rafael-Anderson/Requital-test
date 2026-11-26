@@ -101,6 +101,8 @@ export interface OrderRow {
   // lets a replay return the same open session. Internal: stripAttribution removes it.
   paymentSessionUrl: string | null;
   paymentSessionAt: Date | null;
+  paymentSessionStartedAt: Date | null;
+  paymentAbandonedAt: Date | null;
 }
 
 export interface MapsErrorLogRow {
