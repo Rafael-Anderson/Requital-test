@@ -12,6 +12,10 @@ import { DatabaseService } from '../database/database.service';
 import type { QueryParam } from '../database/database.service';
 import { isDuplicateKeyError } from '../database/mysql-errors';
 import { decrypt, encrypt } from '../common/crypto';
+import {
+  sanitizeCredentialMap,
+  sanitizeCredentialValue,
+} from '../common/credential-sanitize';
 import type { TenantContext } from '../common/tenant-context';
 import { FeaturesService } from '../features/features.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -89,7 +93,7 @@ function assertCredentialMap(value: unknown): Record<string, string> {
       throw new BadRequestException(
         'credentials keys must be simple names and values non-empty strings up to 2000 characters',
       );
-    out[k] = v;
+    out[k] = sanitizeCredentialValue(v);
   }
   return out;
 }
@@ -197,7 +201,9 @@ export class ChannelConnectionsService {
     const credentials = dto.credentials
       ? encrypt(JSON.stringify(assertCredentialMap(dto.credentials)))
       : null;
-    const secret = dto.webhookSecret ? encrypt(dto.webhookSecret) : null;
+    const secret = dto.webhookSecret
+      ? encrypt(sanitizeCredentialValue(dto.webhookSecret))
+      : null;
     let id: number;
     try {
       const res = await this.db.execute(
@@ -322,7 +328,9 @@ export class ChannelConnectionsService {
     if (dto.webhookSecret !== undefined) {
       sets.push('webhookSecret = ?');
       params.push(
-        dto.webhookSecret === null ? null : encrypt(dto.webhookSecret),
+        dto.webhookSecret === null
+          ? null
+          : encrypt(sanitizeCredentialValue(dto.webhookSecret)),
       );
     }
     // An id change is only valid while the connection is off, and that is
@@ -856,10 +864,15 @@ export class ChannelConnectionsService {
       externalLocationId: row.externalLocationId,
       externalBrandId: row.externalBrandId,
       externalSiteId: row.externalSiteId,
+      // Sanitised on use as well as on save (credential-sanitize.ts).
       credentials: row.credentials
-        ? (JSON.parse(decrypt(row.credentials)) as Record<string, string>)
+        ? sanitizeCredentialMap(
+            JSON.parse(decrypt(row.credentials)) as Record<string, string>,
+          )
         : null,
-      webhookSecret: row.webhookSecret ? decrypt(row.webhookSecret) : null,
+      webhookSecret: row.webhookSecret
+        ? sanitizeCredentialValue(decrypt(row.webhookSecret))
+        : null,
     };
   }
 

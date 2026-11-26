@@ -2565,7 +2565,22 @@ export const WHATSAPP_CREDENTIAL_FIELDS: CredentialFieldDef[] = [
 export interface WhatsAppSettings {
   hasCredentials: boolean;
   maskedCredentials: Record<string, string> | null;
+  // Only on the answer to a save: the automatic Test connection.
+  connectionTest?: WhatsAppConnectionTest;
 }
+
+// Meta's own message and trace id for a failed Graph API call. Never a token.
+export interface MetaErrorDetails {
+  metaMessage: string | null;
+  fbtraceId: string | null;
+  code: number | null;
+  subcode: number | null;
+  status: number;
+}
+
+export type WhatsAppConnectionTest =
+  | { ok: true; displayPhoneNumber: string | null; verifiedName: string | null }
+  | { ok: false; reason: string; message: string; details: MetaErrorDetails | null };
 
 // --- Slider delivery — mirrors backend/src/delivery-providers/. ---
 

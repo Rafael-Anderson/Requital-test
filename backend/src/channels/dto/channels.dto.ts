@@ -1,4 +1,5 @@
 import { Type } from 'class-transformer';
+import { SanitizeCredential } from '../../common/credential-sanitize';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -38,6 +39,7 @@ export class CreateChannelConnectionDto {
   provider: string;
 
   @IsOptional()
+  @SanitizeCredential()
   @IsString()
   @MinLength(ID.min)
   @MaxLength(ID.max)
@@ -45,12 +47,14 @@ export class CreateChannelConnectionDto {
   externalLocationId?: string;
 
   @IsOptional()
+  @SanitizeCredential()
   @IsString()
   @MaxLength(ID.max)
   @Matches(ID_PATTERN, { message: ID_MESSAGE })
   externalBrandId?: string;
 
   @IsOptional()
+  @SanitizeCredential()
   @IsString()
   @MaxLength(ID.max)
   @Matches(ID_PATTERN, { message: ID_MESSAGE })
@@ -58,11 +62,13 @@ export class CreateChannelConnectionDto {
 
   // WRITE-ONLY. Flat string map; encrypted at rest, never returned.
   @IsOptional()
+  @SanitizeCredential()
   @IsObject()
   credentials?: Record<string, string>;
 
   // WRITE-ONLY.
   @IsOptional()
+  @SanitizeCredential()
   @IsString()
   @MinLength(8)
   @MaxLength(512)
@@ -72,6 +78,7 @@ export class CreateChannelConnectionDto {
 // provider and outletId are immutable after create. null clears a field.
 export class UpdateChannelConnectionDto {
   @IsOptional()
+  @SanitizeCredential()
   @ValidateIf((_o, v) => v !== null)
   @IsString()
   @MinLength(ID.min)
@@ -80,6 +87,7 @@ export class UpdateChannelConnectionDto {
   externalLocationId?: string | null;
 
   @IsOptional()
+  @SanitizeCredential()
   @ValidateIf((_o, v) => v !== null)
   @IsString()
   @MaxLength(ID.max)
@@ -87,6 +95,7 @@ export class UpdateChannelConnectionDto {
   externalBrandId?: string | null;
 
   @IsOptional()
+  @SanitizeCredential()
   @ValidateIf((_o, v) => v !== null)
   @IsString()
   @MaxLength(ID.max)
@@ -94,11 +103,13 @@ export class UpdateChannelConnectionDto {
   externalSiteId?: string | null;
 
   @IsOptional()
+  @SanitizeCredential()
   @ValidateIf((_o, v) => v !== null)
   @IsObject()
   credentials?: Record<string, string> | null;
 
   @IsOptional()
+  @SanitizeCredential()
   @ValidateIf((_o, v) => v !== null)
   @IsString()
   @MinLength(8)

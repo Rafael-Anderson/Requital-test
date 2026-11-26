@@ -1,4 +1,5 @@
 import { IsBoolean, IsObject, IsOptional } from 'class-validator';
+import { SanitizeCredential } from '../../common/credential-sanitize';
 
 export class UpdatePaymentProviderDto {
   @IsOptional()
@@ -10,5 +11,6 @@ export class UpdatePaymentProviderDto {
   // than here, same tradeoff as UpdateThemeDto.colors.
   @IsOptional()
   @IsObject()
+  @SanitizeCredential()
   credentials?: Record<string, string>;
 }

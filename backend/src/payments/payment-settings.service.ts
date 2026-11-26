@@ -14,6 +14,7 @@ import type {
   PaymentProvider,
 } from './payment-provider.interface';
 import { credentialProblems } from './credential-validation';
+import { sanitizeCredentialMap } from '../common/credential-sanitize';
 import {
   CREDENTIALS_REJECTED,
   CredentialHealthService,
@@ -127,7 +128,9 @@ export class PaymentSettingsService {
         this.resolveEnabled(provider, byProvider) &&
         (provider !== 'nomod' || nomodGranted);
       const decrypted = row?.credentials
-        ? (JSON.parse(decrypt(row.credentials)) as Record<string, string>)
+        ? sanitizeCredentialMap(
+            JSON.parse(decrypt(row.credentials)) as Record<string, string>,
+          )
         : null;
       const response: ProviderSettingsResponse = {
         provider,
@@ -206,6 +209,9 @@ export class PaymentSettingsService {
     const typedProvider = provider as PaymentGatewayProvider;
 
     if (dto.credentials) {
+      // Pasted invisible characters (zero-width, bidi marks) are removed before
+      // any check, for every provider (credential-sanitize.ts).
+      dto.credentials = sanitizeCredentialMap(dto.credentials);
       this.assertValidCredentials(typedProvider, dto.credentials);
       // Copy and paste adds stray spaces; the shape checks above already ignore
       // them, so the stored value must not carry them either.
@@ -413,7 +419,11 @@ export class PaymentSettingsService {
     );
     const credentials = rows[0]?.credentials as string | null | undefined;
     if (!credentials) return null;
-    return JSON.parse(decrypt(credentials)) as Record<string, string>;
+    // Sanitised on USE too, so a value stored before the save-time clean-up
+    // (with a pasted invisible character) works without being re-entered.
+    return sanitizeCredentialMap(
+      JSON.parse(decrypt(credentials)) as Record<string, string>,
+    );
   }
 
   // Public-safe projection: a Tabby/Tamara "public key" is meant to be

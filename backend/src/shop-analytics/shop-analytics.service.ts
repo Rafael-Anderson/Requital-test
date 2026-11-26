@@ -1,4 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import {
+  sanitizeCredentialValue,
+  sanitizeOptional,
+} from '../common/credential-sanitize';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { QueryParam } from '../database/database.service';
@@ -113,14 +117,16 @@ export class ShopAnalyticsService {
     for (const field of PLAIN_FIELDS) {
       if (dto[field] === undefined) continue;
       columns.push(field);
-      values.push(dto[field]);
+      values.push(sanitizeOptional(dto[field]));
       changed.push(field);
     }
     for (const { dto: key, column } of TOKEN_FIELDS) {
       const token = dto[key];
       if (token === undefined) continue;
       columns.push(column);
-      values.push(token === null ? null : encrypt(token));
+      values.push(
+        token === null ? null : encrypt(sanitizeCredentialValue(token)),
+      );
       // The name of the field that changed, never its value.
       changed.push(key);
     }
@@ -149,18 +155,22 @@ export class ShopAnalyticsService {
 
   // Public-safe config for the storefront. Re-validated by the storefront before
   // use; absent keys mean "not configured".
-  async resolvePublicConfig(shopId: number): Promise<PublicAnalyticsConfig | null> {
+  async resolvePublicConfig(
+    shopId: number,
+  ): Promise<PublicAnalyticsConfig | null> {
     const row = await this.loadRow(shopId);
     if (!row) return null;
     const config: PublicAnalyticsConfig = {};
-    if (row.ga4MeasurementId) config.ga4MeasurementId = row.ga4MeasurementId;
-    if (row.metaPixelId) config.metaPixelId = row.metaPixelId;
-    if (row.tiktokPixelId) config.tiktokPixelId = row.tiktokPixelId;
-    if (row.snapPixelId) config.snapPixelId = row.snapPixelId;
+    const clean = (v: string) => sanitizeCredentialValue(v);
+    if (row.ga4MeasurementId)
+      config.ga4MeasurementId = clean(row.ga4MeasurementId);
+    if (row.metaPixelId) config.metaPixelId = clean(row.metaPixelId);
+    if (row.tiktokPixelId) config.tiktokPixelId = clean(row.tiktokPixelId);
+    if (row.snapPixelId) config.snapPixelId = clean(row.snapPixelId);
     if (row.googleAdsConversionId) {
-      config.googleAdsConversionId = row.googleAdsConversionId;
+      config.googleAdsConversionId = clean(row.googleAdsConversionId);
       if (row.googleAdsConversionLabel) {
-        config.googleAdsConversionLabel = row.googleAdsConversionLabel;
+        config.googleAdsConversionLabel = clean(row.googleAdsConversionLabel);
       }
     }
     return Object.keys(config).length > 0 ? config : null;
@@ -174,23 +184,33 @@ export class ShopAnalyticsService {
     const row = await this.loadRow(shopId);
     if (!row?.metaPixelId || !row.metaCapiTokenEnc) return null;
     return {
-      pixelId: row.metaPixelId,
-      accessToken: decrypt(row.metaCapiTokenEnc),
+      pixelId: sanitizeCredentialValue(row.metaPixelId),
+      accessToken: sanitizeCredentialValue(decrypt(row.metaCapiTokenEnc)),
       testEventCode: row.metaTestEventCode ?? null,
     };
   }
 
   // Same contract as the Meta resolver: null unless BOTH the pixel id and the
   // token are set.
-  async resolveTiktokCredentials(shopId: number): Promise<AdPlatformCredentials | null> {
+  async resolveTiktokCredentials(
+    shopId: number,
+  ): Promise<AdPlatformCredentials | null> {
     const row = await this.loadRow(shopId);
     if (!row?.tiktokPixelId || !row.tiktokEventsTokenEnc) return null;
-    return { pixelId: row.tiktokPixelId, accessToken: decrypt(row.tiktokEventsTokenEnc) };
+    return {
+      pixelId: sanitizeCredentialValue(row.tiktokPixelId),
+      accessToken: sanitizeCredentialValue(decrypt(row.tiktokEventsTokenEnc)),
+    };
   }
 
-  async resolveSnapCredentials(shopId: number): Promise<AdPlatformCredentials | null> {
+  async resolveSnapCredentials(
+    shopId: number,
+  ): Promise<AdPlatformCredentials | null> {
     const row = await this.loadRow(shopId);
     if (!row?.snapPixelId || !row.snapCapiTokenEnc) return null;
-    return { pixelId: row.snapPixelId, accessToken: decrypt(row.snapCapiTokenEnc) };
+    return {
+      pixelId: sanitizeCredentialValue(row.snapPixelId),
+      accessToken: sanitizeCredentialValue(decrypt(row.snapCapiTokenEnc)),
+    };
   }
 }

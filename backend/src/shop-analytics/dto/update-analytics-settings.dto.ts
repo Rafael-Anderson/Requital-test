@@ -1,4 +1,5 @@
 import { IsOptional, Matches } from 'class-validator';
+import { SanitizeCredential } from '../../common/credential-sanitize';
 import {
   GA4_MEASUREMENT_ID,
   GOOGLE_ADS_CONVERSION_ID,
@@ -18,12 +19,14 @@ import {
 // admin form sends null for an emptied field.
 export class UpdateAnalyticsSettingsDto {
   @IsOptional()
+  @SanitizeCredential()
   @Matches(GA4_MEASUREMENT_ID, {
     message: 'ga4MeasurementId must look like G-XXXXXXXXXX',
   })
   ga4MeasurementId?: string | null;
 
   @IsOptional()
+  @SanitizeCredential()
   @Matches(META_PIXEL_ID, {
     message: 'metaPixelId must be the numeric Meta pixel id',
   })
@@ -31,49 +34,59 @@ export class UpdateAnalyticsSettingsDto {
 
   // WRITE-ONLY. Accepted here, encrypted at rest, never returned by any API.
   @IsOptional()
+  @SanitizeCredential()
   @Matches(META_CAPI_TOKEN, {
     message: 'metaCapiToken does not look like a Meta access token',
   })
   metaCapiToken?: string | null;
 
   @IsOptional()
+  @SanitizeCredential()
   @Matches(META_TEST_EVENT_CODE, {
     message: 'metaTestEventCode must look like TEST12345',
   })
   metaTestEventCode?: string | null;
 
   @IsOptional()
+  @SanitizeCredential()
   @Matches(TIKTOK_PIXEL_ID, {
-    message: 'tiktokPixelId must be the TikTok pixel code (upper-case letters and digits)',
+    message:
+      'tiktokPixelId must be the TikTok pixel code (upper-case letters and digits)',
   })
   tiktokPixelId?: string | null;
 
   // WRITE-ONLY, like metaCapiToken.
   @IsOptional()
+  @SanitizeCredential()
   @Matches(TIKTOK_EVENTS_TOKEN, {
-    message: 'tiktokEventsToken does not look like a TikTok Events API access token',
+    message:
+      'tiktokEventsToken does not look like a TikTok Events API access token',
   })
   tiktokEventsToken?: string | null;
 
   @IsOptional()
+  @SanitizeCredential()
   @Matches(SNAP_CAPI_TOKEN, {
     message: 'snapCapiToken does not look like a Snap Conversions API token',
   })
   snapCapiToken?: string | null;
 
   @IsOptional()
+  @SanitizeCredential()
   @Matches(SNAP_PIXEL_ID, {
     message: 'snapPixelId must be the Snap pixel id (a UUID)',
   })
   snapPixelId?: string | null;
 
   @IsOptional()
+  @SanitizeCredential()
   @Matches(GOOGLE_ADS_CONVERSION_ID, {
     message: 'googleAdsConversionId must look like AW-123456789',
   })
   googleAdsConversionId?: string | null;
 
   @IsOptional()
+  @SanitizeCredential()
   @Matches(GOOGLE_ADS_CONVERSION_LABEL, {
     message: 'googleAdsConversionLabel contains invalid characters',
   })
