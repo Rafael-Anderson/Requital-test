@@ -25,7 +25,7 @@ function body<T>(res: Response): T {
   return res.body as T;
 }
 
-const DIRTY_ID = '﻿ 1448631878331811⁩‎ ';
+const DIRTY_ID = '\uFEFF 1448631878331811\u2069\u200E ';
 const CLEAN_ID = '1448631878331811';
 const TOKEN = 'EAABtestToken0123456789';
 
@@ -127,7 +127,7 @@ describe('WhatsApp credentials: sanitising, validation, test connection (e2e)', 
     const res = await request(app.getHttpServer())
       .patch('/whatsapp-settings')
       .set(auth())
-      .send({ phoneNumberId: DIRTY_ID, accessToken: ` ${TOKEN}​` })
+      .send({ phoneNumberId: DIRTY_ID, accessToken: ` ${TOKEN}\u200B` })
       .expect(200);
     const saved = body<{
       connectionTest: {
@@ -167,15 +167,16 @@ describe('WhatsApp credentials: sanitising, validation, test connection (e2e)', 
     await db.execute(`UPDATE shop SET whatsappCredentials = ? WHERE id = ?`, [
       encrypt(
         JSON.stringify({
-          phoneNumberId: `${CLEAN_ID}⁩`,
-          accessToken: `${TOKEN}﻿`,
+          phoneNumberId: `${CLEAN_ID}\u2069`,
+          accessToken: `${TOKEN}\uFEFF`,
         }),
       ),
       shopId,
     ]);
-    const fetchMock: FetchMock = jest.fn((_url: string) =>
-      ok({ messages: [{ id: 'wamid.1' }] }),
-    );
+    const fetchMock: FetchMock = jest.fn<
+      Promise<unknown>,
+      [string, RequestInit?]
+    >(() => ok({ messages: [{ id: 'wamid.1' }] }));
     global.fetch = fetchMock as unknown as typeof fetch;
     await request(app.getHttpServer())
       .post('/whatsapp-settings/test')
@@ -238,7 +239,7 @@ describe('WhatsApp credentials: sanitising, validation, test connection (e2e)', 
     // Meta unreachable: never blocks, says so.
     global.fetch = jest.fn(() =>
       Promise.reject(new Error('ECONNRESET')),
-    ) as unknown as typeof fetch;
+    ) as typeof fetch;
     const net = await request(app.getHttpServer())
       .post('/whatsapp-settings/test-connection')
       .set(auth())
@@ -253,7 +254,7 @@ describe('WhatsApp credentials: sanitising, validation, test connection (e2e)', 
     process.env.WHATSAPP_AUTOTEST_IN_TESTS = '1';
     global.fetch = jest.fn(() =>
       Promise.reject(new Error('ECONNRESET')),
-    ) as unknown as typeof fetch;
+    ) as typeof fetch;
     const res = await request(app.getHttpServer())
       .patch('/whatsapp-settings')
       .set(auth())
