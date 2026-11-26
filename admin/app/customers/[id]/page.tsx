@@ -16,6 +16,7 @@ import StatCard from "@/components/ui/StatCard";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
+import Link from "next/link";
 import BackButton from "@/components/ui/BackButton";
 import InlineErrorMessage from "@/components/ui/InlineErrorMessage";
 import StatusBadge from "@/components/StatusBadge";
@@ -96,7 +97,14 @@ export default function CustomerDetailPage() {
   return (
     <PageShell>
       <BackButton href="/customers" />
-      <h1 className="text-2xl font-semibold mb-4">{customer?.name ?? "Customer"}</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-semibold">{customer?.name ?? "Customer"}</h1>
+        {customer && (
+          <Link href={`/orders/draft-orders/new?customerId=${customer.id}`}>
+            <Button variant="primary">Create order</Button>
+          </Link>
+        )}
+      </div>
 
       {error && customer && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 

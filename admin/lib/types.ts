@@ -100,6 +100,12 @@ export interface Order {
   cashCollectedAt: string | null;
   cashCollectedBy: number | null;
   cashCollectedByName: string | null;
+  // Admin custom orders (a converted draft order); absent/null on every other order.
+  adminSource?: "payment_link" | "cod" | "marked_paid" | null;
+  createdByName?: string | null;
+  draftOrderId?: number | null;
+  manualPaymentMethod?: string | null;
+  manualPaymentReference?: string | null;
   // Null only for orders created before this field existed — falls back to
   // deriving it from total - subtotal for display in that case.
   deliveryFee: string | null;
@@ -2829,33 +2835,96 @@ export interface ValidateDiscountResult {
   freeShipping?: boolean;
 }
 
-// --- Draft Orders — mirrors backend/src/draft-orders/draft-order-constants.ts by hand. ---
+// --- Draft Orders (custom orders) — mirrors backend/src/draft-orders/ by hand. ---
 
-export const DRAFT_ORDER_STATUSES = ["OPEN", "INVOICE_SENT", "COMPLETED", "CANCELLED"] as const;
+// OPEN: being built. INVOICE_SENT: payment link sent (no order yet).
+// AWAITING_PAYMENT: the customer pressed Pay; a pending card order exists.
+// COMPLETED: converted (paid by link, COD, or marked paid). CANCELLED.
+export const DRAFT_ORDER_STATUSES = ["OPEN", "INVOICE_SENT", "AWAITING_PAYMENT", "COMPLETED", "CANCELLED"] as const;
 export type DraftOrderStatus = (typeof DRAFT_ORDER_STATUSES)[number];
 export const DRAFT_ORDER_STATUS_LABELS: Record<DraftOrderStatus, string> = {
   OPEN: "Open",
-  INVOICE_SENT: "Invoice sent",
-  COMPLETED: "Completed",
+  INVOICE_SENT: "Link sent",
+  AWAITING_PAYMENT: "Awaiting payment",
+  COMPLETED: "Converted",
   CANCELLED: "Cancelled",
 };
 
+// The list filters (backend DRAFT_ORDER_FILTERS).
+export const DRAFT_ORDER_FILTERS = [
+  { value: "", label: "All" },
+  { value: "open", label: "Open" },
+  { value: "link_sent", label: "Link sent" },
+  { value: "converted", label: "Paid / converted" },
+  { value: "cancelled", label: "Cancelled" },
+] as const;
+
+export const MANUAL_PAYMENT_METHODS = ["cash", "bank_transfer", "card_terminal", "other"] as const;
+export type ManualPaymentMethod = (typeof MANUAL_PAYMENT_METHODS)[number];
+export const MANUAL_PAYMENT_METHOD_LABELS: Record<ManualPaymentMethod, string> = {
+  cash: "Cash",
+  bank_transfer: "Bank transfer",
+  card_terminal: "Card terminal",
+  other: "Other",
+};
+
+export const ADMIN_ORDER_SOURCE_LABELS: Record<string, string> = {
+  payment_link: "Payment link",
+  cod: "Cash on delivery",
+  marked_paid: "Marked paid",
+};
+
+// The backend's priced bill (DraftPricingService). Money is a decimal string;
+// deliveryFee/taxAmount/total are null while delivery cannot be priced.
+export interface DraftBill {
+  currency: string;
+  taxInclusive: boolean;
+  lines: {
+    productId: number;
+    variantId: number | null;
+    name: string;
+    variantLabel: string | null;
+    quantity: number;
+    unitPrice: string;
+    lineTotal: string;
+    taxRate: number | null;
+    custom: boolean;
+    priceOverridden: boolean;
+    priceReason: string | null;
+  }[];
+  subtotal: string;
+  discount: { amount: string; source: "code" | "manual" | null; code: string | null; reason: string | null };
+  deliveryFee: string | null;
+  deliveryFeeSource: "zone" | "override" | "pickup" | null;
+  deliveryZone: string | null;
+  deliveryError: string | null;
+  taxAmount: string | null;
+  total: string | null;
+  stockWarnings: { productId: number; variantId: number | null; name: string; requested: number; available: number }[];
+}
+
 export interface DraftOrderItem {
   id: number;
-  productId: number;
+  // null for a custom item
+  productId: number | null;
   productName: string;
-  thumbnail: string;
+  thumbnail: string | null;
   variantId: number | null;
   variantLabel: string | null;
   quantity: number;
   price: string;
+  isCustom: boolean;
+  taxable: boolean | null;
+  priceOverrideReason: string | null;
 }
 
 export interface DraftOrder {
   id: number;
   status: DraftOrderStatus;
+  outletId: number;
+  outlet: { id: number; name: string };
+  currency: string;
   customerId: number | null;
-  customer: { id: number; name: string; phone: string } | null;
   customerName: string;
   customerPhone: string;
   customerEmail: string | null;
@@ -2863,12 +2932,29 @@ export interface DraftOrder {
   regionId: number | null;
   region?: Region | null;
   area: string | null;
-  orderType: string | null;
-  outletId: number;
-  outlet: { id: number; name: string };
-  discountId: number | null;
-  discount: { id: number; code: string; type: DiscountType } | null;
+  orderType: "delivery" | "pickup";
+  deliveryDate: string | null;
+  deliveryTimeSlot: string | null;
+  receiverName: string | null;
+  receiverPhone: string | null;
+  receiverMessage: string | null;
+  discountCode: string | null;
+  orderDiscountType: "percent" | "fixed" | null;
+  orderDiscountValue: string | null;
+  orderDiscountReason: string | null;
+  deliveryFeeOverride: string | null;
+  deliveryFeeOverrideReason: string | null;
   notes: string | null;
+  customerNote: string | null;
+  items: DraftOrderItem[];
+  bill: DraftBill | null;
+  billError: string | null;
+  billLocked: boolean;
+  subtotal: number;
+  discountAmount: number;
+  total: number | null;
+  payLink: { url: string; sentAt: string | null; expiresAt: string | null; lockedAt: string | null } | null;
+  cardAvailable: boolean;
   convertedOrderId: number | null;
   convertedOrder: {
     id: number;
@@ -2876,39 +2962,80 @@ export interface DraftOrder {
     status: string;
     paymentStatus: string;
     total: string;
-    trackingToken: string | null;
+    trackingToken: string;
   } | null;
-  items: DraftOrderItem[];
-  subtotal: number;
-  discountAmount: number;
-  total: number;
+  orders: {
+    id: number;
+    shopOrderNumber: number;
+    status: string;
+    paymentStatus: string;
+    total: string;
+    currency: string;
+    adminSource: string | null;
+    createdAt: string;
+  }[];
+  createdBy: { id: number; name: string | null } | null;
   createdAt: string;
   updatedAt: string;
-  // Frozen at creation by migration 20260926210000 and returned by the API
-  // today (the backend selects the whole row). Render money with THIS, not
-  // with the shop's current setting - a historical record must keep the
-  // currency it was actually priced in.
+}
+
+export interface DraftOrderListItem {
+  id: number;
+  status: DraftOrderStatus;
+  customerName: string;
+  customerPhone: string;
+  outlet: { id: number; name: string };
   currency: string;
+  itemCount: number;
+  subtotal: number;
+  discountAmount: number;
+  total: number | null;
+  hasPayLink: boolean;
+  convertedOrderId: number | null;
+  createdBy: { id: number; name: string | null } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaginatedDraftOrders {
+  data: DraftOrderListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
 }
 
 export interface DraftOrderItemInput {
-  productId: number;
+  productId?: number;
   variantId?: number;
   quantity: number;
   price?: number;
+  priceReason?: string;
+  customName?: string;
+  taxable?: boolean;
 }
 
 export interface DraftOrderInput {
   outletId: number;
-  customerName: string;
-  customerPhone: string;
+  customerName?: string;
+  customerPhone?: string;
   customerEmail?: string;
-  customerAddress: string;
+  customerAddress?: string;
   regionId?: number;
   area?: string;
-  orderType?: string;
+  orderType?: "delivery" | "pickup";
+  deliveryDate?: string;
+  deliveryTimeSlot?: string;
+  receiverName?: string;
+  receiverPhone?: string;
+  receiverMessage?: string;
   discountCode?: string | null;
+  orderDiscountType?: "percent" | "fixed" | null;
+  orderDiscountValue?: number;
+  orderDiscountReason?: string;
+  deliveryFeeOverride?: number | null;
+  deliveryFeeOverrideReason?: string;
   notes?: string;
+  customerNote?: string;
   items?: DraftOrderItemInput[];
 }
 

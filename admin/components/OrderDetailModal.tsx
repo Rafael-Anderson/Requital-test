@@ -1,5 +1,6 @@
 "use client";
 
+import AdminOrderSource from "@/components/AdminOrderSource";
 import { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
 import {
@@ -250,6 +251,7 @@ export default function OrderDetailModal({
           <div className="flex items-center gap-2 flex-wrap">
             <span>Order #{order.shopOrderNumber}</span>
             <StatusBadge status={order.status} />
+            <AdminOrderSource order={order} />
           </div>
         ) : (
           "Order details"
