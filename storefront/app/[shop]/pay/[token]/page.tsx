@@ -227,6 +227,11 @@ export default function CustomOrderPayPage() {
             This order was cancelled by the shop. Nothing is owed.
           </p>
         )}
+        {data.state === "review" && (
+          <p role="status" className="text-sm text-amber-700">
+            A payment for this order reached the shop after it was closed. The shop is checking it and will contact you. Please do not pay again.
+          </p>
+        )}
         {data.state === "closed" && (
           <p role="status" className="text-sm text-zinc-600">
             No online payment is needed for this order. The shop will arrange payment with you.

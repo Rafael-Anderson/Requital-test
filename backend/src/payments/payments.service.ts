@@ -305,7 +305,8 @@ export class PaymentsService {
     await this.db.transaction(async (conn) => {
       await conn.query(
         `UPDATE \`order\` SET paymentSessionId = ?, paymentSessionGateway = ?,
-                paymentSessionUrl = NULL, paymentSessionAt = NULL
+                paymentSessionUrl = NULL, paymentSessionAt = NULL,
+                paymentSessionStartedAt = NOW(3)
           WHERE id = ?`,
         [
           session.providerReference,

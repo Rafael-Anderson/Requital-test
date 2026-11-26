@@ -1810,12 +1810,21 @@ export class OrdersService {
     conn: PoolConnection,
     actor: { shopId: number; userId: number | null },
     order: { id: number; outletId: number; channel: string | null },
-    opts: { gatewayFailure?: boolean } = {},
+    opts: { gatewayFailure?: boolean; abandonedSessionId?: string } = {},
   ): Promise<boolean> {
     const { id, outletId } = order;
+    // The abandoned-payment sweep cancels only the exact state it asked the
+    // provider about: still unpaid, still on the SAME session (a new session
+    // minted meanwhile means the customer is paying again), no session being
+    // minted right now. A payment that commits first wins the order row lock and
+    // this matches nothing; one that commits after is parked by
+    // applyWebhookResult (recorded, order left cancelled, merchant alerted).
+    const abandoned = opts.abandonedSessionId !== undefined;
     const [fromPending] = await conn.query(
-      `UPDATE \`order\` SET status = 'cancelled' WHERE id = ? AND shopId = ? AND outletId = ? AND status = 'pending'${opts.gatewayFailure ? " AND paymentStatus = 'unpaid' AND paymentSessionId IS NULL AND paymentSessionClaimToken IS NULL" : ''}`,
-      [id, actor.shopId, outletId],
+      `UPDATE \`order\` SET status = 'cancelled'${abandoned ? ', paymentAbandonedAt = NOW(3)' : ''} WHERE id = ? AND shopId = ? AND outletId = ? AND status = 'pending'${opts.gatewayFailure ? " AND paymentStatus = 'unpaid' AND paymentSessionId IS NULL AND paymentSessionClaimToken IS NULL" : ''}${abandoned ? " AND paymentStatus = 'unpaid' AND paymentSessionId = ? AND paymentSessionClaimToken IS NULL" : ''}`,
+      abandoned
+        ? [id, actor.shopId, outletId, opts.abandonedSessionId]
+        : [id, actor.shopId, outletId],
     );
     if ((fromPending as { affectedRows: number }).affectedRows === 1) {
       // A cancelled order is no longer described by any invoice issued for it
@@ -1856,7 +1865,7 @@ export class OrdersService {
       await this.giftCardsService.voidIssuedForOrder(conn, actor.shopId, id);
       return true;
     }
-    if (opts.gatewayFailure) return false;
+    if (opts.gatewayFailure || abandoned) return false;
 
     const [fromStockDecremented] = await conn.query(
       `UPDATE \`order\` SET status = 'cancelled'
@@ -1936,6 +1945,70 @@ export class OrdersService {
         before: { status: 'pending' },
         after: { status: 'cancelled' },
         metadata: { reason: 'payment_gateway_failure', gateway },
+      },
+    );
+    return true;
+  }
+
+  // The abandoned-payment sweep (PaymentReconciliationService): a card order
+  // still unpaid long after its latest provider session was created, which the
+  // provider has just said is NOT paid. Cancelled by the same transaction body
+  // as a staff cancel (stock, discount use, store credit and gift card balance
+  // all come back), restricted to the exact session the provider was asked
+  // about. A custom order's draft goes back to "link sent" in the same
+  // transaction, so the same pay link works again.
+  //
+  // SYSTEM action, tenant-scoped by shopId on every statement. Sends nothing to
+  // the customer. Returns whether it cancelled (false when anything moved).
+  async cancelAbandonedPayment(
+    shopId: number,
+    orderId: number,
+    sessionId: string,
+    gateway: string,
+  ): Promise<boolean> {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id, outletId, channel, draftOrderId FROM \`order\` WHERE id = ? AND shopId = ?`,
+      [orderId, shopId],
+    );
+    const row = rows[0];
+    if (!row) return false;
+    const cancelled = await this.db.transaction(async (conn) => {
+      const ok = await this.applyCancel(
+        conn,
+        { shopId, userId: null },
+        {
+          id: row.id as number,
+          outletId: row.outletId as number,
+          channel: row.channel as string | null,
+        },
+        { abandonedSessionId: sessionId },
+      );
+      if (ok && row.draftOrderId) {
+        await conn.query(
+          `UPDATE draftorder SET status = 'INVOICE_SENT', updatedAt = NOW(3)
+            WHERE id = ? AND shopId = ? AND status = 'AWAITING_PAYMENT' AND convertedOrderId = ?`,
+          [row.draftOrderId as number, shopId, orderId],
+        );
+      }
+      return ok;
+    });
+    if (!cancelled) return false;
+    await this.affiliateService.syncOrderStatus(orderId, {
+      orderStatus: 'cancelled',
+    });
+    await this.auditLogService.log(
+      {
+        shopId,
+        actorUserId: null,
+        actorLabel: 'system (payment not completed)',
+      },
+      {
+        action: 'order.status_changed',
+        entityType: 'order',
+        entityId: orderId,
+        before: { status: 'pending' },
+        after: { status: 'cancelled' },
+        metadata: { reason: 'payment not completed', gateway },
       },
     );
     return true;

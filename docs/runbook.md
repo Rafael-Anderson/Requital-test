@@ -912,3 +912,26 @@ Nomod is the shop's "card processor", so it is exclusive with Stripe: Stripe mus
 ### Known unknowns (not verifiable from here)
 
 Real Nomod behaviour is UNVERIFIED end to end; everything was built from the public docs and tested against a mocked HTTP layer only: the exact shapes of the `charge.*` payloads other than `charge.completed`; whether `refundTotal`/`referenceId` are always present; whether partial refunds work; the refund response amount (documented as an integer, never trusted); whether a GET on a checkout always carries `amount`/`currency` (a paid answer without them is parked for review, not trusted); whether `items[].discount_amount` is per unit (we always send zero to avoid the question); maximum lengths of item names and metadata; whether `success_url` etc. accept query strings (we send a tracking token and a `payment` flag); whether Nomod's checkout and event ids are globally unique across accounts (we scope our own records by shop, but look a checkout up by its id alone when the reconciliation sweep asks); the checkout expiry window; and whether a 429 carries `Retry-After`.
+
+## Payments: card-processor credentials and abandoned card payments
+
+### A5 credential report (read-only)
+
+`tools/reports/a5-credential-report.js` lists, for every Nomod and Stripe row in `shoppaymentprovider`: stored credentials that would fail today's save-time checks (by **field name** only) and the rejected-status columns (`credentialStatus`, `credentialStatusAt`, `credentialAlertedAt`). It never prints a credential value or the database URL. It reads `DATABASE_URL` and `CREDENTIAL_ENCRYPTION_KEY` from `backend/.env`, opens one connection, sets the session `READ ONLY` and runs SELECTs only. It needs a built backend (`backend/dist`), so run it after a deploy:
+
+```bash
+ssh -i ~/.ssh/hostinger_vps root@187.52.114.246 'sudo -u deploy node /home/deploy/requital/tools/reports/a5-credential-report.js'
+```
+
+A shop listed under "would FAIL" keeps working only until its next save (the save is refused) and is likely already in the rejected state; tell the merchant to re-enter the keys from their Nomod or Stripe dashboard.
+
+### Abandoned card-payment sweep
+
+`PaymentReconciliationService.runAbandonedSweep` runs in the same 10-minute, cross-instance-locked tick as payment reconciliation. A pending, unpaid `card_online` order from the storefront or a custom-order pay link, on Stripe or Nomod, still unpaid `ABANDONED_PAYMENT_HOURS` (24) after its latest provider session was created (`order.paymentSessionStartedAt`) is checked with the provider first:
+
+- paid: applied through the normal idempotent payment path (amount guard included), not cancelled;
+- not paid: cancelled as a staff cancel would (stock, discount use, store credit and gift card balance back), reason "payment not completed" in the activity log (actor "system (payment not completed)"), `order.paymentAbandonedAt` set; a custom order's draft goes back to "link sent" and the same link works again;
+- provider unreachable, no credentials, unknown session or parked for review: skipped this run, never cancelled;
+- session start unknown (orders from before the column): cancelled only on a definite "expired".
+
+Nothing is sent to the customer. A payment that arrives after the cancel is recorded, the order stays cancelled, and the merchant gets one WhatsApp alert ("Fulfil it or refund it in the payment provider"); that custom order's pay link shows "being checked" and refuses another payment. BNPL and PayPal orders are never auto-cancelled.

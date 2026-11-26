@@ -16,7 +16,13 @@ import { DraftOrdersService, type DraftSnapshot } from './draft-orders.service';
 const logger = createLogger('DraftPayService');
 
 export type PayState =
-  'payable' | 'unavailable' | 'paid' | 'closed' | 'cancelled' | 'expired';
+  | 'payable'
+  | 'unavailable'
+  | 'paid'
+  | 'closed'
+  | 'cancelled'
+  | 'expired'
+  | 'review';
 
 // The customer's /pay/<token> page for a custom order. The token is the only
 // credential; it is looked up within the shop named by the URL, so another
@@ -46,6 +52,7 @@ export class DraftPayService {
   private async state(
     shopId: number,
     draft: {
+      id: number;
       status: string;
       payLinkExpiresAt: Date | null;
       convertedOrderId: number | null;
@@ -68,6 +75,18 @@ export class DraftPayService {
       };
     }
     if (draft.status === 'OPEN') return { state: 'closed', order: null };
+    // Money arrived for an order of this draft AFTER it was cancelled (a payment
+    // completed on an old session once the abandoned-payment sweep had cancelled
+    // it). That payment is parked for the shop to fulfil or refund; the same link
+    // must not take a second one in the meantime.
+    const late = await this.db.query<RowDataPacket[]>(
+      `SELECT o.id FROM \`order\` o
+         JOIN paymenttransaction t ON t.orderId = o.id AND t.status = 'paid'
+        WHERE o.shopId = ? AND o.draftOrderId = ? AND o.status = 'cancelled'
+        LIMIT 1`,
+      [shopId, draft.id],
+    );
+    if (late.length) return { state: 'review', order: null };
     if (!draft.payLinkExpiresAt || draft.payLinkExpiresAt < new Date()) {
       return { state: 'expired', order: null };
     }

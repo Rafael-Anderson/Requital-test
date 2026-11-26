@@ -91,6 +91,14 @@ describe("custom order pay page", () => {
     expect(screen.queryByRole("button", { name: "Pay" })).toBeNull();
   });
 
+  it("review (a late payment is being checked) tells the customer not to pay again and offers no Pay", async () => {
+    vi.mocked(getCustomOrderPay).mockResolvedValue(base({ state: "review" }));
+    render(<CustomOrderPayPage />);
+    await screen.findByTestId("pay-state-review");
+    expect(screen.getByText(/Please do not pay again/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pay" })).toBeNull();
+  });
+
   it("an unknown token renders the not-found state", async () => {
     vi.mocked(getCustomOrderPay).mockRejectedValue(new HttpError("Not found", 404));
     render(<CustomOrderPayPage />);

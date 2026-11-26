@@ -836,7 +836,7 @@ export interface RegionsResponse {
 // READ-ONLY GET /pay/:token/summary - deliberately not GET /pay/:token, which
 // mints a gateway checkout session as a side effect.
 // GET /public/:shop/custom-orders/pay/:token (an admin custom order's pay page).
-export type CustomOrderPayState = "payable" | "unavailable" | "paid" | "closed" | "cancelled" | "expired";
+export type CustomOrderPayState = "payable" | "unavailable" | "paid" | "closed" | "cancelled" | "expired" | "review";
 export interface CustomOrderPay {
   state: CustomOrderPayState;
   shop: { name: string; phone: string | null; email: string | null };

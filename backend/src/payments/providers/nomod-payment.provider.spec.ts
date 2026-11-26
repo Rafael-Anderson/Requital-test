@@ -271,13 +271,22 @@ describe('NomodPaymentProvider.retrieveSessionOutcome', () => {
     ).toEqual({ status: 'paid', chargeReference: 'chk_1' });
   });
 
-  it('a mismatch reads as unpaid, so the sweep can never mark it paid', async () => {
+  it('a mismatch is unknown (null), so no sweep can mark it paid or cancel it', async () => {
     expect(
       await new NomodPaymentProvider(svc('review')).retrieveSessionOutcome(
         'chk_1',
         goodCreds,
       ),
-    ).toEqual({ status: 'unpaid' });
+    ).toBeNull();
+  });
+
+  it('no usable credentials is unknown (null), never "unpaid"', async () => {
+    expect(
+      await new NomodPaymentProvider(svc('unpaid')).retrieveSessionOutcome(
+        'chk_1',
+        null,
+      ),
+    ).toBeNull();
   });
 
   it('expired and cancelled are terminal', async () => {

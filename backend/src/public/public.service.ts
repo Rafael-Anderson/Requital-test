@@ -1951,7 +1951,7 @@ export class PublicService {
     try {
       recorded = await this.db.transaction(async (conn) => {
         const [res] = await conn.query(
-          `UPDATE \`order\` SET paymentSessionId = ?, paymentSessionGateway = ?, paymentSessionUrl = ?, paymentSessionAt = NOW(3),
+          `UPDATE \`order\` SET paymentSessionId = ?, paymentSessionGateway = ?, paymentSessionUrl = ?, paymentSessionAt = NOW(3), paymentSessionStartedAt = NOW(3),
                  paymentSessionClaimedAt = NULL, paymentSessionClaimToken = NULL
             WHERE id = ? AND shopId = ? AND status = 'pending' AND paymentStatus = 'unpaid'
               AND paymentSessionClaimToken = ?`,
