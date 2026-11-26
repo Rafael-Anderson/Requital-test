@@ -7,9 +7,19 @@ import {
   getWhatsAppSettings,
   sendWhatsAppTestMessage,
   setWhatsAppCredentials,
+  testWhatsAppConnection,
+  ApiError,
   updateShop,
 } from "@/lib/api";
-import { WHATSAPP_CREDENTIAL_FIELDS, type Shop, type WhatsAppSettings } from "@/lib/types";
+import {
+  WHATSAPP_CREDENTIAL_FIELDS,
+  type MetaErrorDetails,
+  type Shop,
+  type WhatsAppConnectionTest,
+  type WhatsAppSettings,
+} from "@/lib/types";
+import { sanitizeCredentialValue, whatsappCredentialProblems } from "@/lib/whatsapp-credentials";
+import WhatsAppConnectionResult, { MetaErrorDetailsBlock } from "@/components/WhatsAppConnectionResult";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import SecretField from "@/components/ui/SecretField";
@@ -40,6 +50,10 @@ export default function MessagingIntegrationsPage() {
   const [credentials, setCredentials] = useState<WhatsAppSettings | null>(null);
   const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
   const [savingCredentials, setSavingCredentials] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [connection, setConnection] = useState<WhatsAppConnectionTest | null>(null);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testError, setTestError] = useState<{ message: string; details: MetaErrorDetails | null } | null>(null);
 
   const [testNumber, setTestNumber] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
@@ -110,27 +124,43 @@ export default function MessagingIntegrationsPage() {
   }
 
   async function handleSaveCredentials() {
-    const phoneNumberId = credentialValues.phoneNumberId?.trim();
-    const accessToken = credentialValues.accessToken?.trim();
-    if (!phoneNumberId || !accessToken) {
-      if (!credentials?.hasCredentials) {
-        toast("Enter both Phone Number ID and Access Token", "error");
-        return;
-      }
-    }
+    // Pasted invisible characters (Meta Business Manager adds U+2069 after a
+    // Phone Number ID) are removed here and again on the server.
+    const phoneNumberId = sanitizeCredentialValue(credentialValues.phoneNumberId ?? "");
+    const accessToken = sanitizeCredentialValue(credentialValues.accessToken ?? "");
+    const problems = whatsappCredentialProblems({ phoneNumberId, accessToken });
+    setFieldErrors(problems);
+    if (Object.keys(problems).length > 0) return;
     setSavingCredentials(true);
+    setConnection(null);
     try {
-      const updated = await setWhatsAppCredentials({
-        phoneNumberId: phoneNumberId || "",
-        accessToken: accessToken || "",
-      });
+      const updated = await setWhatsAppCredentials({ phoneNumberId, accessToken });
       setCredentials(updated);
       setCredentialValues({});
+      // The automatic Test connection ran on save (saving is never blocked by it).
+      if (updated.connectionTest) setConnection(updated.connectionTest);
       toast("WhatsApp Business API credentials saved");
     } catch (err) {
+      if (err instanceof ApiError && err.fieldErrors) setFieldErrors(err.fieldErrors);
       toast(err instanceof Error ? err.message : "Failed to save WhatsApp credentials", "error");
     } finally {
       setSavingCredentials(false);
+    }
+  }
+
+  async function handleTestConnection() {
+    setTestingConnection(true);
+    try {
+      setConnection(await testWhatsAppConnection());
+    } catch (err) {
+      setConnection({
+        ok: false,
+        reason: "request_failed",
+        message: err instanceof Error ? err.message : "Could not test the connection",
+        details: null,
+      });
+    } finally {
+      setTestingConnection(false);
     }
   }
 
@@ -141,6 +171,7 @@ export default function MessagingIntegrationsPage() {
     setSavingCredentials(true);
     try {
       setCredentials(await clearWhatsAppCredentials());
+      setConnection(null);
       toast("WhatsApp credentials removed");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to remove WhatsApp credentials", "error");
@@ -155,11 +186,17 @@ export default function MessagingIntegrationsPage() {
       return;
     }
     setSendingTest(true);
+    setTestError(null);
     try {
       await sendWhatsAppTestMessage(testNumber.trim());
       toast("Test message sent");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to send test message", "error");
+      // A friendly sentence; Meta's own message and fbtrace_id sit under Details.
+      const message = err instanceof Error ? err.message : "Failed to send test message";
+      const details =
+        err instanceof ApiError && err.details ? (err.details as MetaErrorDetails) : null;
+      setTestError({ message, details });
+      toast(message, "error");
     } finally {
       setSendingTest(false);
     }
@@ -275,7 +312,11 @@ export default function MessagingIntegrationsPage() {
                 label={field.label}
                 masked={credentials.maskedCredentials?.[field.key] ?? null}
                 value={credentialValues[field.key] ?? ""}
-                onChange={(value) => setCredentialValues((prev) => ({ ...prev, [field.key]: value }))}
+                onChange={(value) => {
+                  setCredentialValues((prev) => ({ ...prev, [field.key]: value }));
+                  setFieldErrors((prev) => ({ ...prev, [field.key]: "" }));
+                }}
+                error={fieldErrors[field.key] || undefined}
               />
             ))}
           </div>
@@ -287,10 +328,25 @@ export default function MessagingIntegrationsPage() {
             ) : (
               <span />
             )}
-            <Button variant="primary" onClick={handleSaveCredentials} disabled={savingCredentials} loading={savingCredentials}>
-              {savingCredentials ? "Saving…" : "Save WhatsApp credentials"}
-            </Button>
+            <div className="flex items-center gap-2">
+              {credentials.hasCredentials && (
+                <Button
+                  variant="secondary"
+                  onClick={handleTestConnection}
+                  disabled={testingConnection || savingCredentials}
+                  loading={testingConnection}
+                >
+                  {testingConnection ? "Testing…" : "Test connection"}
+                </Button>
+              )}
+              <Button variant="primary" onClick={handleSaveCredentials} disabled={savingCredentials} loading={savingCredentials}>
+                {savingCredentials ? "Saving…" : "Save WhatsApp credentials"}
+              </Button>
+            </div>
           </div>
+          {connection && (
+            <WhatsAppConnectionResult result={connection} countryCode={countryCode} localNumber={number} />
+          )}
 
           {credentials.hasCredentials && (
             <div className="flex items-end gap-2 pt-3 border-t border-gray-200 dark:border-white/10">
@@ -304,6 +360,12 @@ export default function MessagingIntegrationsPage() {
               <Button variant="secondary" onClick={handleSendTest} disabled={sendingTest} loading={sendingTest}>
                 {sendingTest ? "Sending…" : "Send test message"}
               </Button>
+            </div>
+          )}
+          {testError && (
+            <div role="alert" data-testid="whatsapp-test-message-error" className="text-sm text-red-700 dark:text-red-300">
+              <p>{testError.message}</p>
+              <MetaErrorDetailsBlock details={testError.details} />
             </div>
           )}
         </Card>

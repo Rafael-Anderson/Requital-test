@@ -1,4 +1,5 @@
 import { MetaWhatsAppProvider } from '../whatsapp/providers/meta-whatsapp.provider';
+import { sanitizeOptional } from './credential-sanitize';
 
 // STUB: used when a shop hasn't configured Meta WhatsApp Cloud API
 // credentials yet (see WhatsAppSettingsService/OrderNotificationsService) —
@@ -36,8 +37,14 @@ export async function sendPlatformWhatsAppAlertOrThrow(
   body: string,
   options: { sensitive?: boolean } = {},
 ): Promise<void> {
-  const phoneNumberId = process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID;
-  const accessToken = process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN;
+  // Sanitised (pasted invisible characters removed) so a platform value copied
+  // from Meta Business Manager works; the provider sanitises again on send.
+  const phoneNumberId = sanitizeOptional(
+    process.env.PLATFORM_WHATSAPP_PHONE_NUMBER_ID,
+  );
+  const accessToken = sanitizeOptional(
+    process.env.PLATFORM_WHATSAPP_ACCESS_TOKEN,
+  );
   if (!phoneNumberId || !accessToken) {
     sendWhatsAppStub(to, body, options.sensitive);
     return;

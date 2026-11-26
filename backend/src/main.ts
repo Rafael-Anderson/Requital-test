@@ -1,4 +1,7 @@
 import 'dotenv/config';
+// Platform credentials from env, cleaned of pasted invisible characters before
+// any module reads them (credential-sanitize.ts).
+import './common/sanitize-env-at-boot';
 import { join } from 'path';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';

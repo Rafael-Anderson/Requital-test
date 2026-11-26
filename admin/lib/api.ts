@@ -147,6 +147,7 @@ import type {
   SliderQuote,
   WebhookEvent,
   WhatsAppSettings,
+  WhatsAppConnectionTest,
   AnalyticsSettings,
   AnalyticsSettingsUpdate,
   AttributionModel,
@@ -290,6 +291,10 @@ export class ApiError extends Error {
     public code?: string,
     // Per-field messages some endpoints add (payment credentials), keyed by field.
     public fieldErrors?: Record<string, string>,
+    // Extra context some endpoints add: a stable `reason` and provider
+    // `details` (WhatsApp: Meta's message and fbtrace_id, never a token).
+    public reason?: string,
+    public details?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -369,6 +374,8 @@ async function apiFetch<T>(path: string, init?: RequestInit, isRetry = false): P
       res.status,
       body?.code,
       body?.fieldErrors && typeof body.fieldErrors === "object" ? body.fieldErrors : undefined,
+      typeof body?.reason === "string" ? body.reason : undefined,
+      body?.details && typeof body.details === "object" ? body.details : undefined,
     );
   }
   if (res.status === 204) return undefined as T;
@@ -1093,6 +1100,11 @@ export function setWhatsAppCredentials(data: { phoneNumberId: string; accessToke
 
 export function clearWhatsAppCredentials() {
   return apiFetch<WhatsAppSettings>("/whatsapp-settings", { method: "DELETE" });
+}
+
+// Harmless Graph API read of the saved Phone Number ID (sends no message).
+export function testWhatsAppConnection() {
+  return apiFetch<WhatsAppConnectionTest>("/whatsapp-settings/test-connection", { method: "POST" });
 }
 
 // Sends a real WhatsApp message via this shop's own configured credentials,

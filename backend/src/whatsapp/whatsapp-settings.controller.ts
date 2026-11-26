@@ -35,6 +35,12 @@ export class WhatsAppSettingsController {
     return this.whatsAppSettingsService.clearCredentials(ctx);
   }
 
+  // Harmless Graph API read: shows the number's display name; sends nothing.
+  @Post('test-connection')
+  testConnection(@CurrentUser() ctx: TenantContext) {
+    return this.whatsAppSettingsService.testConnection(ctx);
+  }
+
   @Post('test')
   sendTestMessage(
     @CurrentUser() ctx: TenantContext,

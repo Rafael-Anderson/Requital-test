@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { sanitizeCredentialValue } from '../common/credential-sanitize';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import { FeaturesService } from '../features/features.service';
@@ -69,7 +70,7 @@ export class SliderSettingsService {
   ): Promise<SliderSettingsResponse> {
     const result = await this.db.execute(
       `UPDATE shop SET sliderAccountId = ? WHERE id = ?`,
-      [accountId, shopId],
+      [sanitizeCredentialValue(accountId), shopId],
     );
     if (result.affectedRows === 0) {
       throw new NotFoundException(`Shop ${shopId} not found`);
@@ -101,8 +102,8 @@ export class SliderSettingsService {
       return null;
     }
     return {
-      apiKey,
-      accountId: row.sliderAccountId,
+      apiKey: sanitizeCredentialValue(apiKey),
+      accountId: sanitizeCredentialValue(row.sliderAccountId),
       baseUrl: SLIDER_BASE_URLS[environment],
     };
   }
@@ -130,8 +131,8 @@ export class SliderSettingsService {
       );
     }
     return {
-      apiKey,
-      accountId: row.sliderAccountId,
+      apiKey: sanitizeCredentialValue(apiKey),
+      accountId: sanitizeCredentialValue(row.sliderAccountId),
       baseUrl: SLIDER_BASE_URLS[environment],
     };
   }

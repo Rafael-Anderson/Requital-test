@@ -9,6 +9,7 @@ import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { DatabaseService, type QueryParam } from '../database/database.service';
 import { isDuplicateKeyError, isLockConflict } from '../database/mysql-errors';
 import { decrypt } from '../common/crypto';
+import { sanitizeCredentialValue } from '../common/credential-sanitize';
 import { createLogger } from '../common/logging/logger';
 import type { TenantContext } from '../common/tenant-context';
 import { minorUnitFactor } from '../common/currency-minor-units';
@@ -178,7 +179,7 @@ export class ChannelIngestionService {
     const secrets: string[] = [];
     if (conn.webhookSecret) {
       try {
-        secrets.push(decrypt(conn.webhookSecret));
+        secrets.push(sanitizeCredentialValue(decrypt(conn.webhookSecret)));
       } catch {
         /* an undecryptable secret is simply not a usable secret */
       }

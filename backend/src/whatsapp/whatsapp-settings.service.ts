@@ -11,9 +11,45 @@ import { normalizePhoneToE164 } from '../common/phone';
 import { MetaWhatsAppProvider } from './providers/meta-whatsapp.provider';
 import { WHATSAPP_CREDENTIAL_FIELDS } from './whatsapp-credential-fields';
 import type { SetWhatsAppCredentialsDto } from './dto/set-whatsapp-credentials.dto';
+import {
+  sanitizeCredentialMap,
+  sanitizeCredentialValue,
+} from '../common/credential-sanitize';
+import { whatsappCredentialProblems } from './whatsapp-credential-validation';
+import { MetaGraphError, type MetaErrorDetails } from './meta-graph-error';
+import { createLogger } from '../common/logging/logger';
+
+const logger = createLogger('WhatsAppSettingsService');
+
+// The automatic Test connection after a save calls Meta. Under Jest it is off
+// unless a spec opts in (WHATSAPP_AUTOTEST_IN_TESTS=1), so no spec reaches the
+// real Graph API by saving credentials (same seam as payment settings).
+function autoTestOnSave(): boolean {
+  return (
+    process.env.NODE_ENV !== 'test' ||
+    process.env.WHATSAPP_AUTOTEST_IN_TESTS === '1'
+  );
+}
+
+// What "Test connection" answers. Never a token or a credential value.
+export type WhatsAppConnectionTest =
+  | {
+      ok: true;
+      displayPhoneNumber: string | null;
+      verifiedName: string | null;
+    }
+  | {
+      ok: false;
+      // 'network' = Meta could not be reached (nothing is known either way).
+      reason: string;
+      message: string;
+      details: MetaErrorDetails | null;
+    };
 
 export interface WhatsAppSettingsResponse {
   hasCredentials: boolean;
+  // Present only on the answer to a save: the automatic Test connection.
+  connectionTest?: WhatsAppConnectionTest;
   // Never the real value — e.g. { accessToken: '••••1234' }. See maskValue.
   maskedCredentials: Record<string, string> | null;
 }
@@ -49,17 +85,30 @@ export class WhatsAppSettingsService {
     ctx: TenantContext,
     dto: SetWhatsAppCredentialsDto,
   ): Promise<WhatsAppSettingsResponse> {
-    const encrypted = encrypt(
-      JSON.stringify({
-        phoneNumberId: dto.phoneNumberId,
-        accessToken: dto.accessToken,
-      }),
-    );
+    // The DTO already removed pasted invisible characters; done again here so
+    // no caller can store an unclean value.
+    const phoneNumberId = sanitizeCredentialValue(dto.phoneNumberId);
+    const accessToken = sanitizeCredentialValue(dto.accessToken);
+    const problems = whatsappCredentialProblems({ phoneNumberId, accessToken });
+    if (Object.keys(problems).length > 0) {
+      // `message` is the first problem (what apiFetch shows); `fieldErrors` lets
+      // the form put each one under its own field.
+      throw new BadRequestException({
+        statusCode: 400,
+        message: Object.values(problems)[0],
+        fieldErrors: problems,
+      });
+    }
+    const encrypted = encrypt(JSON.stringify({ phoneNumberId, accessToken }));
     await this.db.execute(
       `UPDATE shop SET whatsappCredentials = ? WHERE id = ?`,
       [encrypted, ctx.shopId],
     );
-    return this.find(ctx);
+    // Test connection runs on every save. Saving is never blocked by it: a
+    // failure (or Meta being unreachable) is reported beside the saved result.
+    if (!autoTestOnSave()) return this.find(ctx);
+    const connectionTest = await this.testConnection(ctx);
+    return { ...(await this.find(ctx)), connectionTest };
   }
 
   async clearCredentials(
@@ -98,12 +147,66 @@ export class WhatsAppSettingsService {
     if (!to) {
       throw new BadRequestException('Enter a valid phone number');
     }
-    await this.metaWhatsAppProvider.sendMessage({
-      to,
-      body: 'This is a test message from your Requital store: WhatsApp Business API is connected correctly.',
-      credentials,
-    });
+    try {
+      await this.metaWhatsAppProvider.sendMessage({
+        to,
+        body: 'This is a test message from your Requital store: WhatsApp Business API is connected correctly.',
+        credentials,
+      });
+    } catch (err) {
+      if (err instanceof MetaGraphError) {
+        // A friendly sentence plus Meta's own message and fbtrace_id, never the
+        // raw response body (and never the token).
+        throw new BadRequestException({
+          statusCode: 400,
+          message: err.friendly.message,
+          reason: err.friendly.reason,
+          details: err.friendly.details,
+        });
+      }
+      throw err;
+    }
     return { sent: true };
+  }
+
+  // A harmless GET of the phone number's own record on the Graph API (sends no
+  // message). Never throws for a Meta or network failure: the answer says what
+  // happened.
+  async testConnection(ctx: TenantContext): Promise<WhatsAppConnectionTest> {
+    const credentials = await this.resolveCredentials(ctx.shopId);
+    if (!credentials) {
+      return {
+        ok: false,
+        reason: 'not_configured',
+        message: 'Save your WhatsApp Business API credentials first.',
+        details: null,
+      };
+    }
+    try {
+      const info =
+        await this.metaWhatsAppProvider.describePhoneNumber(credentials);
+      return { ok: true, ...info };
+    } catch (err) {
+      if (err instanceof MetaGraphError) {
+        return {
+          ok: false,
+          reason: err.friendly.reason,
+          message: err.friendly.message,
+          details: err.friendly.details,
+        };
+      }
+      logger.warn('whatsapp test connection could not reach Meta', {
+        shopId: ctx.shopId,
+        error: err instanceof Error ? err.name : 'non-error',
+      });
+      return {
+        ok: false,
+        reason: 'network',
+        message:
+          'Could not reach Meta to check the connection. Your credentials are saved; try Test connection again in a moment.',
+        details: null,
+      };
+    }
   }
 
   // Decrypted server-side only, to hand a real provider call what it needs
@@ -119,12 +222,18 @@ export class WhatsAppSettingsService {
     const whatsappCredentials = rows[0]?.whatsappCredentials as
       string | null | undefined;
     if (!whatsappCredentials) return null;
-    return JSON.parse(decrypt(whatsappCredentials)) as Record<string, string>;
+    // Sanitised on USE as well as on save, so a value stored before the
+    // clean-up existed (with a pasted invisible character) works at once.
+    return sanitizeCredentialMap(
+      JSON.parse(decrypt(whatsappCredentials)) as Record<string, string>,
+    );
   }
 
   private toResponse(encrypted: string | null): WhatsAppSettingsResponse {
     if (!encrypted) return { hasCredentials: false, maskedCredentials: null };
-    const decrypted = JSON.parse(decrypt(encrypted)) as Record<string, string>;
+    const decrypted = sanitizeCredentialMap(
+      JSON.parse(decrypt(encrypted)) as Record<string, string>,
+    );
     const masked: Record<string, string> = {};
     for (const field of WHATSAPP_CREDENTIAL_FIELDS) {
       if (decrypted[field.key])
