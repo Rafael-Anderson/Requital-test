@@ -22,6 +22,8 @@ import ScrollFade from "@/components/ui/ScrollFade";
 import { isMarketplaceChannel } from "@/lib/channels";
 import { ChannelSourceBadge } from "@/components/channels/ChannelBadges";
 import Link from "next/link";
+import AdminOrderSource from "@/components/AdminOrderSource";
+import { useAuth } from "@/lib/auth-context";
 import Money from "@/components/Money";
 
 const POLL_INTERVAL_MS = 20_000;
@@ -57,6 +59,7 @@ export default function OrdersPage() {
 // boundary in Next 16 — same wrapper shape as app/products/page.tsx's own
 // InventoryPage/InventoryPageContent split.
 function OrdersPageContent() {
+  const { user } = useAuth();
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
@@ -154,7 +157,14 @@ function OrdersPageContent() {
   return (
     <PageShell>
       <BranchBar left={<BackButton href="/" />} />
-      <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50 mb-[18px]">Orders</h1>
+      <div className="mb-[18px] flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-extrabold tracking-[-0.015em] text-text-primary dark:text-zinc-50">Orders</h1>
+        {user && (user.role === "admin" || user.role === "order_manager") && (
+          <Link href="/orders/draft-orders/new">
+            <Button variant="primary">Create order</Button>
+          </Link>
+        )}
+      </div>
       <OrdersTabs />
 
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
@@ -215,6 +225,7 @@ function OrdersPageContent() {
                           </div>
                         )}
                         <div className="text-[13.5px] text-text-secondary dark:text-zinc-300">{order.customerName}</div>
+                        <AdminOrderSource order={order} className="mt-0.5" />
                         <div className="text-sm font-bold text-text-primary dark:text-zinc-50"><Money amount={order.total} currency={order.currency} /></div>
                         {order.deliveryDate && (
                           <div className="text-xs text-text-muted mt-1">

@@ -58,7 +58,6 @@ const ALLOWLIST = {
   listTemplates: 'UNBOUNDED, product templates page',
   listDiscounts: 'UNBOUNDED (no LIMIT server side), discounts page',
   listGiftCards: 'UNBOUNDED (no LIMIT server side), gift cards page',
-  listDraftOrders: 'UNBOUNDED (no LIMIT server side), draft orders page',
   listAbandonedCarts: 'UNBOUNDED (no LIMIT server side), abandoned carts page',
   listBioLinks: 'UNBOUNDED (no LIMIT server side), bio links page',
   listSuppliers: 'server-side LIMIT only, no paging parameters',

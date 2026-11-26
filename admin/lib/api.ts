@@ -73,6 +73,9 @@ import type {
   DiscountInput,
   DraftOrder,
   DraftOrderInput,
+  DraftBill,
+  PaginatedDraftOrders,
+  ManualPaymentMethod,
   ValidateDiscountResult,
   CustomerDetail,
   CustomerTag,
@@ -2382,12 +2385,23 @@ export function validateDiscount(data: {
 
 // --- Draft Orders ---
 
-export function listDraftOrders() {
-  return apiFetch<DraftOrder[]>("/shop/draft-orders");
+export function listDraftOrders(params: { page?: number; pageSize?: number; status?: string; search?: string } = {}) {
+  const q = new URLSearchParams();
+  q.set("page", String(params.page ?? 1));
+  q.set("pageSize", String(params.pageSize ?? 20));
+  if (params.status) q.set("status", params.status);
+  if (params.search?.trim()) q.set("search", params.search.trim());
+  return apiFetch<PaginatedDraftOrders>(`/shop/draft-orders?${q.toString()}`);
 }
 
 export function getDraftOrder(id: number) {
   return apiFetch<DraftOrder>(`/shop/draft-orders/${id}`);
+}
+
+// The live bill split for an unsaved builder form (priced by the backend with
+// the same code as storefront checkout).
+export function previewDraftOrder(data: DraftOrderInput) {
+  return apiFetch<DraftBill>("/shop/draft-orders/preview", { method: "POST", body: JSON.stringify(data) });
 }
 
 export function createDraftOrder(data: DraftOrderInput) {
@@ -2402,15 +2416,25 @@ export function cancelDraftOrder(id: number) {
   return apiFetch<DraftOrder>(`/shop/draft-orders/${id}/cancel`, { method: "PATCH" });
 }
 
-export function completeDraftOrder(id: number) {
-  return apiFetch<DraftOrder>(`/shop/draft-orders/${id}/complete`, { method: "POST" });
+// Creates (or re-sends) the card payment link; no order until the customer pays.
+export function sendDraftPaymentLink(id: number) {
+  return apiFetch<DraftOrder>(`/shop/draft-orders/${id}/payment-link`, { method: "POST" });
 }
 
-export function sendDraftOrderInvoice(id: number) {
-  return apiFetch<{ draftOrder: DraftOrder; paymentLink: { url: string; token: string; expiresAt: string } }>(
-    `/shop/draft-orders/${id}/send-invoice`,
-    { method: "POST" },
-  );
+export function cancelDraftPaymentLink(id: number) {
+  return apiFetch<DraftOrder>(`/shop/draft-orders/${id}/payment-link/cancel`, { method: "POST" });
+}
+
+export function emailDraftInvoice(id: number) {
+  return apiFetch<{ sent: boolean }>(`/shop/draft-orders/${id}/email-invoice`, { method: "POST" });
+}
+
+export function convertDraftCod(id: number) {
+  return apiFetch<DraftOrder>(`/shop/draft-orders/${id}/cod`, { method: "POST" });
+}
+
+export function markDraftPaid(id: number, data: { method: ManualPaymentMethod; reference?: string }) {
+  return apiFetch<DraftOrder>(`/shop/draft-orders/${id}/mark-paid`, { method: "POST", body: JSON.stringify(data) });
 }
 
 export function getScanSettings() {

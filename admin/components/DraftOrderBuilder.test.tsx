@@ -1,53 +1,50 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import DraftOrderBuilder from "./DraftOrderBuilder";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import DraftOrderBuilder, { buildDraftPayload, draftFormProblems, type WorkingItem } from "./DraftOrderBuilder";
 import { ToastProvider } from "@/components/ui/Toast";
-import type { Outlet, Product } from "@/lib/types";
+import type { DraftBill, Outlet, Product } from "@/lib/types";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
 }));
 
-const outlets: Outlet[] = [
-  { id: 1, name: "Main Branch" } as Outlet,
-  { id: 2, name: "Downtown Branch" } as Outlet,
-];
-const products: Product[] = [{ id: 1, name: "Rose Bouquet", hasVariants: false, price: "120" } as Product];
-
 vi.mock("@/lib/api", () => ({
   listOutlets: vi.fn(),
-  listProducts: vi.fn(),
-  validateDiscount: vi.fn(),
+  listProductsPage: vi.fn(),
+  listCustomers: vi.fn(),
+  getCustomer: vi.fn(),
+  previewDraftOrder: vi.fn(),
   createDraftOrder: vi.fn(),
   updateDraftOrder: vi.fn(),
   getRegions: vi.fn(),
 }));
 
-import { getRegions, listOutlets, listProducts } from "@/lib/api";
+import { createDraftOrder, getRegions, listOutlets, listProductsPage, previewDraftOrder } from "@/lib/api";
 
-const uaeRegions = {
-  country: { code: "AE", regionLabel: "Emirate" },
-  regions: [
-    { id: 1, code: "AE-AZ", nameEn: "Abu Dhabi", nameAr: "أبوظبي", sortOrder: 1 },
-    { id: 2, code: "AE-DU", nameEn: "Dubai", nameAr: "دبي", sortOrder: 2 },
-    { id: 3, code: "AE-SH", nameEn: "Sharjah", nameAr: "الشارقة", sortOrder: 3 },
-  ],
-};
+const outlets: Outlet[] = [{ id: 1, name: "Main Branch" } as Outlet];
+const rose = { id: 7, name: "Rose Bouquet", hasVariants: false, price: "50", thumbnail: "", stockQuantity: 3, variants: [] } as unknown as Product;
 
-// Mocking the module rather than wrapping in a provider, matching how this
-// suite already handles auth-context/outlet-context (see OutletSwitcher.test.tsx).
-vi.mock("@/lib/useShopCurrency", () => ({
-  useShopCurrency: () => "AED",
-}));
-
-let regionsResponse: typeof uaeRegions | { country: null; regions: [] } = uaeRegions;
+const bill = (over: Partial<DraftBill> = {}): DraftBill => ({
+  currency: "AED",
+  taxInclusive: false,
+  lines: [],
+  subtotal: "0",
+  discount: { amount: "0", source: null, code: null, reason: null },
+  deliveryFee: "15",
+  deliveryFeeSource: "zone",
+  deliveryZone: "Dubai",
+  deliveryError: null,
+  taxAmount: "0",
+  total: "15",
+  stockWarnings: [],
+  ...over,
+});
 
 function renderBuilder() {
   vi.mocked(listOutlets).mockResolvedValue(outlets);
-  vi.mocked(listProducts).mockResolvedValue(products);
-  vi.mocked(getRegions).mockResolvedValue(regionsResponse);
+  vi.mocked(getRegions).mockResolvedValue({ country: null, regions: [] } as never);
+  vi.mocked(listProductsPage).mockResolvedValue({ data: [rose], page: 1, pageSize: 8, total: 1 });
   return render(
     <ToastProvider>
       <DraftOrderBuilder />
@@ -55,83 +52,131 @@ function renderBuilder() {
   );
 }
 
-// Same trigger-has-no-label-association caveat as TemplateForm.test.tsx.
-function getCombobox(labelText: string) {
-  const container = screen.getByText(labelText).closest("div");
-  return within(container as HTMLElement).getByRole("combobox");
-}
+const baseForm = {
+  outletId: 1,
+  customerName: "Layla",
+  customerPhone: "0501112233",
+  customerEmail: "",
+  orderType: "delivery" as const,
+  customerAddress: "Villa 7",
+  regionId: null,
+  area: "",
+  deliveryDate: "",
+  deliveryTimeSlot: "",
+  receiverOn: false,
+  receiverName: "",
+  receiverPhone: "",
+  receiverMessage: "",
+  discountMode: "none" as const,
+  discountCode: "",
+  orderDiscountType: "percent" as const,
+  orderDiscountValue: "",
+  orderDiscountReason: "",
+  feeOverrideOn: false,
+  feeOverride: "",
+  feeOverrideReason: "",
+  notes: "",
+  customerNote: "",
+  items: [] as WorkingItem[],
+};
+const line = (over: Partial<WorkingItem>): WorkingItem => ({
+  key: "k",
+  custom: false,
+  name: "",
+  quantity: 1,
+  price: null,
+  priceReason: "",
+  taxable: true,
+  ...over,
+});
+
+describe("draft builder payload and rules", () => {
+  it("a changed catalogue price needs a reason; a custom item needs a name and a price", () => {
+    expect(
+      draftFormProblems({ ...baseForm, items: [line({ productId: 7, price: "40" })] }),
+    ).toContain("Line 1: give a reason for the changed price");
+    expect(
+      draftFormProblems({ ...baseForm, items: [line({ productId: 7, price: "40", priceReason: "Loyal" })] }),
+    ).toEqual([]);
+    expect(draftFormProblems({ ...baseForm, items: [line({ custom: true, price: "" })] })).toEqual([
+      "Line 1: give the custom item a name",
+      "Line 1: give the custom item a price",
+    ]);
+  });
+
+  it("sends a custom item as customName + price + taxable, and a live-priced line without a price", () => {
+    const payload = buildDraftPayload({
+      ...baseForm,
+      items: [
+        line({ productId: 7 }),
+        line({ custom: true, name: "Card", price: "10", taxable: false }),
+      ],
+    });
+    expect(payload.items).toEqual([
+      { productId: 7, variantId: undefined, quantity: 1 },
+      { customName: "Card", price: 10, quantity: 1, taxable: false },
+    ]);
+  });
+
+  it("pickup sends no address, region or fee override", () => {
+    const payload = buildDraftPayload({ ...baseForm, orderType: "pickup", feeOverrideOn: true, feeOverride: "5", feeOverrideReason: "x" });
+    expect(payload.customerAddress).toBeUndefined();
+    expect(payload.deliveryFeeOverride).toBeNull();
+  });
+});
 
 describe("DraftOrderBuilder", () => {
   beforeEach(() => {
-    regionsResponse = uaeRegions;
+    vi.clearAllMocks();
   });
 
-  it("renders Emirate/Branch/Order type/Product pickers as Comboboxes, not native selects", async () => {
+  it("adds a custom item and shows the bill split the backend priced", async () => {
+    vi.mocked(previewDraftOrder).mockResolvedValue(
+      bill({
+        lines: [
+          { productId: 1, variantId: null, name: "Hand-written card", variantLabel: null, quantity: 1, unitPrice: "10", lineTotal: "10", taxRate: 0, custom: true, priceOverridden: false, priceReason: null },
+        ],
+        subtotal: "10",
+        total: "25",
+      }),
+    );
     renderBuilder();
-    await waitFor(() => expect(getCombobox("Branch")).toBeInTheDocument());
-    await waitFor(() => expect(getCombobox("Emirate")).toBeInTheDocument());
-    expect(getCombobox("Order type")).toBeInTheDocument();
-    expect(getCombobox("Product")).toBeInTheDocument();
-    expect(document.querySelector("select")).not.toBeInTheDocument();
+    await screen.findByText("Main Branch");
+    fireEvent.click(screen.getByRole("button", { name: /Custom item/ }));
+    fireEvent.change(screen.getByLabelText("Custom item name"), { target: { value: "Hand-written card" } });
+    fireEvent.change(screen.getByLabelText("Price"), { target: { value: "10" } });
+    await waitFor(() => expect(previewDraftOrder).toHaveBeenCalled(), { timeout: 2000 });
+    const sent = vi.mocked(previewDraftOrder).mock.calls.at(-1)![0];
+    expect(sent.items).toEqual([{ customName: "Hand-written card", price: 10, quantity: 1, taxable: true }]);
+    const split = await screen.findByTestId("bill-split");
+    await waitFor(() => expect(split.textContent).toContain("Hand-written card"));
+    expect(split.textContent).toContain("25");
   });
 
-  it("opens the Emirate combobox and selects an option", async () => {
-    const user = userEvent.setup();
+  it("a changed price is refused without a reason and the draft is not saved", async () => {
+    vi.mocked(previewDraftOrder).mockResolvedValue(bill());
     renderBuilder();
-    await waitFor(() => expect(getCombobox("Branch")).toBeInTheDocument());
-    await waitFor(() => expect(getCombobox("Emirate")).toBeInTheDocument());
-    await user.click(getCombobox("Emirate"));
-    const option = await screen.findByRole("option", { name: "Sharjah" });
-    await user.click(option);
-    expect(getCombobox("Emirate")).toHaveTextContent("Sharjah");
+    await screen.findByText("Main Branch");
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Layla" } });
+    fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "0501112233" } });
+    fireEvent.change(screen.getByLabelText("Add a product"), { target: { value: "Rose" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Change price" }));
+    fireEvent.change(screen.getByLabelText("Price"), { target: { value: "40" } });
+    expect(screen.getByText("A reason is required")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect((await screen.findAllByText("Line 1: give a reason for the changed price")).length).toBeGreaterThan(0);
+    expect(createDraftOrder).not.toHaveBeenCalled();
   });
 
-  it("pre-selects no region: a silent default is how an order lands in the wrong zone", async () => {
+  it("shows the stock warning the backend returns", async () => {
+    vi.mocked(previewDraftOrder).mockResolvedValue(
+      bill({ stockWarnings: [{ productId: 7, variantId: null, name: "Rose Bouquet", requested: 5, available: 3 }] }),
+    );
     renderBuilder();
-    await waitFor(() => expect(getCombobox("Emirate")).toBeInTheDocument());
-    expect(getCombobox("Emirate")).not.toHaveTextContent("Dubai");
-    expect(getCombobox("Emirate")).not.toHaveTextContent("Abu Dhabi");
-  });
-
-  it("labels the field with the country's own word and offers only that country's regions", async () => {
-    regionsResponse = {
-      country: { code: "KW", regionLabel: "Governorate" },
-      regions: [{ id: 9, code: "KW-KU", nameEn: "Capital", nameAr: "العاصمة", sortOrder: 1 }],
-    } as unknown as typeof uaeRegions;
-    const user = userEvent.setup();
-    renderBuilder();
-    await waitFor(() => expect(getCombobox("Governorate")).toBeInTheDocument());
-    expect(screen.queryByText("Emirate")).not.toBeInTheDocument();
-    await user.click(getCombobox("Governorate"));
-    expect(await screen.findByRole("option", { name: "Capital" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Dubai" })).not.toBeInTheDocument();
-  });
-
-  it("has no region field at all for a shop whose country has no regions", async () => {
-    regionsResponse = { country: null, regions: [] };
-    renderBuilder();
-    await waitFor(() => expect(getCombobox("Branch")).toBeInTheDocument());
-    expect(screen.queryByText("Emirate")).not.toBeInTheDocument();
-    expect(screen.queryByText("Region")).not.toBeInTheDocument();
-  });
-
-  it("Branch combobox is populated from listOutlets and defaults to the first outlet", async () => {
-    renderBuilder();
-    await waitFor(() => expect(getCombobox("Branch")).toHaveTextContent("Main Branch"));
-    const user = userEvent.setup();
-    await user.click(getCombobox("Branch"));
-    await user.click(await screen.findByRole("option", { name: "Downtown Branch" }));
-    expect(getCombobox("Branch")).toHaveTextContent("Downtown Branch");
-  });
-
-  it("adds an item via the Product combobox", async () => {
-    const user = userEvent.setup();
-    renderBuilder();
-    await waitFor(() => expect(getCombobox("Product")).toBeInTheDocument());
-    await user.click(getCombobox("Product"));
-    await user.click(await screen.findByRole("option", { name: "Rose Bouquet" }));
-    expect(getCombobox("Product")).toHaveTextContent("Rose Bouquet");
-    await user.click(screen.getByText("Add"));
-    expect(screen.getByText("Rose Bouquet")).toBeInTheDocument();
+    await screen.findByText("Main Branch");
+    fireEvent.change(screen.getByLabelText("Add a product"), { target: { value: "Rose" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+    expect(await screen.findByText(/5 requested, 3 in stock/, {}, { timeout: 2000 })).toBeInTheDocument();
   });
 });

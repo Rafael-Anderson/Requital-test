@@ -1,5 +1,6 @@
 "use client";
 
+import AdminOrderSource from "@/components/AdminOrderSource";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -151,6 +152,7 @@ export default function OrderDetailPage() {
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Order #{order.shopOrderNumber}</h1>
+          <AdminOrderSource order={order} />
           <div className="flex gap-2">
             <StatusBadge status={order.status} />
             <StatusBadge status={order.paymentStatus} />
