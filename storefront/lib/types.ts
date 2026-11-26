@@ -835,6 +835,39 @@ export interface RegionsResponse {
 // What the /pay page renders before the customer commits. Comes from the
 // READ-ONLY GET /pay/:token/summary - deliberately not GET /pay/:token, which
 // mints a gateway checkout session as a side effect.
+// GET /public/:shop/custom-orders/pay/:token (an admin custom order's pay page).
+export type CustomOrderPayState = "payable" | "unavailable" | "paid" | "closed" | "cancelled" | "expired";
+export interface CustomOrderPay {
+  state: CustomOrderPayState;
+  shop: { name: string; phone: string | null; email: string | null };
+  bill: {
+    currency: string;
+    taxInclusive: boolean;
+    lines: { name: string; variantLabel: string | null; quantity: number; unitPrice: string; lineTotal: string }[];
+    subtotal: string;
+    discount: { amount: string; code: string | null };
+    deliveryFee: string | null;
+    taxAmount: string | null;
+    total: string | null;
+  };
+  fulfilment: {
+    orderType: "delivery" | "pickup";
+    customerName: string;
+    customerAddress: string | null;
+    regionName: string | null;
+    area: string | null;
+    deliveryDate: string | null;
+    deliveryTimeSlot: string | null;
+    receiverName: string | null;
+    receiverPhone: string | null;
+    receiverMessage: string | null;
+    customerNote: string | null;
+    outletName: string;
+  };
+  expiresAt: string | null;
+  order: { shopOrderNumber: number; trackingToken: string } | null;
+}
+
 export interface PaymentLinkSummary {
   shopOrderNumber: number;
   total: string;

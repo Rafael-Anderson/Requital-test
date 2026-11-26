@@ -331,6 +331,9 @@ jobs:
           # The seed's password is in public breach corpora, and a CI run must not
           # depend on a third-party API being reachable (the check fails open anyway).
           PASSWORD_BREACH_CHECK: "off"
+          # Stripe calls go to the local fake the custom-order pay-link spec starts
+          # (e2e/fake-stripe.ts); honoured only for a local origin outside production.
+          E2E_FAKE_STRIPE_URL: http://127.0.0.1:12111
         run: nohup node dist/main.js > /tmp/backend.log 2>&1 &
       - name: Wait for backend
         run: |
@@ -380,6 +383,8 @@ jobs:
 
       - name: Run Playwright tests
         working-directory: e2e
+        env:
+          E2E_FAKE_STRIPE_URL: http://127.0.0.1:12111
         run: npm test
 
       # On any failure keep what is needed to find the cause: the Playwright traces and screenshots

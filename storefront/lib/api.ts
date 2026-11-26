@@ -33,6 +33,7 @@ import type {
   ValidateDiscountResult,
   ValidateGiftCardResult,
   PaymentLinkSummary,
+  CustomOrderPay,
 } from "./types";
 import type { ThemeConfig } from "./theme-config-types";
 import { resolveInternalApiOrigin } from "./api-origin";
@@ -861,6 +862,21 @@ export function deleteMyAddress(shopSlug: string, addressId: string) {
 // The payment-link pages. getPaymentLinkSummary is safe to call on mount;
 // startPaymentLinkCheckout is NOT - it mints a gateway session server-side, so
 // it is only called from an explicit "Pay now" action.
+// A custom order's pay page (/pay/<token>): read-only summary, then Pay, which
+// converts the order once and returns a fresh gateway session. Shop-scoped: the
+// token only resolves under its own shop's slug.
+export function getCustomOrderPay(shopSlug: string, token: string) {
+  return get<CustomOrderPay>(`/public/${shopSlug}/custom-orders/pay/${encodeURIComponent(token)}`);
+}
+
+export function startCustomOrderPay(shopSlug: string, token: string) {
+  return authedFetch<{ alreadyPaid: boolean; checkoutUrl?: string }>(
+    shopSlug,
+    `/public/${shopSlug}/custom-orders/pay/${encodeURIComponent(token)}/session`,
+    { method: "POST" },
+  );
+}
+
 export function getPaymentLinkSummary(token: string) {
   return get<PaymentLinkSummary>(
     `/pay/${encodeURIComponent(token)}/summary`,
