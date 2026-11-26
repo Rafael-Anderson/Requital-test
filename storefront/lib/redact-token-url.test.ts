@@ -17,6 +17,14 @@ describe("redactTokenUrl", () => {
     }
   });
 
+  it("redacts a custom order's /pay/<token> segment but not /pay/success", () => {
+    expect(redactTokenUrl(`/rose/pay/${T32.toLowerCase()}`)).toBe("/rose/pay/[redacted]");
+    expect(redactTokenUrl(`https://rose.requital.io/pay/${T32}?x=1`)).toBe("https://rose.requital.io/pay/[redacted]?x=1");
+    expect(carriesToken(`/pay/${T32}`)).toBe(true);
+    expect(redactTokenUrl("/rose/pay/success")).toBe("/rose/pay/success");
+    expect(redactTokenUrl("/rose/pay/success?x=1")).toBe("/rose/pay/success?x=1");
+  });
+
   it("redacts every ?token= / &token= shape", () => {
     for (const [input, out] of [
       [`/rose/orders/track?token=${T32}`, "/rose/orders/track?token=[redacted]"],

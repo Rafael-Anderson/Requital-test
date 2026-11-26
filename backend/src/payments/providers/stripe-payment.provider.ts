@@ -17,6 +17,33 @@ import {
   isGatewayCurrencyBlocked,
 } from '../blocked-gateway-currencies';
 
+// The Playwright suite's fake Stripe API (e2e/fake-stripe.ts). Honoured only
+// when E2E_FAKE_STRIPE_URL names a LOCAL http(s) origin AND NODE_ENV is not
+// production, so no deployed environment can redirect Stripe calls by
+// accident; anything else is ignored and the real API is used.
+export function fakeStripeApi(): {
+  host: string;
+  port: number;
+  protocol: 'http' | 'https';
+} | null {
+  const raw = process.env.E2E_FAKE_STRIPE_URL?.trim();
+  if (!raw || process.env.NODE_ENV === 'production') return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') return null;
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  const protocol = url.protocol === 'http:' ? 'http' : 'https';
+  return {
+    host: url.hostname,
+    port: Number(url.port) || (protocol === 'http' ? 80 : 443),
+    protocol,
+  };
+}
+
 @Injectable()
 export class StripePaymentProvider implements PaymentProvider {
   readonly name = 'stripe';
@@ -51,7 +78,8 @@ export class StripePaymentProvider implements PaymentProvider {
     }
     let client = this.clients.get(key);
     if (!client) {
-      client = new Stripe(key);
+      const fake = fakeStripeApi();
+      client = fake ? new Stripe(key, fake) : new Stripe(key);
       this.clients.set(key, client);
     }
     return client;

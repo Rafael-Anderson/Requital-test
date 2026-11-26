@@ -11,12 +11,17 @@ export const REDACTED = "[redacted]";
 
 // /orders/<anything> except the static /orders/track page itself.
 const ORDER_PATH_SEGMENT = /(\/orders\/)(?!track(?:[/?#]|$))[^/?#]+/gi;
+// /pay/<token> (a custom order's payment link), except the static /pay/success.
+const PAY_PATH_SEGMENT = /(\/pay\/)(?!success(?:[/?#]|$))[^/?#]+/gi;
 // ?token=..., &token=... (any case), up to the next & or #.
 const TOKEN_QUERY = /([?&]token=)[^&#]*/gi;
 
 export function redactTokenUrl(input: string): string {
   if (!input) return input;
-  return input.replace(ORDER_PATH_SEGMENT, `$1${REDACTED}`).replace(TOKEN_QUERY, `$1${REDACTED}`);
+  return input
+    .replace(ORDER_PATH_SEGMENT, `$1${REDACTED}`)
+    .replace(PAY_PATH_SEGMENT, `$1${REDACTED}`)
+    .replace(TOKEN_QUERY, `$1${REDACTED}`);
 }
 
 // True when redaction changes the string, i.e. it carries a token.
