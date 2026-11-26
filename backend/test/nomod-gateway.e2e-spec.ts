@@ -361,7 +361,7 @@ describe('Nomod gateway (e2e, Nomod HTTP faked)', () => {
         .set('Authorization', `Bearer ${shop.adminToken}`)
         .send({
           enabled: true,
-          credentials: { apiKey: 'k', webhookSecret: 'whsec_x' },
+          credentials: { apiKey: 'k', webhookSecret: 'whsec_c2VjcmV0' },
         })
         .expect(403);
       expect(JSON.stringify(res.body)).toContain('not available');

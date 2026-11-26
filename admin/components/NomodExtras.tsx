@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy } from "lucide-react";
 import {
   API_URL,
   getNomodPending,
@@ -15,6 +14,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import Money from "@/components/Money";
+import WebhookUrlCard from "@/components/WebhookUrlCard";
 
 // Everything about Nomod that is not a credential field: the webhook address to
 // paste into Nomod, a connection test, the partial refund warning and the list of
@@ -46,16 +46,6 @@ export default function NomodExtras({
 
   const url = path ? `${API_URL}${path}` : null;
 
-  async function copy() {
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast("Webhook URL copied");
-    } catch {
-      toast("Could not copy URL", "error");
-    }
-  }
-
   async function generate(rotate: boolean) {
     if (
       rotate &&
@@ -82,6 +72,8 @@ export default function NomodExtras({
     setTest(null);
     try {
       setTest(await nomodTestConnection());
+      // The test clears (or sets) the "key rejected" banner on the page.
+      onChanged();
     } catch (err) {
       setTest({ ok: false, message: err instanceof Error ? err.message : "The test could not run." });
     } finally {
@@ -104,45 +96,32 @@ export default function NomodExtras({
 
   return (
     <>
-      <Card className="space-y-2">
-        <p className="text-xs font-medium text-text-secondary dark:text-zinc-300">
-          In Nomod, create a Hosted Checkout webhook with all 8 charge events (created, authorised, completed, failed,
-          cancelled, refunded, partially refunded, dispute created) and paste this address as its URL. Then paste the
-          whsec_ signing secret Nomod shows you into the field above. Keep this address private: it identifies your shop.
-        </p>
-        {url ? (
-          <div className="flex items-center gap-2">
-            <code
-              title={url}
-              className="min-w-0 flex-1 truncate text-xs bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 rounded px-2 py-1.5"
-            >
-              {url}
-            </code>
-            <button
-              type="button"
-              onClick={copy}
-              className="flex items-center gap-1 text-xs text-accent-text dark:text-accent hover:underline cursor-pointer shrink-0"
-            >
-              <Copy className="size-3" />
-              Copy
-            </button>
-          </div>
-        ) : (
+      <WebhookUrlCard
+        provider="Nomod"
+        url={url}
+        actions={
           <Button type="button" variant="secondary" size="sm" loading={busy === "generate"} onClick={() => generate(false)}>
             Generate webhook URL
           </Button>
-        )}
-        {url && (
-          <button
-            type="button"
-            onClick={() => generate(true)}
-            disabled={busy === "rotate"}
-            className="text-xs text-text-faint hover:underline cursor-pointer"
-          >
-            Generate a new URL
-          </button>
-        )}
-      </Card>
+        }
+        footer={
+          url && (
+        <button
+          type="button"
+          onClick={() => generate(true)}
+          disabled={busy === "rotate"}
+          className="text-xs text-text-faint hover:underline cursor-pointer"
+        >
+          Generate a new URL
+        </button>
+          )
+        }
+      >
+        In Nomod, create a Hosted Checkout webhook with all 8 charge events (created, authorised, completed, failed,
+        cancelled, refunded, partially refunded, dispute created) and paste this address as its URL. Then copy the
+        whsec_ signing secret Nomod shows you into the Webhook Signing Secret field above. Keep this address private: it
+        identifies your shop.
+      </WebhookUrlCard>
 
       <Card className="space-y-2">
         <p className="text-xs text-text-faint">

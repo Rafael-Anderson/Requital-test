@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { PaymentSettingsService } from './payment-settings.service';
 import { UpdatePaymentProviderDto } from './dto/update-payment-provider.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -19,6 +27,13 @@ export class PaymentSettingsController {
   @Get()
   findAll(@CurrentUser() ctx: TenantContext) {
     return this.paymentSettingsService.findAll(ctx);
+  }
+
+  // A harmless authenticated call to Stripe with the shop's saved secret key.
+  // (Nomod's lives at payment-settings/nomod/test-connection.) Never returns a key.
+  @Post('stripe/test-connection')
+  testStripe(@CurrentUser() ctx: TenantContext) {
+    return this.paymentSettingsService.testConnection(ctx.shopId, 'stripe');
   }
 
   // :provider is one of PAYMENT_GATEWAY_PROVIDERS or 'cod' — validated

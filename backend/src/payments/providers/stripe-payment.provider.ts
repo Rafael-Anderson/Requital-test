@@ -9,6 +9,7 @@ import {
   RefundResult,
   WebhookResult,
   CheckoutSessionOutcome,
+  ConnectionTestResult,
 } from '../payment-provider.interface';
 import { toMinorUnits } from '../../common/currency-minor-units';
 import {
@@ -33,6 +34,13 @@ export class StripePaymentProvider implements PaymentProvider {
   // per-shop credentials were resolved — preserves the original behavior
   // for every shop that predates per-shop credential storage.
   private readonly clients = new Map<string, Stripe>();
+
+  // Unit tests pass a fake for testConnection's balance read. Without one, under
+  // NODE_ENV=test testConnection never calls Stripe (it answers "could not reach",
+  // which changes no status), so no spec can reach the real API by saving a key.
+  constructor(
+    private readonly balanceReader?: (secretKey: string) => Promise<unknown>,
+  ) {}
 
   private clientFor(secretKey: string | undefined): Stripe {
     const key = secretKey ?? process.env.STRIPE_SECRET_KEY;
@@ -62,6 +70,64 @@ export class StripePaymentProvider implements PaymentProvider {
   // the platform account.
   isUsable(credentials: Record<string, string> | null): boolean {
     return !!(credentials?.secretKey ?? process.env.STRIPE_SECRET_KEY);
+  }
+
+  // A harmless authenticated read (the account balance) with the SHOP'S OWN secret
+  // key; never the platform fallback, so a merchant's test says something about
+  // their own key. An authentication_error is the only "rejected" answer.
+  async testConnection(
+    credentials: Record<string, string> | null,
+  ): Promise<ConnectionTestResult> {
+    const key = credentials?.secretKey?.trim();
+    if (!key) {
+      return {
+        ok: false,
+        rejected: false,
+        message: 'Save a Stripe secret key first.',
+      };
+    }
+    try {
+      if (this.balanceReader) {
+        await this.balanceReader(key);
+      } else if (process.env.NODE_ENV === 'test') {
+        return {
+          ok: false,
+          rejected: false,
+          message: 'Could not reach Stripe.',
+        };
+      } else {
+        await this.clientFor(key).balance.retrieve(
+          {},
+          { timeout: PROVIDER_CALL_TIMEOUT_MS },
+        );
+      }
+      return {
+        ok: true,
+        rejected: false,
+        message: 'Stripe accepted the secret key.',
+      };
+    } catch (err) {
+      const e = err as { type?: unknown; rawType?: unknown };
+      if (
+        e?.type === 'StripeAuthenticationError' ||
+        e?.rawType === 'authentication_error'
+      ) {
+        return {
+          ok: false,
+          rejected: true,
+          message: 'Stripe rejected the secret key.',
+        };
+      }
+      if (e?.type === 'StripePermissionError') {
+        return {
+          ok: false,
+          rejected: false,
+          message:
+            'Stripe accepted the key but it lacks permission to read the account. Use a secret key or give the restricted key read access.',
+        };
+      }
+      return { ok: false, rejected: false, message: 'Could not reach Stripe.' };
+    }
   }
 
   async createCheckoutSession(

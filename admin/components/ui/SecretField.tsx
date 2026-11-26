@@ -22,6 +22,8 @@ export default function SecretField({
   onChange,
   placeholder,
   onReplace,
+  hint,
+  error,
 }: {
   label: string;
   masked: string | null;
@@ -31,6 +33,10 @@ export default function SecretField({
   // Called when Replace is clicked, for a form whose secrets only make sense
   // replaced together (a credential set): it can open them all at once.
   onReplace?: () => void;
+  // A short line under the field (where to copy the value from).
+  hint?: string;
+  // Shown under the field in red; marks the input invalid.
+  error?: string;
 }) {
   const [editing, setEditing] = useState(!masked);
 
@@ -60,13 +66,17 @@ export default function SecretField({
   }
 
   return (
-    <Input
-      label={label}
-      type="password"
-      autoComplete="new-password"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-    />
+    <div>
+      <Input
+        label={label}
+        type="password"
+        autoComplete="new-password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        error={error}
+      />
+      {hint && !error && <p className="mt-1 text-xs text-text-faint">{hint}</p>}
+    </div>
   );
 }

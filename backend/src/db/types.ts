@@ -928,6 +928,10 @@ export interface ShoppaymentproviderRow {
   enabled: boolean;
   credentials: string | null;
   webhookToken: string | null;
+  // NULL = unknown/ok; 'rejected' = the provider refused the shop's own keys.
+  credentialStatus: string | null;
+  credentialStatusAt: Date | null;
+  credentialAlertedAt: Date | null;
   updatedAt: Date;
 }
 

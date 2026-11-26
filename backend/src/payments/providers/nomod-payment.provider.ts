@@ -3,6 +3,7 @@ import {
   RefundNotAttemptedError,
   type CheckoutSession,
   type CheckoutSessionOutcome,
+  type ConnectionTestResult,
   type CreateCheckoutSessionParams,
   type PaymentProvider,
   type RefundPaymentParams,
@@ -50,6 +51,24 @@ export class NomodPaymentProvider implements PaymentProvider {
     return !!(
       credentials?.apiKey?.trim() && credentials?.webhookSecret?.trim()
     );
+  }
+
+  async testConnection(
+    credentials: Record<string, string> | null,
+  ): Promise<ConnectionTestResult> {
+    const creds = nomodCredentials(credentials);
+    if (!creds) {
+      return {
+        ok: false,
+        rejected: false,
+        message: 'Save a Nomod API key first.',
+      };
+    }
+    try {
+      return await this.client.testConnection(creds);
+    } catch {
+      return { ok: false, rejected: false, message: 'Could not reach Nomod.' };
+    }
   }
 
   async createCheckoutSession(

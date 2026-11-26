@@ -113,8 +113,13 @@ export type CheckoutSessionOutcome =
   | { status: 'unpaid' }
   | { status: 'expired' };
 
-export interface PaymentProvider {
+export interface ConnectionTestResult {
+  ok: boolean;
+  rejected: boolean;
+  message: string;
+}
 
+export interface PaymentProvider {
   // See CheckoutSessionOutcome. Undefined on providers that cannot be polled.
   retrieveSessionOutcome?(
     sessionId: string,
@@ -129,6 +134,14 @@ export interface PaymentProvider {
   // OPTIONAL: a provider that does not say is treated as usable (test doubles);
   // every structural stub answers false.
   isUsable?(credentials: Record<string, string> | null): boolean;
+  // A harmless authenticated call with the given credentials. `rejected` is true
+  // ONLY when the provider refused the credentials themselves (not a network error
+  // or a 5xx), which is what marks a shop's card processor "credentials rejected".
+  // The message is a fixed, merchant-safe sentence: never a key, never a response
+  // body. OPTIONAL: only the card processors (Nomod, Stripe) implement it.
+  testConnection?(
+    credentials: Record<string, string> | null,
+  ): Promise<ConnectionTestResult>;
   createCheckoutSession(
     params: CreateCheckoutSessionParams,
   ): Promise<CheckoutSession>;

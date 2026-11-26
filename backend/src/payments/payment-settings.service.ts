@@ -2,13 +2,23 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Optional,
 } from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../database/database.service';
 import type { QueryParam } from '../database/database.service';
 import { ShopService } from '../shop/shop.service';
 import { PaymentProviderRegistry } from './payment-provider.registry';
-import type { PaymentProvider } from './payment-provider.interface';
+import type {
+  ConnectionTestResult,
+  PaymentProvider,
+} from './payment-provider.interface';
+import { credentialProblems } from './credential-validation';
+import {
+  CREDENTIALS_REJECTED,
+  CredentialHealthService,
+  isHealthTracked,
+} from './credential-health.service';
 import type { TenantContext } from '../common/tenant-context';
 import { randomBytes } from 'crypto';
 import { decrypt, encrypt } from '../common/crypto';
@@ -42,6 +52,24 @@ export interface ProviderSettingsResponse {
   // Nomod only: the shop-scoped, unguessable webhook path the merchant pastes into
   // Nomod (the admin prefixes the API origin). Null until it is first generated.
   webhookPath?: string | null;
+  // Nomod and Stripe only: 'rejected' while the provider refuses the shop's saved
+  // credentials (card payments are paused), else null (unknown or fine).
+  credentialStatus?: 'rejected' | null;
+  credentialStatusAt?: Date | null;
+  // Only on the response to a save that changed this provider's credentials: the
+  // automatic Test connection run right after saving.
+  connectionTest?: ConnectionTestResult;
+}
+
+// Under Jest the automatic test-on-save is off (it would call the real Nomod or
+// Stripe API from every spec that saves a key); a spec that fakes the provider HTTP
+// turns it back on with PAYMENT_AUTOTEST_IN_TESTS=1. Read per call so a spec can set
+// it in beforeAll. Always on outside tests.
+function autoTestOnSave(): boolean {
+  return (
+    process.env.NODE_ENV !== 'test' ||
+    process.env.PAYMENT_AUTOTEST_IN_TESTS === '1'
+  );
 }
 
 function maskValue(value: string): string {
@@ -60,6 +88,8 @@ export class PaymentSettingsService {
     private readonly shopService: ShopService,
     private readonly providerRegistry: PaymentProviderRegistry,
     private readonly features: FeaturesService,
+    // Optional so unit tests that build the service by hand need not supply it.
+    @Optional() private readonly health?: CredentialHealthService,
   ) {}
 
   async findAll(ctx: TenantContext): Promise<ProviderSettingsResponse[]> {
@@ -76,7 +106,12 @@ export class PaymentSettingsService {
     const byProvider = new Map(
       rows.map((r) => [
         r.provider as string,
-        r as { enabled: boolean; credentials: string | null },
+        r as {
+          enabled: boolean;
+          credentials: string | null;
+          credentialStatus?: string | null;
+          credentialStatusAt?: Date | null;
+        },
       ]),
     );
     const nomodGranted = await this.features.isEnabled(
@@ -103,6 +138,13 @@ export class PaymentSettingsService {
           ? this.maskCredentials(provider, decrypted)
           : null,
       };
+      if (isHealthTracked(provider)) {
+        const rejected = row?.credentialStatus === CREDENTIALS_REJECTED;
+        response.credentialStatus = rejected ? 'rejected' : null;
+        response.credentialStatusAt = rejected
+          ? (row?.credentialStatusAt ?? null)
+          : null;
+      }
       if (provider === 'nomod') {
         response.available = nomodGranted;
         response.publicValues = decrypted
@@ -165,6 +207,13 @@ export class PaymentSettingsService {
 
     if (dto.credentials) {
       this.assertValidCredentials(typedProvider, dto.credentials);
+      // Copy and paste adds stray spaces; the shape checks above already ignore
+      // them, so the stored value must not carry them either.
+      if (typedProvider === 'stripe') {
+        dto.credentials = Object.fromEntries(
+          Object.entries(dto.credentials).map(([k, v]) => [k, v.trim()]),
+        );
+      }
     }
     // Nomod is a platform-granted feature: it cannot be switched on (and its
     // settings cannot be created) for a shop the platform has not granted it to.
@@ -264,6 +313,20 @@ export class PaymentSettingsService {
       await this.ensureNomodWebhookToken(ctx.shopId);
     }
 
+    // New credentials for a card processor: the old "rejected" verdict was about
+    // the OLD keys, so it is cleared, and the new keys are tested at once. The save
+    // itself has already happened: a network error in the test never undoes it.
+    let connectionTest: ConnectionTestResult | undefined;
+    if (
+      dto.credentials &&
+      isHealthTracked(typedProvider) &&
+      this.health &&
+      autoTestOnSave()
+    ) {
+      await this.health.markAccepted(ctx.shopId, typedProvider);
+      connectionTest = await this.testConnection(ctx.shopId, typedProvider);
+    }
+
     // Keeps shop.paymentGateway (still what card_online checkout resolution
     // reads — see PublicService.createOrder) in sync with whichever card
     // processor is now active, so the rest of the existing checkout flow
@@ -275,7 +338,64 @@ export class PaymentSettingsService {
       ]);
     }
 
-    return this.findAll(ctx);
+    const all = await this.findAll(ctx);
+    if (connectionTest) {
+      const entry = all.find((r) => r.provider === typedProvider);
+      if (entry) entry.connectionTest = connectionTest;
+    }
+    return all;
+  }
+
+  // Records what a checkout-session call said about the shop's credentials:
+  // success clears "rejected", a refusal of the credentials sets it and alerts the
+  // merchant (at most once per 24h). `credentials` is what the call was made with:
+  // null (platform fallback key) records nothing. Never throws.
+  async observeProviderCall(
+    shopId: number,
+    provider: string,
+    credentials: Record<string, string> | null | undefined,
+    outcome: { ok: true } | { ok: false; error: unknown },
+  ): Promise<void> {
+    if (!this.health) return;
+    await this.health.observe(shopId, provider, !!credentials, outcome);
+  }
+
+  // Test connection for a card processor with the shop's SAVED credentials. A
+  // success clears the "credentials rejected" status; a refusal of the credentials
+  // sets it (no merchant alert: the merchant is looking at the answer). A network
+  // error changes nothing. Never throws.
+  async testConnection(
+    shopId: number,
+    provider: string,
+  ): Promise<ConnectionTestResult> {
+    if (!isHealthTracked(provider)) {
+      throw new BadRequestException(
+        `Test connection is not available for ${provider}`,
+      );
+    }
+    let result: ConnectionTestResult;
+    try {
+      const impl = this.providerRegistry.get(provider);
+      if (!impl.testConnection) {
+        return { ok: false, rejected: false, message: 'Not available.' };
+      }
+      result = await impl.testConnection(
+        await this.resolveCredentials(shopId, provider),
+      );
+    } catch {
+      return {
+        ok: false,
+        rejected: false,
+        message: 'The connection test could not run. Try again.',
+      };
+    }
+    if (this.health) {
+      if (result.ok) await this.health.markAccepted(shopId, provider);
+      else if (result.rejected) {
+        await this.health.markRejected(shopId, provider, { alert: false });
+      }
+    }
+    return result;
   }
 
   // Decrypted server-side only to resolve the credentials a provider call
@@ -391,6 +511,16 @@ export class PaymentSettingsService {
       if (currency && isGatewayCurrencyBlocked(provider, currency))
         return false;
     }
+    // The provider refused the shop's own keys (Nomod 401/403, Stripe
+    // authentication_error): card payment is paused until the keys work again,
+    // so the storefront does not offer a method that cannot succeed.
+    if (isHealthTracked(provider)) {
+      const status = await this.db.query<RowDataPacket[]>(
+        `SELECT credentialStatus FROM shoppaymentprovider WHERE shopId = ? AND provider = ?`,
+        [shopId, provider],
+      );
+      if (status[0]?.credentialStatus === CREDENTIALS_REJECTED) return false;
+    }
     let impl: PaymentProvider;
     try {
       impl = this.providerRegistry.get(provider);
@@ -465,6 +595,18 @@ export class PaymentSettingsService {
       }
     }
     if (provider === 'nomod') this.assertValidNomodSettings(credentials);
+    const problems = credentialProblems(provider, credentials);
+    const fields = Object.keys(problems);
+    if (fields.length > 0) {
+      // `message` is the first problem (what apiFetch shows); `fieldErrors` lets
+      // the admin put each one under its own input.
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: problems[fields[0]],
+        fieldErrors: problems,
+      });
+    }
   }
 
   private assertValidNomodSettings(credentials: Record<string, string>) {

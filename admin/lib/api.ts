@@ -285,6 +285,8 @@ export class ApiError extends Error {
     // Stable machine-readable reason some endpoints add (for example
     // "mfa_locked", "mfa_enrollment_required"). Absent on most errors.
     public code?: string,
+    // Per-field messages some endpoints add (payment credentials), keyed by field.
+    public fieldErrors?: Record<string, string>,
   ) {
     super(message);
     this.name = "ApiError";
@@ -359,7 +361,12 @@ async function apiFetch<T>(path: string, init?: RequestInit, isRetry = false): P
       notifyUnauthorized();
     }
     const body = await res.json().catch(() => null);
-    throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status, body?.code);
+    throw new ApiError(
+      body?.message ?? `Request failed (${res.status})`,
+      res.status,
+      body?.code,
+      body?.fieldErrors && typeof body.fieldErrors === "object" ? body.fieldErrors : undefined,
+    );
   }
   if (res.status === 204) return undefined as T;
   // A 200 with an empty body (no Content-Length, or 0) isn't valid JSON —
@@ -1031,7 +1038,15 @@ export function nomodRotateWebhookUrl() {
 }
 
 export function nomodTestConnection() {
-  return apiFetch<{ ok: boolean; message: string }>("/payment-settings/nomod/test-connection", { method: "POST" });
+  return apiFetch<{ ok: boolean; rejected?: boolean; message: string }>("/payment-settings/nomod/test-connection", {
+    method: "POST",
+  });
+}
+
+export function stripeTestConnection() {
+  return apiFetch<{ ok: boolean; rejected?: boolean; message: string }>("/payment-settings/stripe/test-connection", {
+    method: "POST",
+  });
 }
 
 export function getNomodPending(minutes = 15) {

@@ -337,7 +337,11 @@ describe('NomodClient.testConnection', () => {
         jest.fn().mockResolvedValue(reply(status, {})),
         noSleep,
       ).testConnection(creds);
-      expect(r).toEqual({ ok: false, message: 'Nomod rejected the API key.' });
+      expect(r).toEqual({
+        ok: false,
+        rejected: true,
+        message: 'Nomod rejected the API key.',
+      });
     }
   });
 

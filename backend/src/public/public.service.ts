@@ -1140,10 +1140,9 @@ export class PublicService {
       ),
       // Shop timezone for the "is this product still New" expiry check —
       // must be the SHOP's tz, not the server's (stakeholder #6).
-      this.db.query<RowDataPacket[]>(
-        `SELECT timezone FROM shop WHERE id = ?`,
-        [shopId],
-      ),
+      this.db.query<RowDataPacket[]>(`SELECT timezone FROM shop WHERE id = ?`, [
+        shopId,
+      ]),
       // Storefront-visible custom fields only (visibleOnStorefront = 1), one
       // query for the whole list. Hidden fields are never selected.
       loadVisibleProductMetafields(this.db, shopId, productIds),
@@ -1166,10 +1165,7 @@ export class PublicService {
       taxClasses.find((t) => t.isDefault === true)?.rate ?? 0,
     );
     const brandById = new Map(
-      brands.map((b) => [
-        b.id,
-        { id: b.id, name: b.name, logoUrl: b.logoUrl },
-      ]),
+      brands.map((b) => [b.id, { id: b.id, name: b.name, logoUrl: b.logoUrl }]),
     );
 
     const collectionsByProduct = new Map<number, RowDataPacket[]>();
@@ -1887,12 +1883,16 @@ export class PublicService {
       throw new OrderNotPayableError();
     }
     let session: CheckoutSession;
+    // What the session call was made with (null = platform fallback key), so the
+    // outcome can be recorded against the shop's own credentials only.
+    let usedCredentials: Record<string, string> | null = null;
     try {
       const provider = this.providerRegistry.get(gatewayName);
       const credentials = await this.paymentSettingsService.resolveCredentials(
         shop.id,
         gatewayName,
       );
+      usedCredentials = credentials;
       const abort = new AbortController();
       session = await withProviderTimeout(abort, () =>
         provider.createCheckoutSession({
@@ -1919,7 +1919,19 @@ export class PublicService {
           credentials,
         }),
       );
+      await this.paymentSettingsService.observeProviderCall(
+        shop.id,
+        gatewayName,
+        credentials,
+        { ok: true },
+      );
     } catch (err) {
+      await this.paymentSettingsService.observeProviderCall(
+        shop.id,
+        gatewayName,
+        usedCredentials,
+        { ok: false, error: err },
+      );
       // Release the lease so the shopper's retry is not told "in progress".
       await this.db
         .execute(
@@ -2078,7 +2090,12 @@ export class PublicService {
     this.assertFulfillmentOpen(shop, outlet, dto.orderType);
     if (dto.deliveryDate) {
       this.assertWithinAcceptanceWindow(shop, dto.deliveryDate);
-      this.assertValidTimeSlot(shop, dto.orderType, dto.deliveryDate, dto.deliveryTimeSlot);
+      this.assertValidTimeSlot(
+        shop,
+        dto.orderType,
+        dto.deliveryDate,
+        dto.deliveryTimeSlot,
+      );
     }
 
     const resolvedItems = await this.productsService.resolveOrderItems(
@@ -2156,7 +2173,9 @@ export class PublicService {
         // Each line's own captured tax, rounded once at persist to this
         // currency's real precision - the same round-once-per-stored-column
         // policy the order total follows.
-        taxAmount: String(roundMoney(totals.lines[idx].taxAmount, shop.currency)),
+        taxAmount: String(
+          roundMoney(totals.lines[idx].taxAmount, shop.currency),
+        ),
       }),
     );
 
@@ -2332,7 +2351,7 @@ export class PublicService {
           ];
           const [res] = await withTrackingToken((trackingToken) =>
             conn.query(
-        `INSERT INTO \`order\` (
+              `INSERT INTO \`order\` (
           shopId, ingredientsConsumedAt, consumptionRecordedAt, outletId, customerId, customerName, customerPhone, customerEmail,
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           receiverName, receiverPhone,
@@ -2342,71 +2361,73 @@ export class PublicService {
           dropoffLatitude, dropoffLongitude,
           idempotencyKey, idempotencyFingerprint
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          shop.id,
-          ingredientsConsumed ? new Date() : null,
-          // The stock record below is authoritative for this order from the
-          // start, even when it consumed nothing (see OrdersService.create).
-          new Date(),
-          outlet.id,
-          customer.id,
-          dto.customerName,
-          dto.customerPhone,
-          dto.customerEmail ?? null,
-          dto.customerAddress,
-          region.regionId,
-          dto.area ?? null,
-          dto.deliveryDate ? new Date(dto.deliveryDate) : null,
-          dto.deliveryTimeSlot ?? null,
-          dto.deliveryNotes ?? null,
-          dto.receiverMessage ?? null,
-          receiver?.name ?? null,
-          receiver?.phone ?? null,
-          'storefront',
-          dto.orderType,
-          dto.paymentMethod,
-          deliveryFee,
-          roundMoney(taxAmount, shop.currency),
-          discount?.id ?? null,
-          discountCodeSnapshot ?? null,
-          discount ? discountAmount : null,
-          giftCard?.id ?? null,
-          giftCard?.code ?? null,
-          giftCard ? giftCardAmountApplied : null,
-          storeCreditMinor > 0 ? storeCreditAmount : null,
-          orderTotal,
-          // Nothing left to collect through the selected paymentMethod when
-          // the gift card covers the order in full — marked paid at
-          // creation rather than left 'unpaid' waiting for a payment event
-          // that was never going to happen (no online-payment session is
-          // created for a zero remainder either, see below).
-          remainderTotal <= 0 ? 'paid' : 'unpaid',
-          trackingToken,
-          shopOrderNumber,
-          // Frozen at creation. This path already had shop.currency in hand and
-          // passed it straight to the payment gateway as the charge currency —
-          // now the order records what it was actually charged in, instead of
-          // that being re-derived from a mutable setting later.
-          shop.currency,
-          // See the matching comment in OrdersService.create — same freeze, same
-          // reason, and read on the transaction's own connection so a platform
-          // admin changing a rate mid-checkout cannot land between the read and
-          // the insert.
-          capturedRate?.rateBaseCurrency ?? null,
-          capturedRate?.exchangeRate ?? null,
-          // MKT-14: where the order came from, plus the cookie-consent state at
-          // this moment. NULL = the browser sent nothing (unknown).
-          attributionData ? JSON.stringify(attributionData) : null,
-          // F9: typed address with no map pin (Maps unavailable): flagged so the
-          // merchant confirms it with the customer.
-          addressUnverified ? 1 : 0,
-          // F1: the shopper's own map pin, kept for the courier dropoff. Only a
-          // delivery order with a real, shopper-placed pin: never a pickup, never a
-          // typed address (addressManual: no pin exists, and the point the server
-          // geocodes for the radius check is a guess that is not stored).
-          ...(dropoffPin ? [dropoffPin.lat, dropoffPin.lng] : [null, null]),
-          ...idemParams,
-        ],
+              [
+                shop.id,
+                ingredientsConsumed ? new Date() : null,
+                // The stock record below is authoritative for this order from the
+                // start, even when it consumed nothing (see OrdersService.create).
+                new Date(),
+                outlet.id,
+                customer.id,
+                dto.customerName,
+                dto.customerPhone,
+                dto.customerEmail ?? null,
+                dto.customerAddress,
+                region.regionId,
+                dto.area ?? null,
+                dto.deliveryDate ? new Date(dto.deliveryDate) : null,
+                dto.deliveryTimeSlot ?? null,
+                dto.deliveryNotes ?? null,
+                dto.receiverMessage ?? null,
+                receiver?.name ?? null,
+                receiver?.phone ?? null,
+                'storefront',
+                dto.orderType,
+                dto.paymentMethod,
+                deliveryFee,
+                roundMoney(taxAmount, shop.currency),
+                discount?.id ?? null,
+                discountCodeSnapshot ?? null,
+                discount ? discountAmount : null,
+                giftCard?.id ?? null,
+                giftCard?.code ?? null,
+                giftCard ? giftCardAmountApplied : null,
+                storeCreditMinor > 0 ? storeCreditAmount : null,
+                orderTotal,
+                // Nothing left to collect through the selected paymentMethod when
+                // the gift card covers the order in full — marked paid at
+                // creation rather than left 'unpaid' waiting for a payment event
+                // that was never going to happen (no online-payment session is
+                // created for a zero remainder either, see below).
+                remainderTotal <= 0 ? 'paid' : 'unpaid',
+                trackingToken,
+                shopOrderNumber,
+                // Frozen at creation. This path already had shop.currency in hand and
+                // passed it straight to the payment gateway as the charge currency —
+                // now the order records what it was actually charged in, instead of
+                // that being re-derived from a mutable setting later.
+                shop.currency,
+                // See the matching comment in OrdersService.create — same freeze, same
+                // reason, and read on the transaction's own connection so a platform
+                // admin changing a rate mid-checkout cannot land between the read and
+                // the insert.
+                capturedRate?.rateBaseCurrency ?? null,
+                capturedRate?.exchangeRate ?? null,
+                // MKT-14: where the order came from, plus the cookie-consent state at
+                // this moment. NULL = the browser sent nothing (unknown).
+                attributionData ? JSON.stringify(attributionData) : null,
+                // F9: typed address with no map pin (Maps unavailable): flagged so the
+                // merchant confirms it with the customer.
+                addressUnverified ? 1 : 0,
+                // F1: the shopper's own map pin, kept for the courier dropoff. Only a
+                // delivery order with a real, shopper-placed pin: never a pickup, never a
+                // typed address (addressManual: no pin exists, and the point the server
+                // geocodes for the radius check is a guess that is not stored).
+                ...(dropoffPin
+                  ? [dropoffPin.lat, dropoffPin.lng]
+                  : [null, null]),
+                ...idemParams,
+              ],
             ),
           );
           return res;
@@ -2620,9 +2641,7 @@ export class PublicService {
       | 'longitude'
       | 'discountCode'
     > & { addressManual?: boolean; customerAddress?: string },
-    resolvedItems: Awaited<
-      ReturnType<ProductsService['resolveOrderItems']>
-    >,
+    resolvedItems: Awaited<ReturnType<ProductsService['resolveOrderItems']>>,
     // Already checked against the shop's own country by the caller
     // (RegionsService.resolveForShop): the caller is the one that writes it.
     region: { regionId: number | null; regionName: string | null },
@@ -2793,7 +2812,9 @@ export class PublicService {
     // route can neither read an unpublished product's price nor tell which
     // ids exist.
     const askedIds = [...new Set(dto.items.map((i) => i.productId))];
-    const availableRows = await this.db.query<({ id: number } & RowDataPacket)[]>(
+    const availableRows = await this.db.query<
+      ({ id: number } & RowDataPacket)[]
+    >(
       `SELECT id FROM product WHERE shopId = ? AND status = 'Available' AND id IN (${askedIds
         .map(() => '?')
         .join(', ')})`,
@@ -2829,7 +2850,8 @@ export class PublicService {
       currency: shop.currency,
       orderType: dto.orderType,
       taxInclusive: shop.taxInclusive,
-      status: 'quoted' as 'quoted' | 'pickup_free' | 'needs_address' | 'unavailable',
+      status: 'quoted' as
+        'quoted' | 'pickup_free' | 'needs_address' | 'unavailable',
       reason: null as string | null,
       zone: null as string | null,
       subtotal: null as string | null,
@@ -2868,7 +2890,9 @@ export class PublicService {
       // Delivery in a country that has regions needs one chosen first; until
       // then it is an incomplete address, not an unavailable one.
       const region = await this.regionsService
-        .resolveForShop(shop.id, dto, { required: dto.orderType === 'delivery' })
+        .resolveForShop(shop.id, dto, {
+          required: dto.orderType === 'delivery',
+        })
         .catch((err: unknown) => {
           throw err instanceof BadRequestException && dto.regionId == null
             ? new DeliveryAddressRequiredException(err.message)
@@ -2884,7 +2908,10 @@ export class PublicService {
       );
       return {
         ...base,
-        status: dto.orderType === 'pickup' ? ('pickup_free' as const) : ('quoted' as const),
+        status:
+          dto.orderType === 'pickup'
+            ? ('pickup_free' as const)
+            : ('quoted' as const),
         zone: priced.zoneName,
         subtotal: money(priced.subtotal),
         discountAmount: money(priced.discountAmount),
@@ -2986,8 +3013,7 @@ export class PublicService {
     // geocoded point matching a placed-circle zone would make the order charge a
     // different fee than it quoted. Zones then match by name/region only, in
     // both. The geocoded point is used for the radius check above and nothing else.
-    const pin =
-      !manual && lat != null && lng != null ? { lat, lng } : null;
+    const pin = !manual && lat != null && lng != null ? { lat, lng } : null;
     // Which rule decides the zone: until a merchant has reviewed and confirmed
     // every active zone's regions, the shop keeps the old name matching and no fee
     // changes. See delivery-zones/zone-matching-mode.ts.
@@ -3012,7 +3038,10 @@ export class PublicService {
         regionIdsByZone.set(r.zoneId, list);
       }
       zone = matchDeliveryZoneByRegion(
-        zones.map((z) => ({ ...z, regionIds: regionIdsByZone.get(z.id) ?? [] })),
+        zones.map((z) => ({
+          ...z,
+          regionIds: regionIdsByZone.get(z.id) ?? [],
+        })),
         regionId,
         pin,
       );
@@ -3050,15 +3079,15 @@ export class PublicService {
       }
       if (!quiet) {
         logger.warn(
-        'address matched no configured delivery zone, falling back to the shop default delivery fee via radius eligibility; check for a zone-name mismatch',
-        {
-          outletId: outlet.id,
-          area: dto.area ?? null,
-          regionName,
-          regionId,
-          zoneMatchingMode: mode,
-        },
-      );
+          'address matched no configured delivery zone, falling back to the shop default delivery fee via radius eligibility; check for a zone-name mismatch',
+          {
+            outletId: outlet.id,
+            area: dto.area ?? null,
+            regionName,
+            regionId,
+            zoneMatchingMode: mode,
+          },
+        );
       }
     }
 

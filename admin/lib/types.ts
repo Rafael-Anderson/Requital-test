@@ -2524,6 +2524,13 @@ export interface PaymentProviderSettings {
   publicValues?: Record<string, string>;
   // Nomod: the shop's own webhook path; the admin prefixes the API origin.
   webhookPath?: string | null;
+  // Nomod and Stripe: 'rejected' while the provider refuses the saved keys (card
+  // payments are paused), with when that was first seen. Null = unknown or fine.
+  credentialStatus?: "rejected" | null;
+  credentialStatusAt?: string | null;
+  // Only on the answer to a save that changed this provider's keys: the automatic
+  // Test connection run right after.
+  connectionTest?: { ok: boolean; rejected: boolean; message: string };
 }
 
 export interface NomodPendingCheckout {

@@ -22,6 +22,7 @@ import { NomodSettingsController } from './nomod/nomod-settings.controller';
 import { PayPalPaymentProvider } from './providers/paypal-payment.provider';
 import { PaymentSettingsController } from './payment-settings.controller';
 import { PaymentSettingsService } from './payment-settings.service';
+import { CredentialHealthService } from './credential-health.service';
 import { AffiliateModule } from '../affiliate/affiliate.module';
 import { BranchRolesModule } from '../branch-roles/branch-roles.module';
 import { OrdersModule } from '../orders/orders.module';
@@ -80,6 +81,7 @@ function paymentProviderRegistryFactory(
     PaymentReconciliationService,
     PaymentsService,
     PaymentSettingsService,
+    CredentialHealthService,
     { provide: NomodClient, useFactory: () => new NomodClient() },
     NomodPaymentService,
     NomodConfirmService,

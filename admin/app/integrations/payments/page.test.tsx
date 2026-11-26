@@ -5,16 +5,30 @@ import type { PaymentProviderSettings, Shop } from "@/lib/types";
 
 afterEach(cleanup);
 
-vi.mock("@/lib/api", () => ({
-  API_URL: "http://api.test",
-  getPaymentSettings: vi.fn(),
-  getShop: vi.fn(),
-  updatePaymentProvider: vi.fn(),
-}));
+vi.mock("@/lib/api", () => {
+  class ApiError extends Error {
+    constructor(
+      message: string,
+      public status: number,
+      public code?: string,
+      public fieldErrors?: Record<string, string>,
+    ) {
+      super(message);
+    }
+  }
+  return {
+    API_URL: "http://api.test",
+    ApiError,
+    getPaymentSettings: vi.fn(),
+    getShop: vi.fn(),
+    updatePaymentProvider: vi.fn(),
+    stripeTestConnection: vi.fn(),
+  };
+});
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ user: { shopId: 1 } }) }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));
 vi.mock("@/components/NomodExtras", () => ({ default: () => null }));
-import { getPaymentSettings, getShop, updatePaymentProvider } from "@/lib/api";
+import { ApiError, getPaymentSettings, getShop, updatePaymentProvider } from "@/lib/api";
 import { fireEvent } from "@testing-library/react";
 
 beforeEach(() => {
@@ -121,5 +135,78 @@ describe("Payments page: Nomod", () => {
     // the page reloads from the server, which only ever returns the mask
     await waitFor(() => expect(screen.queryByDisplayValue("brand-new-key")).not.toBeInTheDocument());
     expect(await screen.findByText("••••-key")).toBeInTheDocument();
+  });
+});
+
+describe("Payments page: credential safeguards (JOB A)", () => {
+  beforeEach(() => {
+    vi.mocked(getShop).mockResolvedValue({ currency: "AED" } as unknown as Shop);
+  });
+
+  async function openNomodKeyField() {
+    vi.mocked(getPaymentSettings).mockResolvedValue([
+      { ...STRIPE_ROW, enabled: false },
+      { ...NOMOD_ROW, maskedCredentials: null, hasCredentials: false },
+    ] as unknown as PaymentProviderSettings[]);
+    render(<PaymentIntegrationsPage />);
+    await screen.findByText("Card processing");
+    fireEvent.click(screen.getByRole("radio", { name: /Nomod/ }));
+    return (await screen.findAllByPlaceholderText("Paste from your Nomod dashboard")) as HTMLInputElement[];
+  }
+
+  it("labels each key input 'Paste from your <provider> dashboard'", async () => {
+    const inputs = await openNomodKeyField();
+    expect(inputs).toHaveLength(2);
+  });
+
+  it("shows a pasted webhook URL as an inline error and does not save", async () => {
+    const [apiKey] = await openNomodKeyField();
+    fireEvent.change(apiKey, { target: { value: "https://api.requital.io/payments/webhook/nomod/abc" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save card processor" }));
+    expect(
+      await screen.findByText(
+        "This looks like a webhook URL. Paste the API key from your Nomod dashboard instead.",
+      ),
+    ).toBeInTheDocument();
+    expect(apiKey).toHaveAttribute("aria-invalid", "true");
+    expect(updatePaymentProvider).not.toHaveBeenCalled();
+  });
+
+  it("puts the server's fieldErrors under their fields", async () => {
+    const [, secret] = await openNomodKeyField();
+    vi.mocked(updatePaymentProvider).mockRejectedValue(
+      new ApiError("bad", 400, undefined, { webhookSecret: "Server says the secret is wrong." }),
+    );
+    fireEvent.change(secret, { target: { value: "whsec_c2VjcmV0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save card processor" }));
+    expect(await screen.findByText("Server says the secret is wrong.")).toBeInTheDocument();
+  });
+
+  it("shows the red rejected banner on the provider", async () => {
+    vi.mocked(getPaymentSettings).mockResolvedValue([
+      { ...STRIPE_ROW, enabled: false },
+      { ...NOMOD_ROW, enabled: true, credentialStatus: "rejected", credentialStatusAt: "2026-11-20T10:00:00Z" },
+    ] as unknown as PaymentProviderSettings[]);
+    render(<PaymentIntegrationsPage />);
+    const banner = await screen.findByRole("alert");
+    expect(banner.textContent).toMatch(/Your Nomod API key was rejected on .*\. Card payments are paused\./);
+    expect(banner.textContent).toMatch(/Update your key and press Test connection/);
+  });
+
+  it("no banner while the keys are fine", async () => {
+    vi.mocked(getPaymentSettings).mockResolvedValue([
+      { ...STRIPE_ROW, enabled: false },
+      { ...NOMOD_ROW, enabled: true, credentialStatus: null },
+    ] as unknown as PaymentProviderSettings[]);
+    render(<PaymentIntegrationsPage />);
+    await screen.findByText("Card processing");
+    expect(screen.queryByText(/Card payments are paused/)).not.toBeInTheDocument();
+  });
+
+  it("puts the Stripe webhook URL in a 'Copy to your Stripe dashboard' card", async () => {
+    vi.mocked(getPaymentSettings).mockResolvedValue([STRIPE_ROW] as unknown as PaymentProviderSettings[]);
+    render(<PaymentIntegrationsPage />);
+    expect(await screen.findByText("Copy to your Stripe dashboard")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy Stripe webhook URL" })).toBeInTheDocument();
   });
 });

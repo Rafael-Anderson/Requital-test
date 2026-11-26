@@ -5,8 +5,7 @@ import type { TenantContext } from '../../common/tenant-context';
 import { minorToDecimal } from '../../drivers/cash';
 import type { NomodcheckoutRow } from '../../db/types';
 import { PaymentSettingsService } from '../payment-settings.service';
-import { NomodClient, NomodConfigError } from './nomod-client';
-import { nomodCredentials } from './nomod-payment.service';
+import { NomodClient } from './nomod-client';
 import { NomodConfirmService } from './nomod-confirm.service';
 
 export interface NomodPendingRow {
@@ -45,24 +44,12 @@ export class NomodAdminService {
   }
 
   // A harmless authenticated read with the SAVED key. The key never appears in the
-  // answer; a failure is a fixed sentence.
+  // answer; a failure is a fixed sentence. Goes through PaymentSettingsService so a
+  // success clears, and a rejection sets, the "credentials rejected" status.
   async testConnection(
     ctx: TenantContext,
-  ): Promise<{ ok: boolean; message: string }> {
-    const creds = nomodCredentials(
-      await this.settings.resolveCredentials(ctx.shopId, 'nomod'),
-    );
-    if (!creds) {
-      return { ok: false, message: 'Save a Nomod API key first.' };
-    }
-    try {
-      return await this.client.testConnection(creds);
-    } catch (err) {
-      if (err instanceof NomodConfigError) {
-        return { ok: false, message: err.message };
-      }
-      return { ok: false, message: 'Could not reach Nomod.' };
-    }
+  ): Promise<{ ok: boolean; rejected: boolean; message: string }> {
+    return this.settings.testConnection(ctx.shopId, 'nomod');
   }
 
   // Nomod checkouts still unpaid after `minutes`, plus every one parked for review

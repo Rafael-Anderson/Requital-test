@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Optional,
+} from '@nestjs/common';
 import type { RowDataPacket } from 'mysql2/promise';
 import { DatabaseService } from '../../database/database.service';
 import { isDuplicateKeyError } from '../../database/mysql-errors';
@@ -31,6 +35,7 @@ import {
   type NomodOrderSnapshot,
 } from './nomod-money';
 import { exactMinor } from './nomod-events';
+import { CredentialHealthService } from '../credential-health.service';
 
 const logger = createLogger('NomodPaymentService');
 
@@ -100,6 +105,7 @@ export class NomodPaymentService {
     private readonly features: FeaturesService,
     private readonly notifications: OrderNotificationsService,
     private readonly client: NomodClient,
+    @Optional() private readonly health?: CredentialHealthService,
   ) {}
 
   // Creates a Nomod hosted checkout for an order and records it. Called by the
@@ -381,7 +387,18 @@ export class NomodPaymentService {
   > {
     const creds = nomodCredentials(rawCredentials);
     if (!creds || !row.checkoutId) return { kind: 'unpaid' };
-    const res = await this.client.getCheckout(creds, row.checkoutId);
+    let res: Awaited<ReturnType<NomodClient['getCheckout']>>;
+    try {
+      res = await this.client.getCheckout(creds, row.checkoutId);
+    } catch (err) {
+      // A 401/403 here means the shop's saved key stopped working: pause card
+      // payment and tell the merchant, exactly as a failed checkout does.
+      await this.health?.observe(row.shopId, 'nomod', true, {
+        ok: false,
+        error: err,
+      });
+      throw err;
+    }
     await this.db
       .execute(`UPDATE nomodcheckout SET lastCheckedAt = NOW(3) WHERE id = ?`, [
         row.id,
