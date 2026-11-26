@@ -720,13 +720,6 @@ describe('Custom orders (e2e)', () => {
       ).toBe('172.5');
       expect((await orderRow(oldOrder)).status).toBe('cancelled');
 
-      // a payment on the old session lands on a cancelled order: never paid
-      await deliver(
-        a,
-        completed(E('co-old'), oldCheckout.referenceId as string, '120.00'),
-      ).expect(201);
-      expect((await orderRow(oldOrder)).paymentStatus).not.toBe('paid');
-
       // the new order asks for the new amount; a payment of the OLD amount is parked
       await pay(a, token).expect(200);
       const newOrder = (await getDraft(a, draft.id)).convertedOrderId!;
@@ -743,6 +736,19 @@ describe('Custom orders (e2e)', () => {
       ).expect(201);
       expect((await orderRow(newOrder)).paymentStatus).toBe('unpaid');
       expect((await latestCheckout(newOrder)).status).toBe('review');
+
+      // a payment on the OLD session lands on a cancelled order: never paid,
+      // parked for the shop, and the link then refuses to take a second payment
+      await deliver(
+        a,
+        completed(E('co-old'), oldCheckout.referenceId as string, '120.00'),
+      ).expect(201);
+      expect((await orderRow(oldOrder)).paymentStatus).not.toBe('paid');
+      expect((await orderRow(oldOrder)).status).toBe('cancelled');
+      expect(
+        body<PaySummary>(await paySummary(a, token).expect(200)).state,
+      ).toBe('review');
+      await pay(a, token).expect(409);
     });
 
     it('cancelling a draft while the customer is paying cancels its pending order and returns the stock', async () => {
