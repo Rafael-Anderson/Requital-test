@@ -10,6 +10,9 @@ import type { UserRole } from './tenant-context';
 export const ALL_PERMISSIONS = [
   'orders.view',
   'orders.manage',
+  // Admin custom orders (draft orders): building one, sending its payment link,
+  // and converting it. Admin and order_manager hold it.
+  'orders.create',
   'dashboard.view',
   'products.view',
   'products.manage_stock',
@@ -62,6 +65,7 @@ const BRANCH_PERMISSIONS = new Set<Permission>(ALL_PERMISSIONS);
 const ORDER_MANAGER_PERMISSIONS = new Set<Permission>([
   'orders.view',
   'orders.manage',
+  'orders.create',
   'search.use',
 ]);
 

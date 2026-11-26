@@ -2785,6 +2785,54 @@ export class PublicService {
     };
   }
 
+  // Staff pricing for an admin custom order (DraftOrdersService). It is
+  // priceCheckout itself, the function every storefront order is charged by, so
+  // the builder's bill split and a storefront checkout of the same cart cannot
+  // drift: same zone fee, same discount evaluation, same per-line tax. The
+  // address is treated as typed text (a staff order has no map pin), and the
+  // call is quiet (no "no zone matched" warning per keystroke). Writes nothing.
+  async priceForStaff(
+    shopId: number,
+    outletId: number,
+    input: {
+      orderType?: string;
+      regionId: number | null;
+      regionName: string | null;
+      area?: string;
+      discountCode?: string;
+      customerAddress?: string;
+    },
+    resolvedItems: Awaited<ReturnType<ProductsService['resolveOrderItems']>>,
+    staffKey: string,
+  ) {
+    const shops = await this.db.query<(ShopRow & RowDataPacket)[]>(
+      `SELECT * FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    const outlets = await this.db.query<(OutletRow & RowDataPacket)[]>(
+      `SELECT * FROM outlet WHERE id = ? AND shopId = ?`,
+      [outletId, shopId],
+    );
+    if (!shops[0] || !outlets[0]) {
+      throw new BadRequestException('outletId is invalid for this shop');
+    }
+    return this.priceCheckout(
+      shops[0],
+      outlets[0],
+      {
+        orderType: input.orderType as CreatePublicOrderDto['orderType'],
+        regionId: input.regionId ?? undefined,
+        area: input.area,
+        discountCode: input.discountCode,
+        addressManual: true,
+        customerAddress: input.customerAddress,
+      },
+      resolvedItems,
+      { regionId: input.regionId, regionName: input.regionName },
+      { quiet: true, clientIp: staffKey },
+    );
+  }
+
   // Public, read-only delivery-fee quote for the cart and checkout summary. It
   // creates nothing and runs the exact pricing createOrder runs (priceCheckout),
   // so what it returns is what the order will be charged. Gift card and store
@@ -3267,6 +3315,13 @@ export class PublicService {
     if (!validSlots.includes(deliveryTimeSlot)) {
       throw new BadRequestException('This time slot is no longer available');
     }
+  }
+
+  // The shop behind a slug for a public page that is not catalogue content (the
+  // custom-order pay page): the same not-found rule as every public read,
+  // including a suspended shop, but no "published" requirement.
+  resolveShopBySlug(shopSlug: string): Promise<ShopRow> {
+    return this.resolveShop(shopSlug);
   }
 
   private async resolveShop(shopSlug: string): Promise<ShopRow> {

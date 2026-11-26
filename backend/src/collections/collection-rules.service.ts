@@ -28,7 +28,9 @@ export class CollectionRulesService {
   // transaction (it uses the pool).
   async validate(shopId: number, raw: RuleInput[]): Promise<ParsedRule[]> {
     if (raw.length > MAX_RULES) {
-      throw new BadRequestException(`At most ${MAX_RULES} conditions are allowed`);
+      throw new BadRequestException(
+        `At most ${MAX_RULES} conditions are allowed`,
+      );
     }
     const rules: ParsedRule[] = [];
     for (const r of raw) {
@@ -83,7 +85,14 @@ export class CollectionRulesService {
     for (let i = 0; i < rules.length; i++) {
       await conn.query(
         `INSERT INTO collectionrule (shopId, collectionId, field, operator, value, position) VALUES (?, ?, ?, ?, ?, ?)`,
-        [shopId, collectionId, rules[i].field, rules[i].operator, rules[i].value, i],
+        [
+          shopId,
+          collectionId,
+          rules[i].field,
+          rules[i].operator,
+          rules[i].value,
+          i,
+        ],
       );
     }
   }
@@ -96,7 +105,8 @@ export class CollectionRulesService {
   ) {
     const pred = buildCollectionPredicate(matchMode, rules);
     return {
-      sql: `p.shopId = ?${availableOnly ? " AND p.status = 'Available'" : ''} AND ${pred.sql}`,
+      // systemRole: draft orders' hidden custom-item carriers are never members.
+      sql: `p.shopId = ? AND p.systemRole IS NULL${availableOnly ? " AND p.status = 'Available'" : ''} AND ${pred.sql}`,
       params: [shopId, ...pred.params] as QueryParam[],
     };
   }
@@ -149,10 +159,15 @@ export class CollectionRulesService {
     const c = rows[0];
     if (!c) return { sql: '1 = 0', params: [] };
     if (c.collectionType === 'automated') {
-      return buildCollectionPredicate(
+      const pred = buildCollectionPredicate(
         c.matchMode as MatchMode,
         await this.load(shopId, collectionId),
       );
+      // Draft orders' hidden custom-item carriers are never members.
+      return {
+        sql: `(${pred.sql}) AND p.systemRole IS NULL`,
+        params: pred.params,
+      };
     }
     return {
       sql: 'EXISTS (SELECT 1 FROM productcollection pc WHERE pc.productId = p.id AND pc.collectionId = ?)',
@@ -212,7 +227,7 @@ export class CollectionRulesService {
       if (rules.length === 0) continue; // no conditions matches nothing
       const pred = buildCollectionPredicate(c.matchMode as MatchMode, rules);
       selects.push({
-        sql: `SELECT p.id AS productId, ${Number(c.id)} AS collectionId FROM product p WHERE p.shopId = ? AND p.id IN (${idList}) AND ${pred.sql}`,
+        sql: `SELECT p.id AS productId, ${Number(c.id)} AS collectionId FROM product p WHERE p.shopId = ? AND p.systemRole IS NULL AND p.id IN (${idList}) AND ${pred.sql}`,
         params: [shopId, ...productIds, ...pred.params],
       });
     }

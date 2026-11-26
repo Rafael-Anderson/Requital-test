@@ -5,6 +5,12 @@
 export interface OrderRow {
   id: number;
   shopId: number;
+  // Admin custom orders (migration 20261206100000); NULL on every other order.
+  draftOrderId?: number | null;
+  createdByUserId?: number | null;
+  adminSource?: string | null;
+  manualPaymentMethod?: string | null;
+  manualPaymentReference?: string | null;
   // Per-shop display number (migration 20260923130000). `id` stays the identity
   // for every FK, URL and gateway round trip; this is only ever shown to a
   // human. Unique per (shopId, shopOrderNumber).
@@ -355,6 +361,9 @@ export interface PaymenttransactionRow {
 }
 
 export interface ProductRow {
+  // 'custom_item' | 'custom_item_untaxed' for the system carriers of draft-order
+  // custom lines (migration 20261206100000); NULL for every real product.
+  systemRole?: string | null;
   id: number;
   shopId: number;
   name: string;
@@ -1354,6 +1363,25 @@ export interface DraftorderRow {
   // rather than shop.currency is what stops a later shop-setting change
   // from re-denominating rows that are already written.
   currency: string;
+  // Custom orders (migration 20261206100000). All NULL = not set.
+  payToken: string | null;
+  payLinkSentAt: Date | null;
+  payLinkExpiresAt: Date | null;
+  snapshotJson: unknown;
+  snapshotAt: Date | null;
+  convertingAt: Date | null;
+  deliveryFeeOverride: string | null;
+  deliveryFeeOverrideReason: string | null;
+  orderDiscountType: string | null;
+  orderDiscountValue: string | null;
+  orderDiscountReason: string | null;
+  customerNote: string | null;
+  receiverName: string | null;
+  receiverPhone: string | null;
+  receiverMessage: string | null;
+  deliveryDate: string | null;
+  deliveryTimeSlot: string | null;
+  createdByUserId: number | null;
 }
 
 export interface DraftorderitemRow {
@@ -1364,6 +1392,9 @@ export interface DraftorderitemRow {
   productName: string;
   quantity: number;
   price: string;
+  isCustom: boolean;
+  taxable: boolean | null;
+  priceOverrideReason: string | null;
 }
 
 export interface AbandonedcartRow {

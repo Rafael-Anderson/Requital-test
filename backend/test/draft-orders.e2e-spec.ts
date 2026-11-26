@@ -222,9 +222,11 @@ describe('Draft Orders (e2e)', () => {
         .get('/shop/draft-orders')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
-      expect(body<DraftOrderRow[]>(list).some((d) => d.id === draft.id)).toBe(
-        true,
-      );
+      expect(
+        body<{ data: DraftOrderRow[] }>(list).data.some(
+          (d) => d.id === draft.id,
+        ),
+      ).toBe(true);
 
       await request(app.getHttpServer())
         .get(`/shop/draft-orders/${draft.id}`)
@@ -332,7 +334,10 @@ describe('Draft Orders (e2e)', () => {
   });
 
   describe('sendInvoice()', () => {
-    it('converts to an unpaid Order, generates a payment link, and complete() afterward reuses the same order', async () => {
+    // Custom orders (2026-11-26): sending the invoice creates the DRAFT's own
+    // payment link and no order (the draft converts when the customer pays, or
+    // when staff mark it paid / take it as COD). See custom-orders.e2e-spec.ts.
+    it('creates the payment link without an order; complete() afterward converts exactly once', async () => {
       const { adminToken, outletId, productId } = await setupShop('invoice');
       await setStock(adminToken, outletId, productId, 5);
 
@@ -347,42 +352,30 @@ describe('Draft Orders (e2e)', () => {
         .post(`/shop/draft-orders/${draft.id}/send-invoice`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(201);
-      const { draftOrder, paymentLink } = body<{
-        draftOrder: DraftOrderRow;
-        paymentLink: { url: string; token: string };
-      }>(sent);
+      const draftOrder = body<
+        DraftOrderRow & { payLink: { url: string } | null }
+      >(sent);
       expect(draftOrder.status).toBe('INVOICE_SENT');
-      expect(draftOrder.convertedOrderId).toBeTruthy();
-      expect(paymentLink.url).toContain(paymentLink.token);
+      expect(draftOrder.convertedOrderId).toBeNull();
+      expect(draftOrder.payLink?.url).toMatch(/\/pay\/[0-9a-f]{32}$/);
+      // no stock is held by a sent link
+      expect(await getShadowStockQuantity(db, outletId, { productId })).toBe(5);
 
-      const orderAfterInvoice = await getOrderById(draftOrder.convertedOrderId!);
-      expect(orderAfterInvoice?.paymentStatus).toBe('unpaid');
-      expect(orderAfterInvoice?.paymentLinkToken).toBe(paymentLink.token);
-
-      // Customer pays by cash instead of using the link — mark complete;
-      // must reuse the SAME converted order, not create a second one.
+      // Customer pays by cash instead of using the link: mark complete.
       const completed = await request(app.getHttpServer())
         .post(`/shop/draft-orders/${draft.id}/complete`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(201);
       const result = body<DraftOrderRow>(completed);
       expect(result.status).toBe('COMPLETED');
-      expect(result.convertedOrderId).toBe(draftOrder.convertedOrderId);
-
-      const finalOrder = await getOrderById(draftOrder.convertedOrderId!);
+      const finalOrder = await getOrderById(result.convertedOrderId!);
       expect(finalOrder?.paymentStatus).toBe('paid');
 
-      // draftorder.convertedOrderId is a unique FK into `order` — count via
-      // that join to prove exactly one order exists for this draft (not
-      // duplicated by the earlier send-invoice conversion).
       const allOrdersForDraftRows = await db.query<RowDataPacket[]>(
-        `SELECT COUNT(*) AS c FROM \`order\` o
-         INNER JOIN draftorder do ON do.convertedOrderId = o.id
-         WHERE do.id = ?`,
+        `SELECT COUNT(*) AS c FROM \`order\` WHERE draftOrderId = ?`,
         [draft.id],
       );
-      const allOrdersForDraft = Number(allOrdersForDraftRows[0].c);
-      expect(allOrdersForDraft).toBe(1);
+      expect(Number(allOrdersForDraftRows[0].c)).toBe(1);
     });
   });
 
@@ -404,7 +397,7 @@ describe('Draft Orders (e2e)', () => {
       expect(body<DraftOrderRow>(res).status).toBe('CANCELLED');
     });
 
-    it('cancelling an INVOICE_SENT draft also cancels and restocks the underlying order', async () => {
+    it('cancelling an INVOICE_SENT draft holds no stock and leaves no order', async () => {
       const { adminToken, outletId, productId } =
         await setupShop('cancel-invoiced');
       await setStock(adminToken, outletId, productId, 5);
@@ -419,31 +412,22 @@ describe('Draft Orders (e2e)', () => {
           )
           .expect(201),
       );
-      const sent = body<{ draftOrder: DraftOrderRow }>(
-        await request(app.getHttpServer())
-          .post(`/shop/draft-orders/${draft.id}/send-invoice`)
-          .set('Authorization', `Bearer ${adminToken}`)
-          .expect(201),
-      );
-      const orderId = sent.draftOrder.convertedOrderId!;
-
-      const stockAfterReserve = await getShadowStockQuantity(db, outletId, {
-        productId,
-      });
-      expect(stockAfterReserve).toBe(3); // 5 - 2
-
       await request(app.getHttpServer())
+        .post(`/shop/draft-orders/${draft.id}/send-invoice`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(201);
+      expect(await getShadowStockQuantity(db, outletId, { productId })).toBe(5);
+      const res = await request(app.getHttpServer())
         .patch(`/shop/draft-orders/${draft.id}/cancel`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
-
-      const order = await getOrderById(orderId);
-      expect(order?.status).toBe('cancelled');
-
-      const stockAfterCancel = await getShadowStockQuantity(db, outletId, {
-        productId,
-      });
-      expect(stockAfterCancel).toBe(5); // restocked
+      expect(body<DraftOrderRow>(res).status).toBe('CANCELLED');
+      const orders = await db.query<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM \`order\` WHERE draftOrderId = ?`,
+        [draft.id],
+      );
+      expect(Number(orders[0].c)).toBe(0);
+      expect(await getShadowStockQuantity(db, outletId, { productId })).toBe(5);
     });
   });
 

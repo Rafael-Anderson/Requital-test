@@ -76,6 +76,8 @@ interface AssembledOrder extends OrderRow {
   orderitem: AssembledOrderItem[];
   paymenttransaction: RowDataPacket[];
   cashCollectedByName: string | null;
+  // Admin custom orders: the staff user who created the draft.
+  createdByName?: string | null;
 }
 
 export interface AssembledOrderNote {
@@ -91,6 +93,27 @@ interface AssembledOrderDetail extends AssembledOrder {
   externaldelivery: RowDataPacket | null;
   ordernote: AssembledOrderNote[];
   surveyresponse: RowDataPacket | null;
+}
+
+// How an admin custom order (a converted draft) is recorded. See
+// DraftOrdersService; never accepted from a request body.
+export interface DraftConversionOptions {
+  draftOrderId: number;
+  createdByUserId: number | null;
+  adminSource: 'payment_link' | 'cod' | 'marked_paid';
+  paymentMethod: string | null;
+  manualPaymentMethod?: string | null;
+  manualPaymentReference?: string | null;
+  markPaid?: boolean;
+  // A fixed staff discount amount (replaces a discount code).
+  manualDiscountAmount?: number;
+  // Per line, the custom item's own name (undefined = the product's name).
+  lineNames?: (string | undefined)[];
+  // Card link: the order is announced after its payment session exists.
+  deferNotifications?: boolean;
+  // Card link: the order-level link token the existing pay path charges.
+  paymentLinkToken?: string;
+  paymentLinkExpiresAt?: Date;
 }
 
 @Injectable()
@@ -134,7 +157,9 @@ export class OrdersService {
       params.push(outletId);
     }
     if (query.statuses?.length) {
-      conditions.push(`o.status IN (${query.statuses.map(() => '?').join(', ')})`);
+      conditions.push(
+        `o.status IN (${query.statuses.map(() => '?').join(', ')})`,
+      );
       params.push(...query.statuses);
     } else if (query.status) {
       conditions.push('o.status = ?');
@@ -306,8 +331,20 @@ export class OrdersService {
     dto: CreateOrderDto,
     // sizeBaseline: the size of the draft being converted, so a legacy draft
     // that predates the order limits can still be completed as it stands.
-    options: { reserveStock?: boolean; sizeBaseline?: OrderSize } = {},
+    options: {
+      reserveStock?: boolean;
+      sizeBaseline?: OrderSize;
+      // An admin custom order (draft orders). Everything here is optional and
+      // only ever set by DraftOrdersService; a plain POST /orders never sets it.
+      draft?: DraftConversionOptions;
+    } = {},
   ) {
+    const draft = options.draft;
+    if (draft?.manualDiscountAmount !== undefined && dto.discountCode) {
+      throw new BadRequestException(
+        'Use either a discount code or a manual discount, not both',
+      );
+    }
     // A separate receiver: both or neither (400 otherwise); NULL/NULL = the customer.
     const receiver = resolveOrderReceiver(dto);
     // Branch users are always pinned to their own outlet — any outletId in
@@ -356,20 +393,25 @@ export class OrdersService {
     assertOrderWithinLimits(resolvedItems, options.sizeBaseline);
 
     const itemsData = resolvedItems.map(
-      ({
-        product,
-        variant,
-        quantity,
-        price,
-        autoDiscountAmount,
-        unitCost,
-        variantLabel,
-        taxClassId,
-        taxRate,
-      }) => {
+      (
+        {
+          product,
+          variant,
+          quantity,
+          price,
+          autoDiscountAmount,
+          unitCost,
+          variantLabel,
+          taxClassId,
+          taxRate,
+        },
+        index,
+      ) => {
         return {
           productId: product.id as number,
-          productName: product.name as string,
+          // A custom line (draft orders) carries its own name; its product is
+          // only the shop's system carrier.
+          productName: draft?.lineNames?.[index] ?? (product.name as string),
           variantId: variant?.id ?? null,
           variantLabel: variantLabel ?? null,
           quantity,
@@ -415,7 +457,17 @@ export class OrdersService {
     } | null = null;
     let discountAmount = 0;
     let discountCodeSnapshot: string | undefined;
-    if (dto.discountCode) {
+    if (draft?.manualDiscountAmount !== undefined) {
+      // A staff discount on a custom order: a fixed amount (a percent is turned
+      // into an amount by the draft pricer, on the same lines), capped at the
+      // goods subtotal. It goes through computeOrderTotals below exactly like a
+      // code's amount, so the tax treatment is identical.
+      const goods = itemsData.reduce(
+        (sum, d) => sum + Number(d.priceAtPurchase) * d.quantity,
+        0,
+      );
+      discountAmount = Math.max(0, Math.min(draft.manualDiscountAmount, goods));
+    } else if (dto.discountCode) {
       const resolved = await this.discountsService.resolveByCode(
         ctx.shopId,
         dto.discountCode,
@@ -563,57 +615,57 @@ export class OrdersService {
         async (shopOrderNumber) => {
           const [res] = await withTrackingToken((trackingToken) =>
             conn.query(
-        `INSERT INTO \`order\` (
+              `INSERT INTO \`order\` (
           shopId, outletId, ingredientsConsumedAt, consumptionRecordedAt, customerId, customerName, customerPhone, customerEmail,
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           receiverName, receiverPhone,
           channel, orderType, deliveryFee, discountId, discountCode, discountAmount, taxAmount, total, trackingToken,
           shopOrderNumber, currency, rateBaseCurrency, exchangeRate
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          ctx.shopId,
-          outletId,
-          ingredientsConsumed ? new Date() : null,
-          // Marks this order's stock record as authoritative from the start
-          // (see orderstockconsumption's migration). NOT conditional on having
-          // consumed anything: a deferred admin order consumes at confirm, and
-          // "nothing consumed" must read as a fact, not as LEGACY.
-          new Date(),
-          customer.id,
-          dto.customerName,
-          dto.customerPhone,
-          dto.customerEmail ?? null,
-          dto.customerAddress,
-          region.regionId,
-          dto.area ?? null,
-          dto.deliveryDate ? new Date(dto.deliveryDate) : null,
-          dto.deliveryTimeSlot ?? null,
-          dto.deliveryNotes ?? null,
-          dto.receiverMessage ?? null,
-          receiver?.name ?? null,
-          receiver?.phone ?? null,
-          dto.channel ?? null,
-          dto.orderType ?? null,
-          deliveryFee,
-          discount?.id ?? null,
-          discountCodeSnapshot ?? null,
-          discount ? discountAmount : null,
-          roundedTaxAmount,
-          total,
-          trackingToken,
-          shopOrderNumber,
-          // The currency this order is priced and charged in, frozen here.
-          // Previously re-read live from shop.currency on every display and
-          // every gateway call, so changing the shop setting silently
-          // re-denominated every past order.
-          orderCurrency,
-          // Frozen at creation and never recomputed, exactly like
-          // priceAtPurchase and orderitem.unitCost. Null when the platform has
-          // no rate stored for this currency — an honest "not captured" rather
-          // than a 1 that would later read as parity with the base.
-          capturedRate?.rateBaseCurrency ?? null,
-          capturedRate?.exchangeRate ?? null,
-        ],
+              [
+                ctx.shopId,
+                outletId,
+                ingredientsConsumed ? new Date() : null,
+                // Marks this order's stock record as authoritative from the start
+                // (see orderstockconsumption's migration). NOT conditional on having
+                // consumed anything: a deferred admin order consumes at confirm, and
+                // "nothing consumed" must read as a fact, not as LEGACY.
+                new Date(),
+                customer.id,
+                dto.customerName,
+                dto.customerPhone,
+                dto.customerEmail ?? null,
+                dto.customerAddress,
+                region.regionId,
+                dto.area ?? null,
+                dto.deliveryDate ? new Date(dto.deliveryDate) : null,
+                dto.deliveryTimeSlot ?? null,
+                dto.deliveryNotes ?? null,
+                dto.receiverMessage ?? null,
+                receiver?.name ?? null,
+                receiver?.phone ?? null,
+                dto.channel ?? null,
+                dto.orderType ?? null,
+                deliveryFee,
+                discount?.id ?? null,
+                discountCodeSnapshot ?? null,
+                discount ? discountAmount : null,
+                roundedTaxAmount,
+                total,
+                trackingToken,
+                shopOrderNumber,
+                // The currency this order is priced and charged in, frozen here.
+                // Previously re-read live from shop.currency on every display and
+                // every gateway call, so changing the shop setting silently
+                // re-denominated every past order.
+                orderCurrency,
+                // Frozen at creation and never recomputed, exactly like
+                // priceAtPurchase and orderitem.unitCost. Null when the platform has
+                // no rate stored for this currency — an honest "not captured" rather
+                // than a 1 that would later read as parity with the base.
+                capturedRate?.rateBaseCurrency ?? null,
+                capturedRate?.exchangeRate ?? null,
+              ],
             ),
           );
           return res;
@@ -622,7 +674,8 @@ export class OrdersService {
       const newOrderId = (result as { insertId: number }).insertId;
 
       if (itemsData.length > 0) {
-        const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        const placeholders = itemsData
+          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .join(', ');
         await conn.query(
           `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost, taxClassId, taxRate, taxAmount)
@@ -651,8 +704,36 @@ export class OrdersService {
         consumedRows,
       );
 
+      if (draft) {
+        await conn.query(
+          `UPDATE \`order\` SET draftOrderId = ?, createdByUserId = ?, adminSource = ?,
+                  paymentMethod = ?, manualPaymentMethod = ?, manualPaymentReference = ?,
+                  paymentStatus = IF(?, 'paid', paymentStatus),
+                  paymentLinkToken = ?, paymentLinkExpiresAt = ?
+            WHERE id = ? AND shopId = ?`,
+          [
+            draft.draftOrderId,
+            draft.createdByUserId,
+            draft.adminSource,
+            draft.paymentMethod,
+            draft.manualPaymentMethod ?? null,
+            draft.manualPaymentReference ?? null,
+            draft.markPaid ? 1 : 0,
+            draft.paymentLinkToken ?? null,
+            draft.paymentLinkExpiresAt ?? null,
+            newOrderId,
+            ctx.shopId,
+          ],
+        );
+      }
+
       if (discount) {
-        await this.discountsService.redeem(conn, discount, newOrderId, customer.id);
+        await this.discountsService.redeem(
+          conn,
+          discount,
+          newOrderId,
+          customer.id,
+        );
       }
 
       return newOrderId;
@@ -669,6 +750,10 @@ export class OrdersService {
 
     const orders = await this.loadOrdersWithRelations([orderId]);
     const order = this.toResponse(orders.get(orderId)!);
+
+    // A card-link custom order is announced only once its payment session
+    // exists, exactly like a storefront card checkout (DraftPayService).
+    if (draft?.deferNotifications) return order;
 
     // Not awaited, deliberately — see the matching comment on the storefront
     // checkout path (PublicService.createOrder) for why: a slow or down
@@ -829,7 +914,12 @@ export class OrdersService {
       await this.db.execute(
         `UPDATE \`order\` SET cashCollectedAt = NOW(3), cashCollectedBy = ?, cashCollectedByDriverId = ?
           WHERE id = ? AND shopId = ? AND cashCollectedAt IS NULL`,
-        [ctx.driver ? null : ctx.userId, ctx.driver?.id ?? null, id, ctx.shopId],
+        [
+          ctx.driver ? null : ctx.userId,
+          ctx.driver?.id ?? null,
+          id,
+          ctx.shopId,
+        ],
       );
     }
     const orders = await this.loadOrdersWithRelations([id]);
@@ -892,7 +982,8 @@ export class OrdersService {
     // connection inside it). The earn job handler re-checks everything under
     // locks, so this only avoids queueing for shops with loyalty off.
     const queueLoyaltyEarn =
-      dto.status === 'delivered' && (await this.loyaltyService.isLive(ctx.shopId));
+      dto.status === 'delivered' &&
+      (await this.loyaltyService.isLive(ctx.shopId));
     await this.db.transaction(async (conn) => {
       // Compare-and-swap on the status column, not a plain update: the
       // WHERE clause re-checks `order.status` at the moment MySQL takes the
@@ -925,13 +1016,7 @@ export class OrdersService {
         dto.status === 'confirmed' &&
         !IMMEDIATE_STOCK_RESERVATION_CHANNELS.includes(order.channel ?? '')
       ) {
-        await this.adjustStockForOrder(
-          conn,
-          ctx,
-          order.id,
-          order.outletId,
-          -1,
-        );
+        await this.adjustStockForOrder(conn, ctx, order.id, order.outletId, -1);
       }
       // The job row commits with the status change, so a delivered order can
       // never lose its earn job (and a rolled-back one never leaves one).
@@ -958,9 +1043,7 @@ export class OrdersService {
     );
     if ((result as { affectedRows: number }).affectedRows === 0) {
       const label = await shopOrderNumberLabel(conn, ctx.shopId, orderId);
-      throw new ConflictException(
-        `${label} is no longer ready to leave`,
-      );
+      throw new ConflictException(`${label} is no longer ready to leave`);
     }
   }
 
@@ -1407,7 +1490,8 @@ export class OrdersService {
 
       await conn.query(`DELETE FROM orderitem WHERE orderId = ?`, [orderId]);
       if (newItemsData.length > 0) {
-        const placeholders = newItemsData.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        const placeholders = newItemsData
+          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .join(', ');
         await conn.query(
           `INSERT INTO orderitem (orderId, productId, productName, variantId, variantLabel, quantity, priceAtPurchase, autoDiscountAmount, unitCost, taxClassId, taxRate, taxAmount)
@@ -1506,7 +1590,10 @@ export class OrdersService {
     shopId: number,
     order: { customerId?: number | null; storeCreditAmount?: unknown },
   ): Promise<number | null> {
-    if (order.customerId == null || !(Number(order.storeCreditAmount ?? 0) > 0)) {
+    if (
+      order.customerId == null ||
+      !(Number(order.storeCreditAmount ?? 0) > 0)
+    ) {
       return null;
     }
     await this.storeCreditService.lockCustomer(conn, shopId, order.customerId);
@@ -1860,12 +1947,10 @@ export class OrdersService {
   // auditlog directly off a bare id.
   async getHistory(ctx: TenantContext, id: number) {
     const order = await this.findOne(ctx, id);
-    const entries = await this.auditLogService.listForEntity(
-      ctx,
-      'order',
-      id,
-      ['order.status_changed', 'order.delivery_failed'],
-    );
+    const entries = await this.auditLogService.listForEntity(ctx, 'order', id, [
+      'order.status_changed',
+      'order.delivery_failed',
+    ]);
     return [
       // The very first "became pending" moment is the order's own creation,
       // not a logged transition — updateStatus/cancel only ever log a
@@ -2095,9 +2180,11 @@ export class OrdersService {
       this.db.query<
         (OrderRow & { cashCollectedByName: string | null } & RowDataPacket)[]
       >(
-        `SELECT o.*, COALESCE(u.name, CONCAT('Driver ', d.name)) AS cashCollectedByName
+        `SELECT o.*, COALESCE(u.name, CONCAT('Driver ', d.name)) AS cashCollectedByName,
+                cu.name AS createdByName
          FROM \`order\` o LEFT JOIN user u ON u.id = o.cashCollectedBy
          LEFT JOIN driver d ON d.id = o.cashCollectedByDriverId AND d.shopId = o.shopId
+         LEFT JOIN user cu ON cu.id = o.createdByUserId AND cu.shopId = o.shopId
          WHERE o.id IN (${idList})`,
         ids,
       ),
@@ -2131,40 +2218,48 @@ export class OrdersService {
   private async loadOrderDetailWithRelations(
     id: number,
   ): Promise<AssembledOrderDetail> {
-    const [orderRows, items, payments, externalDeliveryRows, noteRows, surveyRows] =
-      await Promise.all([
-        this.db.query<
-          (OrderRow & { cashCollectedByName: string | null } & RowDataPacket)[]
-        >(
-          `SELECT o.*, COALESCE(u.name, CONCAT('Driver ', d.name)) AS cashCollectedByName
+    const [
+      orderRows,
+      items,
+      payments,
+      externalDeliveryRows,
+      noteRows,
+      surveyRows,
+    ] = await Promise.all([
+      this.db.query<
+        (OrderRow & { cashCollectedByName: string | null } & RowDataPacket)[]
+      >(
+        `SELECT o.*, COALESCE(u.name, CONCAT('Driver ', d.name)) AS cashCollectedByName,
+                  cu.name AS createdByName
            FROM \`order\` o LEFT JOIN user u ON u.id = o.cashCollectedBy
            LEFT JOIN driver d ON d.id = o.cashCollectedByDriverId AND d.shopId = o.shopId
+           LEFT JOIN user cu ON cu.id = o.createdByUserId AND cu.shopId = o.shopId
            WHERE o.id = ?`,
-          [id],
-        ),
-        this.db.query<RowDataPacket[]>(
-          `SELECT oi.*, p.thumbnail AS productThumbnail
+        [id],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT oi.*, p.thumbnail AS productThumbnail
            FROM orderitem oi JOIN product p ON p.id = oi.productId
            WHERE oi.orderId = ?`,
-          [id],
-        ),
-        this.loadLatestPaymentTransactions([id]),
-        this.db.query<RowDataPacket[]>(
-          `SELECT * FROM externaldelivery WHERE orderId = ?`,
-          [id],
-        ),
-        this.db.query<RowDataPacket[]>(
-          `SELECT on1.*, u.id AS authorId, u.name AS authorName
+        [id],
+      ),
+      this.loadLatestPaymentTransactions([id]),
+      this.db.query<RowDataPacket[]>(
+        `SELECT * FROM externaldelivery WHERE orderId = ?`,
+        [id],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT on1.*, u.id AS authorId, u.name AS authorName
            FROM ordernote on1 JOIN user u ON u.id = on1.authorUserId
            WHERE on1.orderId = ?
            ORDER BY on1.createdAt DESC`,
-          [id],
-        ),
-        this.db.query<RowDataPacket[]>(
-          `SELECT * FROM surveyresponse WHERE orderId = ?`,
-          [id],
-        ),
-      ]);
+        [id],
+      ),
+      this.db.query<RowDataPacket[]>(
+        `SELECT * FROM surveyresponse WHERE orderId = ?`,
+        [id],
+      ),
+    ]);
     const [order] = await attachRegion(this.db, orderRows);
     return {
       ...order,
@@ -2242,7 +2337,10 @@ export class OrdersService {
     return {
       ...this.toResponse(order),
       externaldelivery: order.externaldelivery
-        ? { ...order.externaldelivery, price: trimDecimal(order.externaldelivery.price as string) }
+        ? {
+            ...order.externaldelivery,
+            price: trimDecimal(order.externaldelivery.price as string),
+          }
         : null,
       ordernote: order.ordernote,
       surveyresponse: order.surveyresponse,

@@ -45,6 +45,17 @@ const OWNERSHIP_MARKERS = [
 ];
 
 const ALLOWLIST = [
+  // Custom orders (draft orders). assertPermission only forwards the outletId to
+  // BranchRolesService.assertPermission (a read of the caller's own override),
+  // and every caller reaches it after assertOutlet()'s `outlet WHERE id AND shopId`.
+  "draft-orders/draft-orders.service.ts:assertPermission",
+  // Read-only stock warning: the query joins ingredient.shopId = ? and reads the
+  // outlet's stock row by that id, so a foreign outletId reads nothing; callers pass
+  // an outletId that assertOutlet() / the draft row already shop-checked.
+  "draft-orders/draft-pricing.service.ts:stockWarnings",
+  // Read-only staff pricing: loads the outlet with `WHERE id = ? AND shopId = ?`
+  // and refuses (400) when it is not this shop's; nothing is written.
+  "public/public.service.ts:priceForStaff",
   // Pagination of GET /products: read-only. The outletId is the one findAll already
   // resolved through resolveOutletFilter() and permission-checked (a branch user is
   // forced to their own outlet); here it only picks which outlet's stock figures are
