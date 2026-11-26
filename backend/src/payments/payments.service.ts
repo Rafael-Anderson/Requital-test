@@ -252,22 +252,43 @@ export class PaymentsService {
     if (due <= 0) {
       throw new ConflictException('Nothing is left to pay on this order');
     }
-    const session = await provider.createCheckoutSession({
-      shopId: order.shopRowId as number,
-      orderId: order.id as number,
-      orderNumber: order.shopOrderNumber as number,
-      amount: due,
-      // The ORDER's own currency (captured at placement), never the shop's live
-      // one: a shop that changed currency since must not have this unpaid order
-      // charged in the new currency at the old order's figure.
-      currency: order.currency as string,
-      successUrl: storefrontUrl(
-        shopUrlFieldsFrom(order),
-        `/pay/success?token=${token}`,
-      ),
-      cancelUrl: storefrontUrl(shopUrlFieldsFrom(order), `/pay?token=${token}`),
+    const shopRowId = order.shopRowId as number;
+    const gatewayName = order.shopPaymentGateway as string;
+    const session = await provider
+      .createCheckoutSession({
+        shopId: order.shopRowId as number,
+        orderId: order.id as number,
+        orderNumber: order.shopOrderNumber as number,
+        amount: due,
+        // The ORDER's own currency (captured at placement), never the shop's live
+        // one: a shop that changed currency since must not have this unpaid order
+        // charged in the new currency at the old order's figure.
+        currency: order.currency as string,
+        successUrl: storefrontUrl(
+          shopUrlFieldsFrom(order),
+          `/pay/success?token=${token}`,
+        ),
+        cancelUrl: storefrontUrl(
+          shopUrlFieldsFrom(order),
+          `/pay?token=${token}`,
+        ),
+        credentials,
+      })
+      .catch(async (err: unknown) => {
+        await this.paymentSettingsService.observeProviderCall(
+          shopRowId,
+          gatewayName,
+          credentials,
+          { ok: false, error: err },
+        );
+        throw err;
+      });
+    await this.paymentSettingsService.observeProviderCall(
+      shopRowId,
+      gatewayName,
       credentials,
-    });
+      { ok: true },
+    );
     // Same reason as the storefront path: without this, a payment-link order
     // whose webhook is lost has nothing to reconcile against.
     //
@@ -651,11 +672,12 @@ export class PaymentsService {
         new Error('second payment received for a paid order'),
         { shopId: order.shopId as number, route: `payment webhook ${gateway}` },
       );
-      const alerted = await this.orderNotificationsService.alertDuplicatePayment(
-        order.shopId as number,
-        order.id as number,
-        result.chargeReference ?? result.providerReference,
-      );
+      const alerted =
+        await this.orderNotificationsService.alertDuplicatePayment(
+          order.shopId as number,
+          order.id as number,
+          result.chargeReference ?? result.providerReference,
+        );
       if (!alerted) {
         logger.error(
           'duplicate payment on a paid order and NO merchant number to alert, refund it by hand',

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy } from "lucide-react";
-import { API_URL, getPaymentSettings, getShop, updatePaymentProvider } from "@/lib/api";
+import { API_URL, ApiError, getPaymentSettings, getShop, stripeTestConnection, updatePaymentProvider } from "@/lib/api";
+import { credentialProblems } from "@/lib/credential-validation";
+import WebhookUrlCard from "@/components/WebhookUrlCard";
 import { stripeBlockedForCurrency } from "@/lib/blocked-gateway-currencies";
 import StripeCurrencyNotice from "@/components/StripeCurrencyNotice";
 import NomodExtras from "@/components/NomodExtras";
@@ -36,41 +37,13 @@ const INDEPENDENT_PROVIDERS: PaymentGatewayProvider[] = ["paypal", "tabby", "tam
 // before verifying, instead of the platform's — see backend
 // stripe-payment.provider.ts.
 function StripeWebhookInstructions({ shopId }: { shopId: number }) {
-  const toast = useToast();
   const url = `${API_URL}/payments/webhook/stripe/${shopId}`;
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(url);
-      toast("Webhook URL copied");
-    } catch {
-      toast("Could not copy URL", "error");
-    }
-  }
-
   return (
-    <Card className="space-y-2">
-      <p className="text-xs font-medium text-text-secondary dark:text-zinc-300">
-        Using your own Stripe account? Add this URL as a webhook endpoint in your Stripe Dashboard
-        (Developers → Webhooks), then paste the signing secret it gives you into the Webhook Secret field above.
-      </p>
-      <div className="flex items-center gap-2">
-        <code
-          title={url}
-          className="min-w-0 flex-1 truncate text-xs bg-surface dark:bg-zinc-900 border border-border dark:border-white/10 rounded px-2 py-1.5"
-        >
-          {url}
-        </code>
-        <button
-          type="button"
-          onClick={copy}
-          className="flex items-center gap-1 text-xs text-accent-text dark:text-accent hover:underline cursor-pointer shrink-0"
-        >
-          <Copy className="size-3" />
-          Copy
-        </button>
-      </div>
-    </Card>
+    <WebhookUrlCard provider="Stripe" url={url}>
+      Using your own Stripe account? Add this URL as a webhook endpoint in your Stripe Dashboard (Developers →
+      Webhooks), then copy the signing secret Stripe gives you (it starts with whsec_) into the Webhook Secret field
+      above.
+    </WebhookUrlCard>
   );
 }
 
@@ -88,6 +61,7 @@ function CredentialFields({
   maskedCredentials,
   publicValues,
   onChange,
+  errors,
 }: {
   provider: PaymentGatewayProvider;
   values: Record<string, string>;
@@ -95,7 +69,10 @@ function CredentialFields({
   // Plain (non-secret) settings as saved; a secret is never in here.
   publicValues?: Record<string, string>;
   onChange: (key: string, value: string) => void;
+  // Per-field problems (client-side checks or the server's fieldErrors).
+  errors?: Record<string, string>;
 }) {
+  const dashboard = PAYMENT_PROVIDER_LABELS[provider];
   return (
     <div className="space-y-3">
       {PROVIDER_CREDENTIAL_FIELDS[provider].map((field) => {
@@ -129,9 +106,33 @@ function CredentialFields({
             masked={maskedCredentials?.[field.key] ?? null}
             value={values[field.key] ?? ""}
             onChange={(value) => onChange(field.key, value)}
+            placeholder={`Paste from your ${dashboard} dashboard`}
+            hint={`Paste from your ${dashboard} dashboard.`}
+            error={errors?.[field.key]}
           />
         );
       })}
+    </div>
+  );
+}
+
+// Shown while the provider is refusing the shop's saved keys: the storefront has
+// stopped offering card payment until they work again.
+function CredentialsRejectedBanner({ provider, since }: { provider: PaymentGatewayProvider; since: string | null }) {
+  const label = PAYMENT_PROVIDER_LABELS[provider];
+  const keyName = provider === "stripe" ? "secret key" : "API key";
+  const when = since
+    ? new Date(since).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    : null;
+  return (
+    <div
+      role="alert"
+      className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+    >
+      <p className="font-semibold">
+        Your {label} {keyName} was rejected{when ? ` on ${when}` : ""}. Card payments are paused.
+      </p>
+      <p className="mt-1 text-xs">Update your key and press Test connection.</p>
     </div>
   );
 }
@@ -157,6 +158,9 @@ export default function PaymentIntegrationsPage() {
   const [cardProcessor, setCardProcessor] = useState<PaymentGatewayProvider>("stripe");
   const [cardCredentials, setCardCredentials] = useState<Record<string, string>>({});
   const [savingCard, setSavingCard] = useState(false);
+  const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
+  const [testingCard, setTestingCard] = useState(false);
+  const [cardTest, setCardTest] = useState<{ ok: boolean; message: string } | null>(null);
 
   const [independentCredentials, setIndependentCredentials] = useState<
     Record<string, Record<string, string>>
@@ -173,6 +177,7 @@ export default function PaymentIntegrationsPage() {
     const activeCardProcessor = rows.find((r) => r.isCardProcessor && r.enabled);
     setCardProcessor((activeCardProcessor?.provider as PaymentGatewayProvider) ?? "stripe");
     setCardCredentials({});
+    setCardErrors({});
 
     const nextEnabled: Record<string, boolean> = {};
     for (const provider of INDEPENDENT_PROVIDERS) {
@@ -220,7 +225,14 @@ export default function PaymentIntegrationsPage() {
   }
 
   async function handleSaveCardProcessor() {
+    const problems = credentialProblems(cardProcessor, cardCredentials);
+    setCardErrors(problems);
+    if (Object.keys(problems).length > 0) {
+      toast("Fix the highlighted fields before saving", "error");
+      return;
+    }
     setSavingCard(true);
+    setCardTest(null);
     try {
       const currentlyActive = settings?.find((r) => r.isCardProcessor && r.enabled)?.provider;
       // The exclusivity rule (PaymentSettingsService) rejects enabling one
@@ -232,13 +244,34 @@ export default function PaymentIntegrationsPage() {
         await updatePaymentProvider(currentlyActive, { enabled: false });
       }
       const credentials = Object.keys(cardCredentials).length > 0 ? cardCredentials : undefined;
-      await updatePaymentProvider(cardProcessor, { enabled: true, ...(credentials && { credentials }) });
+      const rows = await updatePaymentProvider(cardProcessor, { enabled: true, ...(credentials && { credentials }) });
       toast(`${PAYMENT_PROVIDER_LABELS[cardProcessor]} is now your card processor`);
+      // Saving new keys runs Test connection on the server; show what it said.
+      const test = rows?.find?.((r) => r.provider === cardProcessor)?.connectionTest;
+      if (test) {
+        setCardTest(test);
+        toast(test.message, test.ok ? undefined : "error");
+      }
       await refresh();
     } catch (err) {
+      if (err instanceof ApiError && err.fieldErrors) setCardErrors(err.fieldErrors);
       toast(err instanceof Error ? err.message : "Failed to save card processor", "error");
     } finally {
       setSavingCard(false);
+    }
+  }
+
+  async function handleTestStripe() {
+    setTestingCard(true);
+    setCardTest(null);
+    try {
+      setCardTest(await stripeTestConnection());
+    } catch (err) {
+      setCardTest({ ok: false, message: err instanceof Error ? err.message : "The test could not run." });
+    } finally {
+      setTestingCard(false);
+      // The test clears (or sets) the "key rejected" banner.
+      refresh().catch(() => undefined);
     }
   }
 
@@ -355,18 +388,50 @@ export default function PaymentIntegrationsPage() {
             );
           })}
         </div>
+        {rowFor(cardProcessor)?.credentialStatus === "rejected" && (
+          <CredentialsRejectedBanner
+            provider={cardProcessor}
+            since={rowFor(cardProcessor)?.credentialStatusAt ?? null}
+          />
+        )}
         <CredentialFields
           provider={cardProcessor}
+          errors={cardErrors}
           values={cardCredentials}
           maskedCredentials={rowFor(cardProcessor)?.maskedCredentials ?? null}
           publicValues={rowFor(cardProcessor)?.publicValues}
-          onChange={(key, value) => setCardCredentials((prev) => ({ ...prev, [key]: value }))}
+          onChange={(key, value) => {
+            setCardCredentials((prev) => ({ ...prev, [key]: value }));
+            setCardErrors((prev) => {
+              if (!prev[key]) return prev;
+              const next = { ...prev };
+              delete next[key];
+              return next;
+            });
+          }}
         />
         {cardProcessor === "stripe" && stripeBlockedForCurrency(shopCurrency) && <StripeCurrencyNotice />}
         <div className="flex items-center justify-between gap-3">
-          <div>
+          <div className="flex flex-wrap items-center gap-3">
             {(cardProcessor === "nomod" || cardProcessor === "stripe") && (
               <PaymentGuideModal guide={cardProcessor} webhookUrl={guideWebhookUrl(cardProcessor)} />
+            )}
+            {cardProcessor === "stripe" && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={testingCard}
+                disabled={!rowFor("stripe")?.maskedCredentials?.secretKey}
+                onClick={handleTestStripe}
+              >
+                Test connection
+              </Button>
+            )}
+            {cardTest && (
+              <span role="status" className={`text-xs ${cardTest.ok ? "text-green-600 dark:text-green-400" : "text-red-600"}`}>
+                {cardTest.message}
+              </span>
             )}
           </div>
           <Button variant="primary" onClick={handleSaveCardProcessor} disabled={savingCard}>

@@ -46,7 +46,7 @@ export function pickWebhookHeaders(
   };
 }
 
-function decodeSecret(secret: string): Buffer | null {
+export function decodeSecret(secret: string): Buffer | null {
   const raw = secret.trim().replace(/^whsec_/, '');
   if (!raw || !/^[A-Za-z0-9+/_-]+={0,2}$/.test(raw)) return null;
   const key = Buffer.from(raw, 'base64');

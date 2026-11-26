@@ -212,7 +212,7 @@ export class NomodClient {
   // documented "ping" endpoint, so the admin screen says so.
   async testConnection(
     creds: NomodCredentials,
-  ): Promise<{ ok: boolean; message: string }> {
+  ): Promise<{ ok: boolean; rejected: boolean; message: string }> {
     try {
       await this.call(
         creds,
@@ -222,23 +222,32 @@ export class NomodClient {
         undefined,
         { allow: [400, 404] },
       );
-      return { ok: true, message: 'Nomod accepted the API key.' };
+      return {
+        ok: true,
+        rejected: false,
+        message: 'Nomod accepted the API key.',
+      };
     } catch (err) {
       if (err instanceof NomodConfigError) {
-        return { ok: false, message: err.message };
+        return { ok: false, rejected: false, message: err.message };
       }
       if (err instanceof NomodApiError) {
         if (err.status === 401 || err.status === 403) {
-          return { ok: false, message: 'Nomod rejected the API key.' };
+          return {
+            ok: false,
+            rejected: true,
+            message: 'Nomod rejected the API key.',
+          };
         }
         return {
           ok: false,
+          rejected: false,
           message: err.status
             ? `Nomod answered with an unexpected status (${err.status}).`
             : 'Could not reach Nomod.',
         };
       }
-      return { ok: false, message: 'Could not reach Nomod.' };
+      return { ok: false, rejected: false, message: 'Could not reach Nomod.' };
     }
   }
 
