@@ -14,13 +14,9 @@ import { resolveOutletFilter } from '../common/outlet-scope';
 import { slugify } from '../common/slugify';
 import { CreateProductDto, ProductImageInput } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import {
-  UpdateProductAvailabilityDto,
-} from './dto/update-product-availability.dto';
+import { UpdateProductAvailabilityDto } from './dto/update-product-availability.dto';
 import { BulkProductIdsDto } from './dto/bulk-product-ids.dto';
-import {
-  BulkUpdateProductStatusDto,
-} from './dto/bulk-update-product-status.dto';
+import { BulkUpdateProductStatusDto } from './dto/bulk-update-product-status.dto';
 import { BulkPriceUpdateDto } from './dto/bulk-price-update.dto';
 import { UpdateProductOptionsDto } from './dto/update-product-options.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
@@ -87,12 +83,16 @@ export class ProductCatalogService {
       return this.findPage(ctx, outletId, paging);
     }
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT id FROM product WHERE shopId = ? ORDER BY id ASC`,
+      // systemRole: the hidden custom-item carriers of draft orders are not products.
+      `SELECT id FROM product WHERE shopId = ? AND systemRole IS NULL ORDER BY id ASC`,
       [ctx.shopId],
     );
     const ids = rows.map((r) => r.id as number);
     const products = await this.read.loadProductsWithRelations(ids, outletId);
-    const soldByProduct = await this.read.getUnitsSoldByProduct(ctx.shopId, ids);
+    const soldByProduct = await this.read.getUnitsSoldByProduct(
+      ctx.shopId,
+      ids,
+    );
     return ids.map((id) =>
       this.read.toResponse(products.get(id)!, soldByProduct.get(id) ?? 0),
     );
@@ -112,7 +112,7 @@ export class ProductCatalogService {
     },
   ) {
     const { page, pageSize, limit, offset } = resolvePage(q);
-    const where: string[] = ['p.shopId = ?'];
+    const where: string[] = ['p.shopId = ?', 'p.systemRole IS NULL'];
     const params: (string | number)[] = [ctx.shopId];
     if (q.collectionId !== undefined) {
       where.push(
@@ -142,7 +142,10 @@ export class ProductCatalogService {
     );
     const ids = rows.map((r) => r.id as number);
     const products = await this.read.loadProductsWithRelations(ids, outletId);
-    const soldByProduct = await this.read.getUnitsSoldByProduct(ctx.shopId, ids);
+    const soldByProduct = await this.read.getUnitsSoldByProduct(
+      ctx.shopId,
+      ids,
+    );
     return toPage(
       ids.map((id) =>
         this.read.toResponse(products.get(id)!, soldByProduct.get(id) ?? 0),
@@ -273,7 +276,9 @@ export class ProductCatalogService {
             dto.weightUnit ?? 'kg',
             dto.dimensions ?? null,
             dto.isGiftCard ?? false,
-            dto.giftCardDenominations ? JSON.stringify(dto.giftCardDenominations) : null,
+            dto.giftCardDenominations
+              ? JSON.stringify(dto.giftCardDenominations)
+              : null,
             dto.giftCardCustomAmountMin ?? null,
             dto.giftCardCustomAmountMax ?? null,
             dto.additionalInfo ? JSON.stringify(dto.additionalInfo) : null,
@@ -296,7 +301,9 @@ export class ProductCatalogService {
           );
         }
         if (dto.attributes?.length) {
-          const placeholders = dto.attributes.map(() => '(?, ?, ?, ?)').join(', ');
+          const placeholders = dto.attributes
+            .map(() => '(?, ?, ?, ?)')
+            .join(', ');
           const params = dto.attributes.flatMap((a, i) => [
             newId,
             a.name.trim(),
@@ -321,7 +328,9 @@ export class ProductCatalogService {
             params,
           );
         }
-        const collectionPlaceholders = dto.collectionIds.map(() => '(?, ?)').join(', ');
+        const collectionPlaceholders = dto.collectionIds
+          .map(() => '(?, ?)')
+          .join(', ');
         await conn.query(
           `INSERT INTO productcollection (productId, collectionId) VALUES ${collectionPlaceholders}`,
           dto.collectionIds.flatMap((collectionId) => [newId, collectionId]),
@@ -334,7 +343,9 @@ export class ProductCatalogService {
           );
         }
         if (usesIngredients && dto.ingredients?.length) {
-          const placeholders = dto.ingredients.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+          const placeholders = dto.ingredients
+            .map(() => '(?, ?, ?, ?, ?, ?)')
+            .join(', ');
           const params = dto.ingredients.flatMap((i) => [
             ctx.shopId,
             newId,
@@ -361,7 +372,10 @@ export class ProductCatalogService {
     } catch (error) {
       this.handleDbError(error);
     }
-    const products = await this.read.loadProductsWithRelations([productId], undefined);
+    const products = await this.read.loadProductsWithRelations(
+      [productId],
+      undefined,
+    );
     return this.read.toResponse(products.get(productId)!);
   }
 
@@ -383,7 +397,10 @@ export class ProductCatalogService {
     if (ownRows.length === 0) {
       throw new NotFoundException(`Product ${id} not found`);
     }
-    const originals = await this.read.loadProductsWithRelations([id], undefined);
+    const originals = await this.read.loadProductsWithRelations(
+      [id],
+      undefined,
+    );
     const original = originals.get(id);
     if (!original) {
       throw new NotFoundException(`Product ${id} not found`);
@@ -471,7 +488,9 @@ export class ProductCatalogService {
         // array position — id-preserving isn't guaranteed insert-order.
         const imageIdByOrder = new Map<number, number>();
         if (original.productimage.length > 0) {
-          const placeholders = original.productimage.map(() => '(?, ?, ?)').join(', ');
+          const placeholders = original.productimage
+            .map(() => '(?, ?, ?)')
+            .join(', ');
           const params = original.productimage.flatMap((img) => [
             newProduct.id,
             img.url,
@@ -491,15 +510,24 @@ export class ProductCatalogService {
         }
         const newImageIdFor = (oldImageId: number | null) => {
           if (oldImageId === null) return null;
-          const oldOrder = original.productimage.find((img) => img.id === oldImageId)?.order;
-          return oldOrder === undefined ? null : (imageIdByOrder.get(oldOrder) ?? null);
+          const oldOrder = original.productimage.find(
+            (img) => img.id === oldImageId,
+          )?.order;
+          return oldOrder === undefined
+            ? null
+            : (imageIdByOrder.get(oldOrder) ?? null);
         };
 
         if (original.productcollection.length > 0) {
-          const placeholders = original.productcollection.map(() => '(?, ?)').join(', ');
+          const placeholders = original.productcollection
+            .map(() => '(?, ?)')
+            .join(', ');
           await conn.query(
             `INSERT INTO productcollection (productId, collectionId) VALUES ${placeholders}`,
-            original.productcollection.flatMap((pc) => [newProduct.id, pc.collection.id]),
+            original.productcollection.flatMap((pc) => [
+              newProduct.id,
+              pc.collection.id,
+            ]),
           );
         }
         if (original.producttag.length > 0) {
@@ -522,7 +550,10 @@ export class ProductCatalogService {
               `INSERT INTO productoptionvalue (optionId, value, \`order\`) VALUES (?, ?, ?)`,
               [newOptionId, value.value, value.order],
             );
-            optionValueIdMap.set(value.id, (valResult as { insertId: number }).insertId);
+            optionValueIdMap.set(
+              value.id,
+              (valResult as { insertId: number }).insertId,
+            );
           }
         }
 
@@ -543,9 +574,15 @@ export class ProductCatalogService {
               variant.weight,
               newImageIdFor(variant.imageId),
               variant.order,
-              variant.optionValue1Id ? (optionValueIdMap.get(variant.optionValue1Id) ?? null) : null,
-              variant.optionValue2Id ? (optionValueIdMap.get(variant.optionValue2Id) ?? null) : null,
-              variant.optionValue3Id ? (optionValueIdMap.get(variant.optionValue3Id) ?? null) : null,
+              variant.optionValue1Id
+                ? (optionValueIdMap.get(variant.optionValue1Id) ?? null)
+                : null,
+              variant.optionValue2Id
+                ? (optionValueIdMap.get(variant.optionValue2Id) ?? null)
+                : null,
+              variant.optionValue3Id
+                ? (optionValueIdMap.get(variant.optionValue3Id) ?? null)
+                : null,
             ],
           );
           const newVariantId = (varResult as { insertId: number }).insertId;
@@ -553,12 +590,18 @@ export class ProductCatalogService {
           // "always starts at zero/untracked" reasoning as everywhere else
           // in this method) — it's always usesIngredients:false, so every
           // variant needs its own fresh shadow ingredient.
-          await this.bom.provisionShadowForVariant(conn, ctx, newProduct.id, newVariantId, {
-            name: newProduct.name,
-            thumbnail: newProduct.thumbnail,
-            trackInventory: newProduct.trackInventory,
-            costPrice: newProduct.costPrice,
-          });
+          await this.bom.provisionShadowForVariant(
+            conn,
+            ctx,
+            newProduct.id,
+            newVariantId,
+            {
+              name: newProduct.name,
+              thumbnail: newProduct.thumbnail,
+              trackInventory: newProduct.trackInventory,
+              costPrice: newProduct.costPrice,
+            },
+          );
         }
         if (original.productvariant.length === 0) {
           await this.bom.provisionShadowForProduct(conn, ctx, newProduct.id, {
@@ -574,7 +617,10 @@ export class ProductCatalogService {
     } catch (error) {
       this.handleDbError(error);
     }
-    const products = await this.read.loadProductsWithRelations([newProductId], undefined);
+    const products = await this.read.loadProductsWithRelations(
+      [newProductId],
+      undefined,
+    );
     return this.read.toResponse(products.get(newProductId)!);
   }
 
@@ -634,7 +680,10 @@ export class ProductCatalogService {
     try {
       await this.db.transaction(async (conn) => {
         if (dto.collectionIds) {
-          await conn.query(`DELETE FROM productcollection WHERE productId = ?`, [id]);
+          await conn.query(
+            `DELETE FROM productcollection WHERE productId = ?`,
+            [id],
+          );
         }
         if (tagIds !== undefined) {
           await conn.query(`DELETE FROM producttag WHERE productId = ?`, [id]);
@@ -656,7 +705,9 @@ export class ProductCatalogService {
             `SELECT * FROM productimage WHERE productId = ?`,
             [id],
           );
-          const existingByUrl = new Map(existingImages.map((img) => [img.url as string, img]));
+          const existingByUrl = new Map(
+            existingImages.map((img) => [img.url as string, img]),
+          );
           const keepUrls = new Set(dto.images.map((img) => img.url));
           const removedIds = existingImages
             .filter((img) => !keepUrls.has(img.url as string))
@@ -673,10 +724,10 @@ export class ProductCatalogService {
             const existing = existingByUrl.get(img.url);
             if (existing) {
               if (existing.order !== order) {
-                await conn.query(`UPDATE productimage SET \`order\` = ? WHERE id = ?`, [
-                  order,
-                  existing.id,
-                ]);
+                await conn.query(
+                  `UPDATE productimage SET \`order\` = ? WHERE id = ?`,
+                  [order, existing.id],
+                );
               }
             } else {
               await conn.query(
@@ -697,12 +748,21 @@ export class ProductCatalogService {
         // style dependency on a stable id), so there's no id-stability
         // concern here worth the extra complexity.
         if (dto.attributes !== undefined) {
-          await conn.query(`DELETE FROM productattribute WHERE productId = ?`, [id]);
+          await conn.query(`DELETE FROM productattribute WHERE productId = ?`, [
+            id,
+          ]);
           if (dto.attributes.length > 0) {
-            const placeholders = dto.attributes.map(() => '(?, ?, ?, ?)').join(', ');
+            const placeholders = dto.attributes
+              .map(() => '(?, ?, ?, ?)')
+              .join(', ');
             await conn.query(
               `INSERT INTO productattribute (productId, name, value, \`order\`) VALUES ${placeholders}`,
-              dto.attributes.flatMap((a, i) => [id, a.name.trim(), a.value.trim(), a.order ?? i]),
+              dto.attributes.flatMap((a, i) => [
+                id,
+                a.name.trim(),
+                a.value.trim(),
+                a.order ?? i,
+              ]),
             );
           }
         }
@@ -712,7 +772,12 @@ export class ProductCatalogService {
             const placeholders = dto.faqs.map(() => '(?, ?, ?, ?)').join(', ');
             await conn.query(
               `INSERT INTO productfaq (productId, question, answer, \`order\`) VALUES ${placeholders}`,
-              dto.faqs.flatMap((f, i) => [id, f.question.trim(), f.answer.trim(), f.order ?? i]),
+              dto.faqs.flatMap((f, i) => [
+                id,
+                f.question.trim(),
+                f.answer.trim(),
+                f.order ?? i,
+              ]),
             );
           }
         }
@@ -758,7 +823,9 @@ export class ProductCatalogService {
             : undefined,
           giftCardCustomAmountMin: dto.giftCardCustomAmountMin,
           giftCardCustomAmountMax: dto.giftCardCustomAmountMax,
-          additionalInfo: dto.additionalInfo ? JSON.stringify(dto.additionalInfo) : undefined,
+          additionalInfo: dto.additionalInfo
+            ? JSON.stringify(dto.additionalInfo)
+            : undefined,
           brandId: dto.brandId,
           taxClassId: dto.taxClassId,
         });
@@ -783,7 +850,9 @@ export class ProductCatalogService {
           );
         }
         if (applyIngredientsReplace && dto.ingredients!.length > 0) {
-          const placeholders = dto.ingredients!.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+          const placeholders = dto
+            .ingredients!.map(() => '(?, ?, ?, ?, ?, ?)')
+            .join(', ');
           await conn.query(
             `INSERT INTO productingredient (shopId, productId, variantId, ingredientId, quantityPerUnit, updatedAt) VALUES ${placeholders}`,
             dto.ingredients!.flatMap((i) => [
@@ -811,7 +880,10 @@ export class ProductCatalogService {
             await this.bom.deleteShadowsForVariants(conn, variantIds);
           }
         } else if (togglingToShadow) {
-          await conn.query(`DELETE FROM productingredient WHERE productId = ?`, [id]);
+          await conn.query(
+            `DELETE FROM productingredient WHERE productId = ?`,
+            [id],
+          );
           const [nameRows] = await conn.query<RowDataPacket[]>(
             `SELECT name, thumbnail, trackInventory, costPrice FROM product WHERE id = ?`,
             [id],
@@ -996,7 +1068,9 @@ export class ProductCatalogService {
       // its stock to live again.
       await this.db.transaction(async (conn) => {
         await deleteVariantMetafieldValuesForProduct(conn, id);
-        await conn.query(`DELETE FROM productvariant WHERE productId = ?`, [id]);
+        await conn.query(`DELETE FROM productvariant WHERE productId = ?`, [
+          id,
+        ]);
         await conn.query(`DELETE FROM productoption WHERE productId = ?`, [id]);
         if (!product.usesIngredients) {
           await this.bom.provisionShadowForProduct(conn, ctx, id, {
@@ -1029,11 +1103,10 @@ export class ProductCatalogService {
 
         let optionId: number;
         if (existingOption) {
-          await conn.query(`UPDATE productoption SET name = ?, \`order\` = ? WHERE id = ?`, [
-            target.name,
-            i,
-            existingOption.id,
-          ]);
+          await conn.query(
+            `UPDATE productoption SET name = ?, \`order\` = ? WHERE id = ?`,
+            [target.name, i, existingOption.id],
+          );
           optionId = existingOption.id;
         } else {
           const [optResult] = await conn.query(
@@ -1045,7 +1118,10 @@ export class ProductCatalogService {
 
         const existingValues = existingOption?.productoptionvalue ?? [];
         const existingByValue = new Map(
-          existingValues.map((v) => [(v.value as string).trim().toLowerCase(), v]),
+          existingValues.map((v) => [
+            (v.value as string).trim().toLowerCase(),
+            v,
+          ]),
         );
         const valueIds: number[] = [];
         for (let j = 0; j < target.values.length; j++) {
@@ -1053,11 +1129,10 @@ export class ProductCatalogService {
           const match = existingByValue.get(value.toLowerCase());
           if (match) {
             existingByValue.delete(value.toLowerCase());
-            await conn.query(`UPDATE productoptionvalue SET value = ?, \`order\` = ? WHERE id = ?`, [
-              value,
-              j,
-              match.id,
-            ]);
+            await conn.query(
+              `UPDATE productoptionvalue SET value = ?, \`order\` = ? WHERE id = ?`,
+              [value, j, match.id],
+            );
             valueIds.push(match.id as number);
           } else {
             const [valResult] = await conn.query(
@@ -1070,7 +1145,9 @@ export class ProductCatalogService {
         // Whatever's left in existingByValue is a value that's no longer
         // present — its variants get reconciled away below (their combo key
         // won't be in newComboKeys since this id no longer exists).
-        const removedIds = [...existingByValue.values()].map((v) => v.id as number);
+        const removedIds = [...existingByValue.values()].map(
+          (v) => v.id as number,
+        );
         if (removedIds.length > 0) {
           await conn.query(
             `DELETE FROM productoptionvalue WHERE id IN (${removedIds.map(() => '?').join(', ')})`,
@@ -1082,7 +1159,9 @@ export class ProductCatalogService {
 
       // Any existing option beyond the new option count is dropped entirely
       // (e.g. product had 3 options, now has 2).
-      const droppedOptionIds = existingOptions.slice(cleanedOptions.length).map((o) => o.id);
+      const droppedOptionIds = existingOptions
+        .slice(cleanedOptions.length)
+        .map((o) => o.id);
       if (droppedOptionIds.length > 0) {
         await conn.query(
           `DELETE FROM productoption WHERE id IN (${droppedOptionIds.map(() => '?').join(', ')})`,
@@ -1094,7 +1173,11 @@ export class ProductCatalogService {
       const newComboKeys = new Set(newCombos.map(comboKey));
       const existingByKey = new Map(
         variantRows.map((v) => [
-          comboKey([v.optionValue1Id as number | null, v.optionValue2Id as number | null, v.optionValue3Id as number | null]),
+          comboKey([
+            v.optionValue1Id as number | null,
+            v.optionValue2Id as number | null,
+            v.optionValue3Id as number | null,
+          ]),
           v,
         ]),
       );
@@ -1103,7 +1186,11 @@ export class ProductCatalogService {
         .filter(
           (v) =>
             !newComboKeys.has(
-              comboKey([v.optionValue1Id as number | null, v.optionValue2Id as number | null, v.optionValue3Id as number | null]),
+              comboKey([
+                v.optionValue1Id as number | null,
+                v.optionValue2Id as number | null,
+                v.optionValue3Id as number | null,
+              ]),
             ),
         )
         .map((v) => v.id as number);
@@ -1121,10 +1208,10 @@ export class ProductCatalogService {
         const existing = existingByKey.get(key);
         if (existing) {
           if (existing.order !== i) {
-            await conn.query(`UPDATE productvariant SET \`order\` = ? WHERE id = ?`, [
-              i,
-              existing.id,
-            ]);
+            await conn.query(
+              `UPDATE productvariant SET \`order\` = ? WHERE id = ?`,
+              [i, existing.id],
+            );
           }
           continue;
         }
@@ -1233,13 +1320,15 @@ export class ProductCatalogService {
         imageId: dto.imageId,
       });
       if (set) {
-        await conn.query(`UPDATE productvariant SET ${set.setClause} WHERE id = ?`, [
-          ...set.params,
-          variantId,
-        ]);
+        await conn.query(
+          `UPDATE productvariant SET ${set.setClause} WHERE id = ?`,
+          [...set.params, variantId],
+        );
       }
       if (applyIngredientsReplace && dto.ingredients!.length > 0) {
-        const placeholders = dto.ingredients!.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+        const placeholders = dto
+          .ingredients!.map(() => '(?, ?, ?, ?, ?, ?)')
+          .join(', ');
         await conn.query(
           `INSERT INTO productingredient (shopId, productId, variantId, ingredientId, quantityPerUnit, updatedAt) VALUES ${placeholders}`,
           dto.ingredients!.flatMap((i) => [
@@ -1253,7 +1342,10 @@ export class ProductCatalogService {
         );
       }
     });
-    const updatedVariants = await this.read.loadVariantsWithRelations([variantId], undefined);
+    const updatedVariants = await this.read.loadVariantsWithRelations(
+      [variantId],
+      undefined,
+    );
     const updated = updatedVariants.get(variantId)!;
     // Needed so the response's makeableQuantity can fall back to the
     // product-level default when this variant has no overrides of its own
@@ -1289,7 +1381,9 @@ export class ProductCatalogService {
         // re-checks ProductVariant_productId_fkey against the product row
         // that is already mid-delete and fails with MySQL 1452. With the
         // variants gone first there is no row left to update.
-        await conn.query(`DELETE FROM productvariant WHERE productId = ?`, [id]);
+        await conn.query(`DELETE FROM productvariant WHERE productId = ?`, [
+          id,
+        ]);
         await conn.query(`DELETE FROM product WHERE id = ?`, [id]);
       });
     } catch (error) {

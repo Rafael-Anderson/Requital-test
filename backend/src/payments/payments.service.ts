@@ -202,7 +202,12 @@ export class PaymentsService {
 
   // Public (token-authenticated, not shop-scoped) — the token is the
   // credential a customer holds, standing in for a merchant session.
-  async getCheckoutSession(token: string) {
+  // `returnPaths` (custom orders): where the gateway sends the customer back.
+  // Defaults to the order payment-link pages.
+  async getCheckoutSession(
+    token: string,
+    returnPaths?: { success: string; cancel: string },
+  ) {
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT o.*, s.id AS shopRowId, s.paymentGateway AS shopPaymentGateway,
               s.subdomain AS shopSubdomain,
@@ -266,11 +271,11 @@ export class PaymentsService {
         currency: order.currency as string,
         successUrl: storefrontUrl(
           shopUrlFieldsFrom(order),
-          `/pay/success?token=${token}`,
+          returnPaths?.success ?? `/pay/success?token=${token}`,
         ),
         cancelUrl: storefrontUrl(
           shopUrlFieldsFrom(order),
-          `/pay?token=${token}`,
+          returnPaths?.cancel ?? `/pay?token=${token}`,
         ),
         credentials,
       })

@@ -42,7 +42,7 @@ export class SearchService {
     const like = `%${query}%`;
     const rows = await this.db.query<RowDataPacket[]>(
       `SELECT id, name, sku, price, thumbnail FROM product
-       WHERE shopId = ? AND (name LIKE ? OR sku LIKE ?)
+       WHERE shopId = ? AND systemRole IS NULL AND (name LIKE ? OR sku LIKE ?)
        ORDER BY name ASC
        LIMIT ?`,
       [ctx.shopId, like, like, RESULTS_PER_COLLECTION],

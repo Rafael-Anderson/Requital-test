@@ -303,7 +303,8 @@ describe('Discount eligibility: validate and charge agree (e2e)', () => {
       }>(draftRes);
       expect(draft.subtotal).toBe(200);
       expect(draft.discountAmount).toBeCloseTo(10, 5); // 10% of A only, not of 200
-      expect(draft.total).toBeCloseTo(190, 5);
+      // goods after the discount (the draft's total now also carries tax)
+      expect(draft.subtotal - draft.discountAmount).toBeCloseTo(190, 5);
 
       // the admin builder's live preview says the same thing
       const adm = await validateAdmin(shop, code, items);

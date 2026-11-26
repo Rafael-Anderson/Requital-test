@@ -1,40 +1,94 @@
 import { CollectionRulesService } from '../collections/collection-rules.service';
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomBytes, randomUUID } from 'crypto';
 import type { RowDataPacket } from 'mysql2/promise';
 import {
   assertOrderWithinLimits,
   loadStoredOrderSize,
 } from '../common/order-limits';
 import { DatabaseService } from '../database/database.service';
-import { buildSetClause } from '../database/update.util';
 import { trimDecimal } from '../database/decimal.util';
 import type { DraftorderRow, DraftorderitemRow } from '../db/types';
 import type { TenantContext } from '../common/tenant-context';
 import { ProductsService } from '../products/products.service';
 import { DiscountsService } from '../discounts/discounts.service';
-import { computeEligibility } from '../discounts/discount-eligibility';
 import type { ValidateDiscountDto } from '../discounts/dto/validate-discount.dto';
 import { OrdersService } from '../orders/orders.service';
-import { PaymentsService } from '../payments/payments.service';
+import { PaymentSettingsService } from '../payments/payment-settings.service';
 import { buildVariantLabel } from '../products/variant-generator';
-import { CreateDraftOrderDto } from './dto/create-draft-order.dto';
-import { UpdateDraftOrderDto } from './dto/update-draft-order.dto';
 import {
   RegionsService,
   attachRegion,
   type RegionSummary,
 } from '../regions/regions.service';
+import { BranchRolesService } from '../branch-roles/branch-roles.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { JobsService } from '../jobs/jobs.service';
+import { OrderNotificationsService } from '../orders/order-notifications.service';
+import { storefrontUrl } from '../common/storefront-url';
+import {
+  PaymentCurrencyNotSupportedException,
+  isGatewayCurrencyBlocked,
+} from '../payments/blocked-gateway-currencies';
+import { resolveOrderReceiver } from '../common/order-receiver';
+import type { DraftOrderFieldsDto } from './dto/draft-order-fields.dto';
+import type { ListDraftOrdersDto } from './dto/list-draft-orders.dto';
+import type { MarkDraftPaidDto } from './dto/mark-paid.dto';
+import {
+  CONVERSION_LEASE_SECONDS,
+  DRAFT_ORDER_FILTERS,
+  PAY_LINK_EXPIRY_DAYS,
+} from './draft-order-constants';
+import {
+  type Bill,
+  DraftPricingService,
+  type NormalisedLine,
+  type PricingInput,
+  sameMoney,
+} from './draft-pricing.service';
+import { buildDraftInvoiceEmail } from './draft-invoice-email';
 
-interface DraftItemInput {
-  productId: number;
-  variantId?: number;
-  quantity: number;
-  price?: number;
+// The priced bill frozen when a payment link is created or re-locked. The pay
+// page and the card conversion read THIS, never the live catalogue.
+export interface DraftSnapshot {
+  v: 1;
+  bill: Bill;
+  // The lines exactly as the conversion re-sends them: every price fixed.
+  lines: {
+    productId: number;
+    variantId: number | null;
+    quantity: number;
+    unitPrice: string;
+    customName: string | null;
+  }[];
+  discountCode: string | null;
+  fulfilment: {
+    orderType: 'delivery' | 'pickup';
+    customerName: string;
+    customerPhone: string;
+    customerAddress: string | null;
+    regionName: string | null;
+    area: string | null;
+    deliveryDate: string | null;
+    deliveryTimeSlot: string | null;
+    receiverName: string | null;
+    receiverPhone: string | null;
+    receiverMessage: string | null;
+    customerNote: string | null;
+    outletName: string;
+  };
 }
+
+type ConversionMode =
+  | { kind: 'cod' }
+  | { kind: 'marked_paid'; method: string; reference: string | null }
+  | { kind: 'card'; paymentLinkToken: string; expiresAt: Date };
 
 interface AssembledDraftItem extends DraftorderitemRow {
   thumbnail: string;
@@ -43,23 +97,12 @@ interface AssembledDraftItem extends DraftorderitemRow {
   optionValue3: string | null;
 }
 
-interface AssembledDraftOrder extends DraftorderRow {
+interface AssembledDraft extends DraftorderRow {
   region: RegionSummary | null;
-  draftorderitem: AssembledDraftItem[];
-  discount: { id: number; code: string; type: string; value: string | null } | null;
-  // The attached discount's amount over the draft's ELIGIBLE lines, computed
-  // by the same function checkout uses (null when no discount is attached).
-  discountAmount: number | null;
-  customer: { id: number; name: string; phone: string } | null;
-  outlet: { id: number; name: string };
-  convertedOrder: {
-    id: number;
-    shopOrderNumber: number;
-    status: string;
-    paymentStatus: string;
-    total: string;
-    trackingToken: string | null;
-  } | null;
+  items: AssembledDraftItem[];
+  discountCode: string | null;
+  outletName: string;
+  createdByName: string | null;
 }
 
 @Injectable()
@@ -69,384 +112,653 @@ export class DraftOrdersService {
     private readonly productsService: ProductsService,
     private readonly discountsService: DiscountsService,
     private readonly ordersService: OrdersService,
-    private readonly paymentsService: PaymentsService,
+    private readonly paymentSettings: PaymentSettingsService,
     private readonly regionsService: RegionsService,
     private readonly collectionRules: CollectionRulesService,
+    private readonly pricing: DraftPricingService,
+    private readonly branchRoles: BranchRolesService,
+    private readonly auditLog: AuditLogService,
+    private readonly jobs: JobsService,
+    private readonly notifications: OrderNotificationsService,
   ) {}
 
-  async findAll(ctx: TenantContext) {
+  // ---------------------------------------------------------------- reads
+
+  async findAll(ctx: TenantContext, query: ListDraftOrdersDto = {}) {
+    await this.syncStatuses(ctx.shopId);
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const where = ['d.shopId = ?'];
+    const params: (string | number)[] = [ctx.shopId];
+    if (query.status) {
+      const statuses = DRAFT_ORDER_FILTERS[query.status];
+      where.push(`d.status IN (${statuses.map(() => '?').join(', ')})`);
+      params.push(...statuses);
+    }
+    const search = query.search?.trim();
+    if (search) {
+      const like = `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      where.push('(d.customerName LIKE ? OR d.customerPhone LIKE ?)');
+      params.push(like, like);
+    }
+    const countRows = await this.db.query<RowDataPacket[]>(
+      `SELECT COUNT(*) AS n FROM draftorder d WHERE ${where.join(' AND ')}`,
+      params,
+    );
     const rows = await this.db.query<RowDataPacket[]>(
-      `SELECT id FROM draftorder WHERE shopId = ? ORDER BY id DESC`,
-      [ctx.shopId],
+      `SELECT d.id FROM draftorder d WHERE ${where.join(' AND ')}
+        ORDER BY d.id DESC LIMIT ? OFFSET ?`,
+      [...params, pageSize, (page - 1) * pageSize],
     );
     const ids = rows.map((r) => r.id as number);
-    const drafts = await this.loadDraftOrdersWithRelations(ids);
-    return ids.map((id) => this.toResponse(drafts.get(id)!));
+    const drafts = await this.loadDrafts(ctx.shopId, ids);
+    return {
+      data: await Promise.all(
+        ids.map((id) => this.toListItem(ctx, drafts.get(id)!)),
+      ),
+      page,
+      pageSize,
+      total: Number(countRows[0]?.n ?? 0),
+    };
   }
 
   async findOne(ctx: TenantContext, id: number) {
-    return this.toResponse(await this.findRawWithRelations(ctx, id));
+    await this.syncStatuses(ctx.shopId, id);
+    const draft = await this.loadOne(ctx.shopId, id);
+    return this.toDetail(ctx, draft);
   }
 
-  async create(ctx: TenantContext, dto: CreateDraftOrderDto) {
-    const outletRows = await this.db.query<RowDataPacket[]>(
-      `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
-      [dto.outletId, ctx.shopId],
+  // The builder's live bill split for an unsaved form.
+  async preview(ctx: TenantContext, dto: DraftOrderFieldsDto) {
+    if (!dto.outletId) throw new BadRequestException('outletId is required');
+    await this.assertOutlet(ctx, dto.outletId);
+    const items = await this.pricing.normaliseItems(
+      ctx.shopId,
+      dto.items ?? [],
     );
-    if (outletRows.length === 0) {
-      throw new BadRequestException('outletId is invalid for this shop');
-    }
+    return this.pricing.price(
+      ctx.shopId,
+      this.pricingInput(dto, dto.outletId, items),
+      `staff:${ctx.userId}`,
+    );
+  }
 
-    // Required: completing a draft reuses
-    // OrdersService.create, which requires a region.
+  // ---------------------------------------------------------------- writes
+
+  async create(ctx: TenantContext, dto: DraftOrderFieldsDto) {
+    if (!dto.outletId) throw new BadRequestException('outletId is required');
+    if (!dto.customerName?.trim())
+      throw new BadRequestException('customerName is required');
+    if (!dto.customerPhone?.trim())
+      throw new BadRequestException('customerPhone is required');
+    await this.assertOutlet(ctx, dto.outletId);
     const region = await this.regionsService.resolveForShop(ctx.shopId, dto, {
-      required: true,
+      required: false,
     });
-
-    const itemsData = await this.buildItemsData(ctx, dto.items);
-
-    // Read-only — doesn't create a customer record for what might be an
-    // abandoned draft; a real row is only ever created at conversion time,
-    // via OrdersService -> CustomersService.findOrCreateForOrder.
-    const existingCustomerRows = await this.db.query<RowDataPacket[]>(
+    this.assertFieldPairs(dto, {});
+    const items = dto.items
+      ? await this.pricing.normaliseItems(ctx.shopId, dto.items)
+      : [];
+    // Prices the draft as entered: a bad discount code or a priced-out line is
+    // refused now, while staff are looking at it.
+    const bill = await this.pricing.price(
+      ctx.shopId,
+      this.pricingInput(
+        { ...dto, regionId: region.regionId ?? undefined },
+        dto.outletId,
+        items,
+      ),
+      `staff:${ctx.userId}`,
+    );
+    const discountId = await this.discountIdFor(ctx.shopId, dto.discountCode);
+    const existingCustomer = await this.db.query<RowDataPacket[]>(
       `SELECT id FROM customer WHERE shopId = ? AND phone = ?`,
       [ctx.shopId, dto.customerPhone],
     );
-    const existingCustomerId = existingCustomerRows[0]?.id as number | undefined;
-
-    const discountId = dto.discountCode
-      ? await this.resolveDiscountOrThrow(
-          ctx.shopId,
-          dto.discountCode,
-          itemsData ?? [],
-          existingCustomerId,
-        )
-      : null;
 
     const newId = await this.db.transaction(async (conn) => {
       const [result] = await conn.query(
-        // currency comes from the shop the draft belongs to, via a subselect
-        // rather than a separate read — a quote has to remember what it quoted
-        // in, independent of any later change to the shop setting.
-        `INSERT INTO draftorder (shopId, outletId, customerId, customerName, customerPhone, customerEmail, customerAddress, regionId, area, orderType, discountId, notes, updatedAt, currency)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT currency FROM shop WHERE id = ?))`,
+        `INSERT INTO draftorder (shopId, outletId, customerId, customerName, customerPhone, customerEmail,
+           customerAddress, regionId, area, orderType, discountId, notes, customerNote,
+           receiverName, receiverPhone, receiverMessage, deliveryDate, deliveryTimeSlot,
+           deliveryFeeOverride, deliveryFeeOverrideReason, orderDiscountType, orderDiscountValue,
+           orderDiscountReason, createdByUserId, updatedAt, currency)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+           (SELECT currency FROM shop WHERE id = ?))`,
         [
           ctx.shopId,
           dto.outletId,
-          existingCustomerId ?? null,
-          dto.customerName,
-          dto.customerPhone,
-          dto.customerEmail ?? null,
-          dto.customerAddress ?? null,
+          (existingCustomer[0]?.id as number | undefined) ?? null,
+          dto.customerName!.trim(),
+          dto.customerPhone!.trim(),
+          dto.customerEmail?.trim() || null,
+          dto.customerAddress?.trim() || null,
           region.regionId,
-          dto.area ?? null,
-          dto.orderType ?? null,
+          dto.area?.trim() || null,
+          dto.orderType ?? 'delivery',
           discountId,
           dto.notes ?? null,
+          dto.customerNote?.trim() || null,
+          dto.receiverName?.trim() || null,
+          dto.receiverPhone?.trim() || null,
+          dto.receiverMessage?.trim() || null,
+          dto.deliveryDate ?? null,
+          dto.deliveryTimeSlot?.trim() || null,
+          dto.deliveryFeeOverride ?? null,
+          dto.deliveryFeeOverride != null
+            ? dto.deliveryFeeOverrideReason!.trim()
+            : null,
+          dto.orderDiscountType ?? null,
+          dto.orderDiscountType ? (dto.orderDiscountValue ?? 0) : null,
+          dto.orderDiscountType ? dto.orderDiscountReason!.trim() : null,
+          ctx.userId || null,
           new Date(),
-          ctx.shopId, // the currency subselect above
+          ctx.shopId,
         ],
       );
       const draftId = (result as { insertId: number }).insertId;
-      if (itemsData && itemsData.length > 0) {
-        const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
-        await conn.query(
-          `INSERT INTO draftorderitem (draftOrderId, productId, variantId, productName, quantity, price)
-           VALUES ${placeholders}`,
-          itemsData.flatMap((i) => [
-            draftId,
-            i.productId,
-            i.variantId ?? null,
-            i.productName,
-            i.quantity,
-            i.price,
-          ]),
-        );
-      }
+      await this.insertItems(conn, draftId, items, bill);
       return draftId;
     });
-    return this.toResponse((await this.loadDraftOrdersWithRelations([newId])).get(newId)!);
+    await this.auditLog.logCtx(ctx, {
+      action: 'draft_order.created',
+      entityType: 'draft_order',
+      entityId: newId,
+      after: {
+        total: bill.total,
+        currency: bill.currency,
+        lines: items.length,
+      },
+    });
+    return this.findOne(ctx, newId);
   }
 
-  async update(ctx: TenantContext, id: number, dto: UpdateDraftOrderDto) {
-    const draft = await this.findRaw(ctx, id);
-    if (draft.status !== 'OPEN') {
+  // Allowed while OPEN or after the link is sent. After a link: the snapshot is
+  // re-locked at the new prices and the same URL keeps working. While the
+  // customer is mid-payment (AWAITING_PAYMENT), the pending order is cancelled
+  // first, which ends its gateway session: a payment that still lands on it is
+  // recorded and flagged for a refund, never applied (F8).
+  async update(ctx: TenantContext, id: number, dto: DraftOrderFieldsDto) {
+    await this.syncStatuses(ctx.shopId, id);
+    const draft = await this.loadOne(ctx.shopId, id);
+    if (draft.status === 'COMPLETED' || draft.status === 'CANCELLED') {
       throw new BadRequestException(
         `Cannot edit a draft order that is already '${draft.status}'`,
       );
     }
-    if (dto.outletId !== undefined) {
-      const outletRows = await this.db.query<RowDataPacket[]>(
-        `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
-        [dto.outletId, ctx.shopId],
-      );
-      if (outletRows.length === 0) {
-        throw new BadRequestException('outletId is invalid for this shop');
-      }
-    }
-    // Optional on an update: only re-resolved when the caller changes it.
-    const region =
-      dto.regionId != null
-        ? await this.regionsService.resolveForShop(ctx.shopId, dto, {
-            required: true,
-          })
-        : undefined;
+    const outletId = dto.outletId ?? draft.outletId;
+    await this.assertOutlet(ctx, outletId);
+    const regionChanged = dto.regionId !== undefined;
+    const region = regionChanged
+      ? await this.regionsService.resolveForShop(ctx.shopId, dto, {
+          required: false,
+        })
+      : null;
+    this.assertFieldPairs(dto, draft);
 
-    const itemsData = await this.buildItemsData(ctx, dto.items, id);
-    let lineItems: {
-      productId: number;
-      price: string | number;
-      quantity: number;
-    }[];
-    if (itemsData) {
-      lineItems = itemsData;
-    } else {
-      const existingItems = await this.db.query<RowDataPacket[]>(
-        `SELECT productId, price, quantity FROM draftorderitem WHERE draftOrderId = ?`,
-        [id],
-      );
-      lineItems = existingItems.map((i) => ({
-        productId: i.productId as number,
-        price: i.price as string,
-        quantity: i.quantity as number,
-      }));
+    const items =
+      dto.items !== undefined
+        ? await this.pricing.normaliseItems(ctx.shopId, dto.items)
+        : this.storedLines(draft);
+    const merged = this.mergeFields(draft, dto, region?.regionId);
+    const bill = await this.pricing.price(
+      ctx.shopId,
+      {
+        ...this.pricingInput(merged, outletId, items),
+        sizeBaseline: await this.storedSize(id),
+      },
+      `staff:${ctx.userId}`,
+    );
+    const discountId =
+      dto.discountCode === undefined
+        ? undefined
+        : await this.discountIdFor(ctx.shopId, dto.discountCode);
+
+    if (draft.status === 'AWAITING_PAYMENT' && draft.convertedOrderId) {
+      await this.releasePendingOrder(ctx, draft.convertedOrderId);
     }
 
-    let discountId: number | null | undefined;
-    if (dto.discountCode === null) {
-      discountId = null;
-    } else if (dto.discountCode !== undefined) {
-      const phone = dto.customerPhone ?? draft.customerPhone;
-      const existingCustomerRows = await this.db.query<RowDataPacket[]>(
-        `SELECT id FROM customer WHERE shopId = ? AND phone = ?`,
-        [ctx.shopId, phone],
-      );
-      discountId = await this.resolveDiscountOrThrow(
-        ctx.shopId,
-        dto.discountCode,
-        lineItems,
-        existingCustomerRows[0]?.id as number | undefined,
+    const linkLive =
+      draft.status === 'INVOICE_SENT' || draft.status === 'AWAITING_PAYMENT';
+    if (linkLive && bill.total === null) {
+      throw new BadRequestException(
+        bill.deliveryError ?? 'Delivery could not be priced',
       );
     }
-
+    // Built before the transaction: nothing inside it may touch the pool.
+    const snapshotJson = linkLive
+      ? JSON.stringify(
+          await this.buildSnapshot(ctx.shopId, merged, outletId, items, bill),
+        )
+      : null;
     await this.db.transaction(async (conn) => {
-      if (itemsData) {
-        await conn.query(`DELETE FROM draftorderitem WHERE draftOrderId = ?`, [id]);
-        if (itemsData.length > 0) {
-          const placeholders = itemsData.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
-          await conn.query(
-            `INSERT INTO draftorderitem (draftOrderId, productId, variantId, productName, quantity, price) VALUES ${placeholders}`,
-            itemsData.flatMap((i) => [
-              id,
-              i.productId,
-              i.variantId ?? null,
-              i.productName,
-              i.quantity,
-              i.price,
-            ]),
-          );
-        }
-      }
-      const set = buildSetClause({
-        outletId: dto.outletId,
-        customerName: dto.customerName,
-        customerPhone: dto.customerPhone,
-        customerEmail: dto.customerEmail,
-        customerAddress: dto.customerAddress,
-        regionId: region?.regionId,
-        area: dto.area,
-        orderType: dto.orderType,
-        discountId,
-        notes: dto.notes,
-        updatedAt: new Date(),
-      });
-      if (set) {
-        await conn.query(`UPDATE draftorder SET ${set.setClause} WHERE id = ?`, [
-          ...set.params,
+      if (dto.items !== undefined) {
+        await conn.query(`DELETE FROM draftorderitem WHERE draftOrderId = ?`, [
           id,
         ]);
+        await this.insertItems(conn, id, items, bill);
       }
+      const set: string[] = [];
+      const params: unknown[] = [];
+      const put = (col: string, value: unknown) => {
+        if (value === undefined) return;
+        set.push(`${col} = ?`);
+        params.push(value);
+      };
+      put('outletId', dto.outletId);
+      put('customerName', dto.customerName?.trim());
+      put('customerPhone', dto.customerPhone?.trim());
+      put(
+        'customerEmail',
+        dto.customerEmail === undefined
+          ? undefined
+          : dto.customerEmail.trim() || null,
+      );
+      put(
+        'customerAddress',
+        dto.customerAddress === undefined
+          ? undefined
+          : dto.customerAddress.trim() || null,
+      );
+      if (regionChanged) put('regionId', region!.regionId);
+      put('area', dto.area === undefined ? undefined : dto.area.trim() || null);
+      put('orderType', dto.orderType);
+      put('discountId', discountId);
+      put('notes', dto.notes);
+      put(
+        'customerNote',
+        dto.customerNote === undefined
+          ? undefined
+          : dto.customerNote.trim() || null,
+      );
+      put(
+        'receiverName',
+        dto.receiverName === undefined
+          ? undefined
+          : dto.receiverName.trim() || null,
+      );
+      put(
+        'receiverPhone',
+        dto.receiverPhone === undefined
+          ? undefined
+          : dto.receiverPhone.trim() || null,
+      );
+      put(
+        'receiverMessage',
+        dto.receiverMessage === undefined
+          ? undefined
+          : dto.receiverMessage.trim() || null,
+      );
+      put('deliveryDate', dto.deliveryDate);
+      put(
+        'deliveryTimeSlot',
+        dto.deliveryTimeSlot === undefined
+          ? undefined
+          : dto.deliveryTimeSlot.trim() || null,
+      );
+      if (dto.deliveryFeeOverride !== undefined) {
+        put('deliveryFeeOverride', dto.deliveryFeeOverride);
+        put(
+          'deliveryFeeOverrideReason',
+          dto.deliveryFeeOverride === null
+            ? null
+            : dto.deliveryFeeOverrideReason!.trim(),
+        );
+      }
+      if (dto.orderDiscountType !== undefined) {
+        put('orderDiscountType', dto.orderDiscountType);
+        put(
+          'orderDiscountValue',
+          dto.orderDiscountType ? (dto.orderDiscountValue ?? 0) : null,
+        );
+        put(
+          'orderDiscountReason',
+          dto.orderDiscountType ? dto.orderDiscountReason!.trim() : null,
+        );
+      }
+      if (linkLive) {
+        // Re-lock: the same link now charges the new amount.
+        put('snapshotJson', snapshotJson);
+        put('snapshotAt', new Date());
+        put('status', 'INVOICE_SENT');
+      }
+      put('updatedAt', new Date());
+      await conn.query(
+        `UPDATE draftorder SET ${set.join(', ')} WHERE id = ? AND shopId = ?`,
+        [...params, id, ctx.shopId],
+      );
     });
-    return this.toResponse((await this.loadDraftOrdersWithRelations([id])).get(id)!);
+    await this.auditLog.logCtx(ctx, {
+      action: 'draft_order.edited',
+      entityType: 'draft_order',
+      entityId: id,
+      after: { total: bill.total, linkRelocked: linkLive },
+    });
+    return this.findOne(ctx, id);
   }
 
   async cancel(ctx: TenantContext, id: number) {
-    const draft = await this.findRaw(ctx, id);
+    await this.syncStatuses(ctx.shopId, id);
+    const draft = await this.loadOne(ctx.shopId, id);
     if (draft.status === 'COMPLETED' || draft.status === 'CANCELLED') {
       throw new BadRequestException(
         `Cannot cancel a draft order that is already '${draft.status}'`,
       );
     }
-    if (draft.convertedOrderId) {
-      // INVOICE_SENT — a real (unpaid) order already exists; cancel it too
-      // through the existing order-cancel path rather than leaving it
-      // orphaned (it also restocks reserved inventory, same as any other
-      // storefront-style cancellation — see OrdersService.cancel).
-      await this.ordersService.cancel(ctx, draft.convertedOrderId);
+    await this.assertPermission(ctx, draft.outletId);
+    if (draft.status === 'AWAITING_PAYMENT' && draft.convertedOrderId) {
+      await this.releasePendingOrder(ctx, draft.convertedOrderId);
     }
+    // The link keeps its token so the customer sees "cancelled", and can no
+    // longer pay (the pay page refuses a CANCELLED draft).
     await this.db.execute(
-      `UPDATE draftorder SET status = 'CANCELLED', updatedAt = ? WHERE id = ?`,
-      [new Date(), id],
+      `UPDATE draftorder SET status = 'CANCELLED', updatedAt = ?
+        WHERE id = ? AND shopId = ? AND status <> 'COMPLETED'`,
+      [new Date(), id, ctx.shopId],
     );
+    await this.auditLog.logCtx(ctx, {
+      action: 'draft_order.cancelled',
+      entityType: 'draft_order',
+      entityId: id,
+      before: { status: draft.status },
+    });
     return this.findOne(ctx, id);
   }
 
-  // "Mark as paid" — the cash/COD-style path for a phone order that skips
-  // the payment link entirely. Converts to a real Order if that hasn't
-  // already happened via sendInvoice (customer paid by cash instead of
-  // using the link that was sent), then marks it paid.
-  async complete(ctx: TenantContext, id: number) {
-    const draft = await this.findRawWithItems(ctx, id);
-    if (draft.status === 'COMPLETED' || draft.status === 'CANCELLED') {
-      throw new BadRequestException(`Draft order is already '${draft.status}'`);
-    }
-    if (draft.draftorderitem.length === 0) {
+  // Creates the payment link (or re-sends the existing one) and freezes the
+  // priced snapshot. The draft stays a draft: no order, no stock held.
+  async sendLink(ctx: TenantContext, id: number) {
+    await this.syncStatuses(ctx.shopId, id);
+    const draft = await this.loadOne(ctx.shopId, id);
+    if (
+      draft.status !== 'OPEN' &&
+      draft.status !== 'INVOICE_SENT' &&
+      draft.status !== 'AWAITING_PAYMENT'
+    ) {
       throw new BadRequestException(
-        'Add at least one item before completing this draft order',
+        `Cannot send a payment link for a draft order that is '${draft.status}'`,
       );
     }
-
-    let orderId = draft.convertedOrderId;
-    if (!orderId) {
-      const order = await this.convertToOrder(ctx, draft);
-      orderId = order.id as number;
-    }
-    await this.db.execute(`UPDATE \`order\` SET paymentStatus = 'paid' WHERE id = ?`, [
-      orderId,
-    ]);
-    await this.db.execute(
-      `UPDATE draftorder SET status = 'COMPLETED', convertedOrderId = ?, updatedAt = ? WHERE id = ?`,
-      [orderId, new Date(), id],
-    );
-    return this.findOne(ctx, id);
-  }
-
-  // Converts to a real (unpaid) Order immediately and generates a payment
-  // link on it via the existing mechanism (PaymentsService.generateLink) —
-  // no separate draft-order payment infrastructure. Actual payment
-  // template then follows the normal flow for that order; a merchant who
-  // sees it get paid (or gets paid by cash instead) calls complete() to
-  // finish it off, or the order can be tracked/marked paid the same way any
-  // other order is.
-  async sendInvoice(ctx: TenantContext, id: number) {
-    const draft = await this.findRawWithItems(ctx, id);
-    if (draft.status !== 'OPEN') {
+    await this.assertPermission(ctx, draft.outletId);
+    await this.assertCardAvailable(ctx.shopId);
+    const items = this.storedLines(draft);
+    if (!items.length) {
       throw new BadRequestException(
-        'Only an open draft order can have an invoice sent',
+        'Add at least one item before sending a payment link',
       );
     }
-    if (draft.draftorderitem.length === 0) {
-      throw new BadRequestException(
-        'Add at least one item before sending an invoice',
-      );
-    }
-
-    // Before the order exists: a card link that can only fail must not leave a
-    // converted order (and its stock hold) behind.
-    await this.paymentsService.assertCardLinkAllowedForShop(ctx.shopId);
-    const order = await this.convertToOrder(ctx, draft);
-    const paymentLink = await this.paymentsService.generateLink(ctx, order.id as number);
-    await this.db.execute(
-      `UPDATE draftorder SET status = 'INVOICE_SENT', convertedOrderId = ?, updatedAt = ? WHERE id = ?`,
-      [order.id, new Date(), id],
-    );
-    return { draftOrder: await this.findOne(ctx, id), paymentLink };
-  }
-
-  // Funnels into OrdersService.create — the exact same pricing/item-
-  // resolution/customer/discount path a storefront or admin-entered order
-  // uses (with reserveStock: true, matching storefront checkout's immediate
-  // atomic stock reservation, not the deferred-to-confirm behavior a plain
-  // admin-entered order gets) — so draft orders can't silently drift from
-  // how every other order is built.
-  private async convertToOrder(
-    ctx: TenantContext,
-    draft: DraftorderRow & { draftorderitem: DraftorderitemRow[]; discountCode?: string },
-  ) {
-    return this.ordersService.create(
-      ctx,
-      {
-        outletId: draft.outletId,
-        customerName: draft.customerName,
-        customerPhone: draft.customerPhone,
-        customerEmail: draft.customerEmail ?? undefined,
-        // Guaranteed non-null: CreateDraftOrderDto requires both fields at
-        // creation time even though the DB column is nullable (nullable
-        // only so historical/edge rows can't violate a NOT NULL constraint).
-        customerAddress: draft.customerAddress as string,
-        // Carried so the region is re-validated on the way through; a draft
-        // holding none is refused rather than given a placeholder.
-        regionId: draft.regionId ?? undefined,
-        area: draft.area ?? undefined,
-        orderType: draft.orderType ?? undefined,
-        channel: 'draft_order',
-        discountCode: draft.discountCode,
-        items: draft.draftorderitem.map((i) => ({
-          productId: i.productId,
-          variantId: i.variantId ?? undefined,
-          quantity: i.quantity,
-          priceOverride: Number(i.price),
-        })),
-      },
-      {
-        reserveStock: true,
-        // a draft that predates the order limits completes as it stands
-        sizeBaseline: await loadStoredOrderSize(
-          this.db,
-          { table: 'draftorderitem', fk: 'draftOrderId' },
-          draft.id,
-        ),
-      },
-    );
-  }
-
-  private async buildItemsData(
-    ctx: TenantContext,
-    items: DraftItemInput[] | undefined,
-    // The draft being edited (already resolved shop-scoped by the caller): a
-    // draft that predates the order limits can still be edited down.
-    existingDraftId?: number,
-  ) {
-    if (!items) return undefined;
-    const resolved = await this.productsService.resolveOrderItems(
+    this.assertConvertible(draft);
+    const bill = await this.pricing.price(
       ctx.shopId,
-      items.map((i) => ({
-        productId: i.productId,
-        quantity: i.quantity,
-        variantId: i.variantId,
-        priceOverride: i.price,
-      })),
+      {
+        ...this.pricingInput(
+          this.mergeFields(draft, {}),
+          draft.outletId,
+          items,
+        ),
+        sizeBaseline: await this.storedSize(draft.id),
+      },
+      `staff:${ctx.userId}`,
     );
-    assertOrderWithinLimits(
-      resolved,
-      existingDraftId === undefined
-        ? undefined
-        : await loadStoredOrderSize(
-            this.db,
-            { table: 'draftorderitem', fk: 'draftOrderId' },
-            existingDraftId,
-          ),
+    if (bill.total === null) {
+      throw new BadRequestException(
+        bill.deliveryError ?? 'Delivery could not be priced',
+      );
+    }
+    if (Number(bill.total) <= 0) {
+      throw new BadRequestException(
+        'There is nothing to pay on this order: use Mark as paid',
+      );
+    }
+    const snapshot = await this.buildSnapshot(
+      ctx.shopId,
+      this.mergeFields(draft, {}),
+      draft.outletId,
+      items,
+      bill,
     );
-    return resolved.map(({ product, variant, quantity, price }) => ({
-      productId: product.id as number,
-      variantId: variant?.id ?? null,
-      productName: product.name as string,
-      quantity,
-      price,
-    }));
+    const token = draft.payToken ?? randomBytes(16).toString('hex');
+    const expiresAt = new Date(
+      Date.now() + PAY_LINK_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+    );
+    await this.db.execute(
+      `UPDATE draftorder SET payToken = ?, payLinkSentAt = NOW(3), payLinkExpiresAt = ?,
+              snapshotJson = ?, snapshotAt = NOW(3),
+              status = IF(status = 'AWAITING_PAYMENT', status, 'INVOICE_SENT'), updatedAt = ?
+        WHERE id = ? AND shopId = ?`,
+      [token, expiresAt, JSON.stringify(snapshot), new Date(), id, ctx.shopId],
+    );
+    await this.auditLog.logCtx(ctx, {
+      action: 'draft_order.link_sent',
+      entityType: 'draft_order',
+      entityId: id,
+      after: { total: bill.total, currency: bill.currency, expiresAt },
+    });
+    return this.findOne(ctx, id);
   }
 
-  private sumItems(
-    items: { price: string | number; quantity: number }[],
-  ): number {
-    return items.reduce((sum, i) => sum + Number(i.price) * i.quantity, 0);
+  // The link stops working; the draft goes back to OPEN.
+  async cancelLink(ctx: TenantContext, id: number) {
+    await this.syncStatuses(ctx.shopId, id);
+    const draft = await this.loadOne(ctx.shopId, id);
+    if (
+      draft.status !== 'INVOICE_SENT' &&
+      draft.status !== 'AWAITING_PAYMENT'
+    ) {
+      throw new BadRequestException('This draft has no active payment link');
+    }
+    await this.assertPermission(ctx, draft.outletId);
+    if (draft.status === 'AWAITING_PAYMENT' && draft.convertedOrderId) {
+      await this.releasePendingOrder(ctx, draft.convertedOrderId);
+    }
+    await this.db.execute(
+      `UPDATE draftorder SET payToken = NULL, payLinkExpiresAt = NULL, snapshotJson = NULL,
+              status = 'OPEN', updatedAt = ?
+        WHERE id = ? AND shopId = ? AND status IN ('INVOICE_SENT', 'AWAITING_PAYMENT')`,
+      [new Date(), id, ctx.shopId],
+    );
+    await this.auditLog.logCtx(ctx, {
+      action: 'draft_order.link_cancelled',
+      entityType: 'draft_order',
+      entityId: id,
+    });
+    return this.findOne(ctx, id);
   }
 
-  // Admin draft-order builder's live preview (POST /shop/discounts/validate,
+  // Emails the invoice with the Pay button to the customer (existing send_email
+  // path). Needs a live link and a customer email.
+  async sendEmail(ctx: TenantContext, id: number) {
+    await this.syncStatuses(ctx.shopId, id);
+    const draft = await this.loadOne(ctx.shopId, id);
+    if (
+      (draft.status !== 'INVOICE_SENT' &&
+        draft.status !== 'AWAITING_PAYMENT') ||
+      !draft.payToken
+    ) {
+      throw new BadRequestException('Create the payment link first');
+    }
+    if (!draft.customerEmail) {
+      throw new BadRequestException('Add the customer email first');
+    }
+    await this.assertPermission(ctx, draft.outletId);
+    const shop = await this.shopRow(ctx.shopId);
+    const snapshot = draft.snapshotJson as DraftSnapshot;
+    const email = buildDraftInvoiceEmail({
+      shopName: (shop.displayName as string | null) || (shop.name as string),
+      shopEmail: (shop.email as string | null) ?? null,
+      shopPhone: shop.whatsappNumber
+        ? `${(shop.whatsappCountryCode as string | null) ?? ''}${shop.whatsappNumber as string}`
+        : null,
+      payUrl: storefrontUrl(shop as never, `/pay/${draft.payToken}`),
+      snapshot,
+    });
+    await this.jobs.enqueue(
+      ctx.shopId,
+      'send_email',
+      {
+        to: draft.customerEmail,
+        subject: email.subject,
+        bodyText: email.text,
+        html: email.html,
+        fromName: (shop.displayName as string | null) || (shop.name as string),
+      },
+      // One per link version: re-sending after a re-lock sends again.
+      `draft:${id}:invoice-email:${draft.snapshotAt?.getTime() ?? 0}:${Date.now()}`,
+      { sensitive: true },
+    );
+    await this.auditLog.logCtx(ctx, {
+      action: 'draft_order.invoice_emailed',
+      entityType: 'draft_order',
+      entityId: id,
+    });
+    return { sent: true };
+  }
+
+  // Cash on delivery / pickup: converts now into a normal pending order.
+  async convertCod(ctx: TenantContext, id: number) {
+    const draft = await this.prepareStaffConversion(ctx, id);
+    await this.convert(ctx, draft, { kind: 'cod' });
+    return this.findOne(ctx, id);
+  }
+
+  // Mark as paid (cash, transfer, card terminal, other): converts now, paid.
+  async markPaid(ctx: TenantContext, id: number, dto: MarkDraftPaidDto) {
+    const draft = await this.prepareStaffConversion(ctx, id);
+    await this.convert(ctx, draft, {
+      kind: 'marked_paid',
+      method: dto.method,
+      reference: dto.reference?.trim() || null,
+    });
+    return this.findOne(ctx, id);
+  }
+
+  // ------------------------------------------------- public pay (DraftPayService)
+
+  // The draft behind /pay/<token> for THIS shop, or null (any mismatch is the
+  // same not-found).
+  async findByPayToken(shopId: number, token: string) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM draftorder WHERE shopId = ? AND payToken = ?`,
+      [shopId, token],
+    );
+    const id = rows[0]?.id as number | undefined;
+    if (!id) return null;
+    await this.syncStatuses(shopId, id);
+    return this.loadOne(shopId, id);
+  }
+
+  // Whether the shop can take a card payment right now: an active card
+  // processor that is usable (keys present, not rejected), in a currency it takes.
+  async cardAvailable(shopId: number): Promise<boolean> {
+    const shop = await this.shopRow(shopId);
+    const gateway = shop.paymentGateway as string;
+    if (!['nomod', 'stripe'].includes(gateway)) return false;
+    if (isGatewayCurrencyBlocked(gateway, shop.currency as string))
+      return false;
+    return this.paymentSettings.isUsable(shopId, gateway);
+  }
+
+  // Pay pressed: the draft becomes exactly one pending unpaid card order (or the
+  // pending order from an earlier press is reused). Returns the order's own
+  // payment-link token, which the existing pay path charges.
+  async convertForPayment(
+    shopId: number,
+    draftId: number,
+  ): Promise<{
+    orderToken: string;
+    orderId: number;
+    trackingToken: string;
+    created: boolean;
+  }> {
+    await this.syncStatuses(shopId, draftId);
+    const draft = await this.loadOne(shopId, draftId);
+    if (draft.status === 'AWAITING_PAYMENT' && draft.convertedOrderId) {
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT id, paymentLinkToken, trackingToken FROM \`order\`
+          WHERE id = ? AND shopId = ? AND status = 'pending' AND paymentStatus = 'unpaid'`,
+        [draft.convertedOrderId, shopId],
+      );
+      if (rows[0]?.paymentLinkToken) {
+        return {
+          orderToken: rows[0].paymentLinkToken as string,
+          orderId: rows[0].id as number,
+          trackingToken: rows[0].trackingToken as string,
+          created: false,
+        };
+      }
+    }
+    if (draft.status !== 'INVOICE_SENT') {
+      throw new ConflictException('This order cannot be paid now');
+    }
+    const ctx = await this.systemContext(shopId, draft.createdByUserId);
+    const orderToken = randomUUID();
+    const order = await this.convert(ctx, draft, {
+      kind: 'card',
+      paymentLinkToken: orderToken,
+      expiresAt:
+        draft.payLinkExpiresAt ??
+        new Date(Date.now() + PAY_LINK_EXPIRY_DAYS * 86400000),
+    });
+    return {
+      orderToken,
+      orderId: order.id,
+      trackingToken: order.trackingToken as string,
+      created: true,
+    };
+  }
+
+  // "We received your order" + the merchant alert for a card-link order, once
+  // its payment session exists: the storefront card-checkout rule, exactly once
+  // per order by the same CAS on order.placedNotifiedAt.
+  async announceAfterSession(
+    shopId: number,
+    orderId: number,
+    createdByUserId: number | null,
+  ) {
+    const res = await this.db.execute(
+      `UPDATE \`order\` SET placedNotifiedAt = NOW(3)
+        WHERE id = ? AND shopId = ? AND placedNotifiedAt IS NULL`,
+      [orderId, shopId],
+    );
+    if (res.affectedRows !== 1) return;
+    const ctx = await this.systemContext(shopId, createdByUserId);
+    const order = await this.ordersService.findOne(ctx, orderId);
+    this.notifications
+      .notifyOrderConfirmed(shopId, order)
+      .catch(() =>
+        this.db
+          .execute(
+            `UPDATE \`order\` SET placedNotifiedAt = NULL WHERE id = ? AND shopId = ?`,
+            [orderId, shopId],
+          )
+          .catch(() => undefined),
+      );
+  }
+
+  // The pending order's gateway call failed: cancel it (stock and discount use
+  // are returned) and put the draft back to "link sent" so the link works again.
+  async releaseAfterGatewayFailure(
+    shopId: number,
+    draftId: number,
+    orderId: number,
+    gateway: string,
+  ) {
+    await this.ordersService.cancelAfterGatewayFailure(
+      shopId,
+      orderId,
+      gateway,
+    );
+    await this.syncStatuses(shopId, draftId);
+  }
+
+  // ------------------------------------------------------- admin discount check
+
+  // Admin draft-order builder's discount check (POST /shop/discounts/validate,
   // served by DiscountValidationController). Lines are priced by the same
   // resolver order creation uses, so the preview is the charge.
   async validateDiscount(ctx: TenantContext, dto: ValidateDiscountDto) {
-    if (!dto.items?.length) return this.discountsService.validate(ctx.shopId, dto);
+    if (!dto.items?.length)
+      return this.discountsService.validate(ctx.shopId, dto);
     const resolved = await this.productsService.resolveOrderItems(
       ctx.shopId,
       dto.items.map((i) => ({
@@ -469,264 +781,824 @@ export class DraftOrdersService {
     return this.discountsService.validate(ctx.shopId, dto, lines);
   }
 
-  private async resolveDiscountOrThrow(
-    shopId: number,
-    code: string,
-    items: {
-      productId: number;
-      price: string | number;
-      quantity: number;
-    }[],
-    customerId?: number,
-  ) {
-    const discount = await this.discountsService.resolveByCode(shopId, code);
-    const currencyRows = await this.db.query<RowDataPacket[]>(
-      `SELECT currency FROM shop WHERE id = ?`,
-      [shopId],
+  // ------------------------------------------------------------- internals
+
+  // A draft whose order was paid becomes COMPLETED; one whose pending order was
+  // cancelled (gateway failure, staff) goes back to "link sent" so the same link
+  // can be paid again. Lazy, on every read and action: cheap, and correct
+  // whichever path paid or cancelled the order.
+  private async syncStatuses(shopId: number, draftId?: number) {
+    const only = draftId ? ' AND d.id = ?' : '';
+    const params = draftId ? [shopId, draftId] : [shopId];
+    await this.db.execute(
+      `UPDATE draftorder d JOIN \`order\` o ON o.id = d.convertedOrderId AND o.shopId = d.shopId
+          SET d.status = 'COMPLETED', d.updatedAt = NOW(3)
+        WHERE d.shopId = ?${only} AND d.status = 'AWAITING_PAYMENT' AND o.paymentStatus = 'paid'`,
+      params,
     );
-    const result = await this.discountsService.evaluate(discount, {
-      lines: await this.discountsService.buildLines(shopId, items),
-      currency: currencyRows[0]?.currency as string | undefined,
-      customerId,
-    });
-    if (!result.valid) {
-      throw new BadRequestException(
-        result.message ?? 'This discount code cannot be applied',
+    await this.db.execute(
+      `UPDATE draftorder d JOIN \`order\` o ON o.id = d.convertedOrderId AND o.shopId = d.shopId
+          SET d.status = 'INVOICE_SENT', d.updatedAt = NOW(3)
+        WHERE d.shopId = ?${only} AND d.status = 'AWAITING_PAYMENT'
+          AND o.status = 'cancelled' AND o.paymentStatus <> 'paid'`,
+      params,
+    );
+  }
+
+  private async prepareStaffConversion(ctx: TenantContext, id: number) {
+    await this.syncStatuses(ctx.shopId, id);
+    const draft = await this.loadOne(ctx.shopId, id);
+    if (draft.status === 'AWAITING_PAYMENT') {
+      throw new ConflictException(
+        'The customer is paying by card right now. Cancel the payment link first.',
       );
     }
-    return result.discountId!;
-  }
-
-  private async findRaw(ctx: TenantContext, id: number) {
-    const rows = await this.db.query<(DraftorderRow & RowDataPacket)[]>(
-      `SELECT * FROM draftorder WHERE id = ? AND shopId = ?`,
-      [id, ctx.shopId],
-    );
-    if (rows.length === 0) {
-      throw new NotFoundException(`Draft order ${id} not found`);
+    if (draft.status !== 'OPEN' && draft.status !== 'INVOICE_SENT') {
+      throw new BadRequestException(`Draft order is already '${draft.status}'`);
     }
-    return rows[0];
-  }
-
-  private async findRawWithRelations(ctx: TenantContext, id: number) {
-    await this.findRaw(ctx, id);
-    const draft = (await this.loadDraftOrdersWithRelations([id])).get(id);
-    if (!draft) {
-      throw new NotFoundException(`Draft order ${id} not found`);
+    if (!draft.items.length) {
+      throw new BadRequestException('Add at least one item first');
     }
+    this.assertConvertible(draft);
     return draft;
   }
 
-  private async findRawWithItems(ctx: TenantContext, id: number) {
-    const draft = await this.findRaw(ctx, id);
-    const items = await this.db.query<(DraftorderitemRow & RowDataPacket)[]>(
-      `SELECT * FROM draftorderitem WHERE draftOrderId = ?`,
-      [id],
+  // The one conversion path: exactly once per draft at a time, by a lease on
+  // draftorder.convertingAt (a second Pay press or a double click gets a 409),
+  // then OrdersService.create, the path every order takes.
+  private async convert(
+    ctx: TenantContext,
+    draft: AssembledDraft,
+    mode: ConversionMode,
+  ) {
+    const allowed =
+      mode.kind === 'card' ? ['INVOICE_SENT'] : ['OPEN', 'INVOICE_SENT'];
+    const claim = await this.db.execute(
+      `UPDATE draftorder SET convertingAt = NOW(3)
+        WHERE id = ? AND shopId = ? AND status IN (${allowed.map(() => '?').join(', ')})
+          AND (convertingAt IS NULL OR convertingAt < NOW(3) - INTERVAL ${CONVERSION_LEASE_SECONDS} SECOND)`,
+      [draft.id, draft.shopId, ...allowed],
     );
-    let discountCode: string | undefined;
-    if (draft.discountId) {
-      const discountRows = await this.db.query<RowDataPacket[]>(
-        `SELECT code FROM discount WHERE id = ?`,
-        [draft.discountId],
+    if (claim.affectedRows !== 1) {
+      throw new ConflictException(
+        'This order is already being processed. Try again in a moment.',
       );
-      discountCode = discountRows[0]?.code as string | undefined;
     }
-    return { ...draft, draftorderitem: items, discountCode };
+    try {
+      const fields = this.mergeFields(draft, {});
+      let items: NormalisedLine[];
+      let deliveryFee: number;
+      let manualDiscountAmount: number | undefined;
+      let discountCode: string | undefined;
+      let expectedTotal: string | null = null;
+      if (mode.kind === 'card') {
+        const snapshot = draft.snapshotJson as DraftSnapshot | null;
+        if (!snapshot)
+          throw new ConflictException('This payment link is not ready');
+        items = snapshot.lines.map((l) => ({
+          productId: l.productId,
+          variantId: l.variantId ?? undefined,
+          quantity: l.quantity,
+          priceOverride: Number(l.unitPrice),
+          priceReason: null,
+          customName: l.customName,
+          taxable: null,
+        }));
+        deliveryFee = Number(snapshot.bill.deliveryFee ?? 0);
+        if (snapshot.bill.discount.source === 'manual') {
+          manualDiscountAmount = Number(snapshot.bill.discount.amount);
+        } else if (snapshot.discountCode) {
+          discountCode = snapshot.discountCode;
+        }
+        expectedTotal = snapshot.bill.total;
+      } else {
+        items = this.storedLines(draft);
+        const bill = await this.pricing.price(
+          draft.shopId,
+          {
+            ...this.pricingInput(fields, draft.outletId, items),
+            sizeBaseline: await this.storedSize(draft.id),
+          },
+          `staff:${ctx.userId}`,
+        );
+        if (bill.deliveryFee === null) {
+          throw new BadRequestException(
+            bill.deliveryError ?? 'Delivery could not be priced',
+          );
+        }
+        deliveryFee = Number(bill.deliveryFee);
+        if (bill.discount.source === 'manual') {
+          manualDiscountAmount = Number(bill.discount.amount);
+        } else if (draft.discountCode) {
+          discountCode = draft.discountCode;
+        }
+        expectedTotal = bill.total;
+      }
+      const pickup = draft.orderType === 'pickup';
+      // Re-checked against the shop's own country (it may have changed since the
+      // draft was saved); OrdersService.create checks it again.
+      const region = await this.regionsService.resolveForShop(
+        draft.shopId,
+        { regionId: draft.regionId ?? undefined },
+        { required: false },
+      );
+      const outletRegion = await this.db.query<RowDataPacket[]>(
+        `SELECT regionId FROM outlet WHERE id = ? AND shopId = ?`,
+        [draft.outletId, draft.shopId],
+      );
+      const order = await this.ordersService.create(
+        ctx,
+        {
+          outletId: draft.outletId,
+          customerName: draft.customerName,
+          customerPhone: draft.customerPhone,
+          customerEmail: draft.customerEmail ?? undefined,
+          customerAddress:
+            draft.customerAddress || (pickup ? 'Pickup at outlet' : ''),
+          regionId:
+            (pickup
+              ? (region.regionId ??
+                (outletRegion[0]?.regionId as number | null | undefined))
+              : region.regionId) ?? undefined,
+          area: draft.area ?? undefined,
+          orderType: draft.orderType ?? 'delivery',
+          deliveryDate: draft.deliveryDate ?? undefined,
+          deliveryTimeSlot: draft.deliveryTimeSlot ?? undefined,
+          deliveryNotes: draft.customerNote ?? undefined,
+          receiverMessage: draft.receiverMessage ?? undefined,
+          receiverName: draft.receiverName ?? undefined,
+          receiverPhone: draft.receiverPhone ?? undefined,
+          channel: 'draft_order',
+          discountCode,
+          deliveryFee,
+          items: items.map((i) => ({
+            productId: i.productId,
+            variantId: i.variantId,
+            quantity: i.quantity,
+            priceOverride: i.priceOverride,
+          })),
+        },
+        {
+          reserveStock: true,
+          sizeBaseline: await loadStoredOrderSize(
+            this.db,
+            { table: 'draftorderitem', fk: 'draftOrderId' },
+            draft.id,
+          ),
+          draft: {
+            draftOrderId: draft.id,
+            createdByUserId: draft.createdByUserId,
+            adminSource:
+              mode.kind === 'card'
+                ? 'payment_link'
+                : mode.kind === 'cod'
+                  ? 'cod'
+                  : 'marked_paid',
+            paymentMethod:
+              mode.kind === 'card'
+                ? 'card_online'
+                : mode.kind === 'cod'
+                  ? pickup
+                    ? 'cash_on_pickup'
+                    : 'cash_on_delivery'
+                  : null,
+            manualPaymentMethod:
+              mode.kind === 'marked_paid' ? mode.method : null,
+            manualPaymentReference:
+              mode.kind === 'marked_paid' ? mode.reference : null,
+            markPaid: mode.kind === 'marked_paid',
+            manualDiscountAmount,
+            lineNames: items.map((i) => i.customName ?? undefined),
+            deferNotifications: mode.kind === 'card',
+            paymentLinkToken:
+              mode.kind === 'card' ? mode.paymentLinkToken : undefined,
+            paymentLinkExpiresAt:
+              mode.kind === 'card' ? mode.expiresAt : undefined,
+          },
+        },
+      );
+      // The card charge is the frozen amount: an order that came out different
+      // (a tax class or discount changed since the link) is never charged.
+      if (
+        mode.kind === 'card' &&
+        expectedTotal !== null &&
+        !sameMoney(order.total, expectedTotal, draft.currency)
+      ) {
+        await this.ordersService.cancelAfterGatewayFailure(
+          draft.shopId,
+          order.id,
+          'draft_snapshot',
+        );
+        throw new ConflictException(
+          'The price of this order changed since the link was sent. Please contact the shop.',
+        );
+      }
+      await this.db.execute(
+        `UPDATE draftorder SET convertedOrderId = ?, customerId = ?, convertingAt = NULL,
+                status = ?, updatedAt = NOW(3)
+          WHERE id = ? AND shopId = ?`,
+        [
+          order.id,
+          order.customerId ?? null,
+          mode.kind === 'card' ? 'AWAITING_PAYMENT' : 'COMPLETED',
+          draft.id,
+          draft.shopId,
+        ],
+      );
+      await this.auditLog.logCtx(ctx, {
+        action: 'draft_order.converted',
+        entityType: 'draft_order',
+        entityId: draft.id,
+        after: {
+          orderId: order.id,
+          shopOrderNumber: order.shopOrderNumber,
+          via: mode.kind === 'card' ? 'payment_link' : mode.kind,
+          total: order.total,
+        },
+      });
+      return order;
+    } catch (err) {
+      await this.db
+        .execute(
+          `UPDATE draftorder SET convertingAt = NULL WHERE id = ? AND shopId = ?`,
+          [draft.id, draft.shopId],
+        )
+        .catch(() => undefined);
+      throw err;
+    }
   }
 
-  // Batch-loads every relation draftOrderInclude used to fetch in one
-  // Prisma nested include, as separate WHERE...IN queries grouped in JS.
-  private async loadDraftOrdersWithRelations(
+  // Cancels the pending card order of a draft (edit, link cancel, draft cancel).
+  // A paid order is never cancelled here.
+  private async releasePendingOrder(ctx: TenantContext, orderId: number) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT status, paymentStatus FROM \`order\` WHERE id = ? AND shopId = ?`,
+      [orderId, ctx.shopId],
+    );
+    const order = rows[0];
+    if (!order || order.status === 'cancelled') return;
+    if (order.paymentStatus === 'paid') {
+      throw new ConflictException('The customer has already paid this order');
+    }
+    await this.ordersService.cancel(ctx, orderId);
+  }
+
+  private assertConvertible(draft: AssembledDraft) {
+    if (draft.orderType !== 'pickup' && !draft.customerAddress) {
+      throw new BadRequestException('Add the delivery address first');
+    }
+  }
+
+  private assertFieldPairs(
+    dto: DraftOrderFieldsDto,
+    current: Partial<Pick<DraftorderRow, 'receiverName' | 'receiverPhone'>>,
+  ) {
+    resolveOrderReceiver({
+      receiverName:
+        dto.receiverName !== undefined
+          ? dto.receiverName
+          : (current.receiverName ?? undefined),
+      receiverPhone:
+        dto.receiverPhone !== undefined
+          ? dto.receiverPhone
+          : (current.receiverPhone ?? undefined),
+    });
+    if (
+      dto.deliveryFeeOverride != null &&
+      !dto.deliveryFeeOverrideReason?.trim()
+    ) {
+      throw new BadRequestException(
+        'Give a reason for the changed delivery fee',
+      );
+    }
+    if (dto.orderDiscountType && !dto.orderDiscountReason?.trim()) {
+      throw new BadRequestException('Give a reason for the discount');
+    }
+  }
+
+  private async assertOutlet(ctx: TenantContext, outletId: number) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT id FROM outlet WHERE id = ? AND shopId = ?`,
+      [outletId, ctx.shopId],
+    );
+    if (!rows.length)
+      throw new BadRequestException('outletId is invalid for this shop');
+    await this.assertPermission(ctx, outletId);
+  }
+
+  private assertPermission(ctx: TenantContext, outletId: number) {
+    return this.branchRoles.assertPermission(ctx, outletId, 'orders.create');
+  }
+
+  private async assertCardAvailable(shopId: number) {
+    // A currency the active card processor cannot take keeps its own specific
+    // 400 (Stripe and KWD/BHD/OMR), as before custom orders.
+    const shop = await this.shopRow(shopId);
+    const gateway = shop.paymentGateway as string;
+    if (isGatewayCurrencyBlocked(gateway, shop.currency as string)) {
+      throw new PaymentCurrencyNotSupportedException(
+        gateway,
+        shop.currency as string,
+      );
+    }
+    if (!(await this.cardAvailable(shopId))) {
+      throw new ForbiddenException(
+        'Card payment links need a working card processor. Set up Nomod or Stripe in Integrations > Payments.',
+      );
+    }
+  }
+
+  private async discountIdFor(shopId: number, code: string | null | undefined) {
+    if (!code) return null;
+    const discount = await this.discountsService.resolveByCode(shopId, code);
+    if (!discount) throw new BadRequestException('Invalid discount code');
+    return discount.id;
+  }
+
+  private async systemContext(
+    shopId: number,
+    userId: number | null,
+  ): Promise<TenantContext> {
+    let id = userId;
+    if (!id) {
+      const rows = await this.db.query<RowDataPacket[]>(
+        `SELECT id FROM user WHERE shopId = ? AND role = 'admin' ORDER BY id ASC LIMIT 1`,
+        [shopId],
+      );
+      id = (rows[0]?.id as number | undefined) ?? null;
+    }
+    if (!id) throw new ConflictException('This order cannot be paid now');
+    return {
+      userId: id,
+      shopId,
+      role: 'admin',
+      outletId: null,
+      systemActorLabel: 'customer (payment link)',
+    };
+  }
+
+  private async shopRow(shopId: number) {
+    const rows = await this.db.query<RowDataPacket[]>(
+      `SELECT * FROM shop WHERE id = ?`,
+      [shopId],
+    );
+    return rows[0];
+  }
+
+  // The draft's own fields with an update's changes applied (no write).
+  private mergeFields(
+    draft: AssembledDraft,
+    dto: DraftOrderFieldsDto,
+    regionId?: number | null,
+  ): DraftOrderFieldsDto & { discountCode?: string | null } {
+    const pick = <T>(v: T | undefined, cur: T) => (v === undefined ? cur : v);
+    return {
+      outletId: pick(dto.outletId, draft.outletId),
+      customerName: pick(dto.customerName, draft.customerName),
+      customerPhone: pick(dto.customerPhone, draft.customerPhone),
+      customerEmail: pick(dto.customerEmail, draft.customerEmail ?? undefined),
+      customerAddress: pick(
+        dto.customerAddress,
+        draft.customerAddress ?? undefined,
+      ),
+      regionId:
+        regionId !== undefined
+          ? (regionId ?? undefined)
+          : (draft.regionId ?? undefined),
+      area: pick(dto.area, draft.area ?? undefined),
+      orderType: pick(dto.orderType, draft.orderType ?? 'delivery'),
+      deliveryDate: pick(dto.deliveryDate, draft.deliveryDate ?? undefined),
+      deliveryTimeSlot: pick(
+        dto.deliveryTimeSlot,
+        draft.deliveryTimeSlot ?? undefined,
+      ),
+      receiverName: pick(dto.receiverName, draft.receiverName ?? undefined),
+      receiverPhone: pick(dto.receiverPhone, draft.receiverPhone ?? undefined),
+      receiverMessage: pick(
+        dto.receiverMessage,
+        draft.receiverMessage ?? undefined,
+      ),
+      discountCode:
+        dto.discountCode !== undefined ? dto.discountCode : draft.discountCode,
+      orderDiscountType: pick(
+        dto.orderDiscountType,
+        (draft.orderDiscountType as 'percent' | 'fixed' | null) ?? null,
+      ),
+      orderDiscountValue: pick(
+        dto.orderDiscountValue,
+        draft.orderDiscountValue != null
+          ? Number(draft.orderDiscountValue)
+          : undefined,
+      ),
+      orderDiscountReason: pick(
+        dto.orderDiscountReason,
+        draft.orderDiscountReason ?? undefined,
+      ),
+      deliveryFeeOverride: pick(
+        dto.deliveryFeeOverride,
+        draft.deliveryFeeOverride != null
+          ? Number(draft.deliveryFeeOverride)
+          : null,
+      ),
+      deliveryFeeOverrideReason: pick(
+        dto.deliveryFeeOverrideReason,
+        draft.deliveryFeeOverrideReason ?? undefined,
+      ),
+      notes: pick(dto.notes, draft.notes ?? undefined),
+      customerNote: pick(dto.customerNote, draft.customerNote ?? undefined),
+    };
+  }
+
+  private storedSize(draftId: number) {
+    return loadStoredOrderSize(
+      this.db,
+      { table: 'draftorderitem', fk: 'draftOrderId' },
+      draftId,
+    );
+  }
+
+  private pricingInput(
+    f: DraftOrderFieldsDto & { discountCode?: string | null },
+    outletId: number,
+    items: NormalisedLine[],
+  ): PricingInput {
+    return {
+      outletId,
+      orderType: f.orderType ?? 'delivery',
+      regionId: f.regionId ?? null,
+      area: f.area ?? null,
+      customerAddress: f.customerAddress ?? null,
+      items,
+      discountCode: f.discountCode ?? null,
+      orderDiscountType: f.orderDiscountType ?? null,
+      orderDiscountValue: f.orderDiscountValue ?? null,
+      orderDiscountReason: f.orderDiscountReason ?? null,
+      deliveryFeeOverride: f.deliveryFeeOverride ?? null,
+    };
+  }
+
+  // The stored lines as pricing input: a custom line keeps its price; a
+  // catalogue line is re-priced live unless staff overrode it.
+  private storedLines(draft: AssembledDraft): NormalisedLine[] {
+    return draft.items.map((i) => ({
+      productId: i.productId,
+      variantId: i.variantId ?? undefined,
+      quantity: i.quantity,
+      priceOverride:
+        i.isCustom || i.priceOverrideReason !== null
+          ? Number(i.price)
+          : undefined,
+      priceReason: i.priceOverrideReason,
+      customName: i.isCustom ? i.productName : null,
+      taxable: i.isCustom ? (i.taxable ?? true) : null,
+    }));
+  }
+
+  private async insertItems(
+    conn: { query: (sql: string, params?: unknown[]) => Promise<unknown> },
+    draftId: number,
+    items: NormalisedLine[],
+    bill: Bill,
+  ) {
+    if (!items.length) return;
+    await conn.query(
+      `INSERT INTO draftorderitem (draftOrderId, productId, variantId, productName, quantity, price, isCustom, taxable, priceOverrideReason)
+       VALUES ${items.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+      items.flatMap((i, index) => [
+        draftId,
+        i.productId,
+        i.variantId ?? null,
+        i.customName ?? bill.lines[index]?.name ?? '',
+        i.quantity,
+        // The unit price at this save (informational for a live-priced line).
+        bill.lines[index]?.unitPrice ?? String(i.priceOverride ?? 0),
+        i.customName ? 1 : 0,
+        i.customName ? (i.taxable ? 1 : 0) : null,
+        i.priceReason,
+      ]),
+    );
+  }
+
+  private async buildSnapshot(
+    shopId: number,
+    f: DraftOrderFieldsDto & { discountCode?: string | null },
+    outletId: number,
+    items: NormalisedLine[],
+    bill: Bill,
+  ): Promise<DraftSnapshot> {
+    const [outlet, region] = await Promise.all([
+      this.db.query<RowDataPacket[]>(
+        `SELECT name FROM outlet WHERE id = ? AND shopId = ?`,
+        [outletId, shopId],
+      ),
+      f.regionId
+        ? this.db.query<RowDataPacket[]>(
+            `SELECT nameEn FROM region WHERE id = ?`,
+            [f.regionId],
+          )
+        : Promise.resolve([] as RowDataPacket[]),
+    ]);
+    const pickup = f.orderType === 'pickup';
+    return {
+      v: 1,
+      bill,
+      lines: items.map((i, index) => ({
+        productId: i.productId,
+        variantId: i.variantId ?? null,
+        quantity: i.quantity,
+        unitPrice: bill.lines[index].unitPrice,
+        customName: i.customName,
+      })),
+      discountCode:
+        bill.discount.source === 'code' ? (f.discountCode ?? null) : null,
+      fulfilment: {
+        orderType: pickup ? 'pickup' : 'delivery',
+        customerName: f.customerName ?? '',
+        customerPhone: f.customerPhone ?? '',
+        customerAddress: pickup ? null : (f.customerAddress ?? null),
+        regionName: pickup
+          ? null
+          : ((region[0]?.nameEn as string | undefined) ?? null),
+        area: pickup ? null : (f.area ?? null),
+        deliveryDate: f.deliveryDate ?? null,
+        deliveryTimeSlot: f.deliveryTimeSlot ?? null,
+        receiverName: f.receiverName ?? null,
+        receiverPhone: f.receiverPhone ?? null,
+        receiverMessage: f.receiverMessage ?? null,
+        customerNote: f.customerNote ?? null,
+        outletName: (outlet[0]?.name as string | undefined) ?? '',
+      },
+    };
+  }
+
+  private async loadOne(shopId: number, id: number): Promise<AssembledDraft> {
+    const draft = (await this.loadDrafts(shopId, [id])).get(id);
+    if (!draft) throw new NotFoundException(`Draft order ${id} not found`);
+    return draft;
+  }
+
+  private async loadDrafts(
+    shopId: number,
     ids: number[],
-  ): Promise<Map<number, AssembledDraftOrder>> {
-    const result = new Map<number, AssembledDraftOrder>();
-    if (ids.length === 0) return result;
+  ): Promise<Map<number, AssembledDraft>> {
+    const result = new Map<number, AssembledDraft>();
+    if (!ids.length) return result;
     const idList = ids.map(() => '?').join(', ');
     const [drafts, items] = await Promise.all([
       this.db.query<(DraftorderRow & RowDataPacket)[]>(
-        `SELECT d.*, disc.code AS discountCode, disc.type AS discountType, disc.value AS discountValue, disc.appliesTo AS discountAppliesTo,
-                c.id AS customerRowId, c.name AS customerName2, c.phone AS customerPhone2,
-                o.id AS outletRowId, o.name AS outletName,
-                co.id AS convertedOrderRowId,
-                co.shopOrderNumber AS convertedOrderNumber,
-                co.status AS convertedOrderStatus,
-                co.paymentStatus AS convertedOrderPaymentStatus, co.total AS convertedOrderTotal,
-                co.trackingToken AS convertedOrderTrackingToken
-         FROM draftorder d
-         LEFT JOIN discount disc ON disc.id = d.discountId
-         LEFT JOIN customer c ON c.id = d.customerId
-         JOIN outlet o ON o.id = d.outletId
-         LEFT JOIN \`order\` co ON co.id = d.convertedOrderId
-         WHERE d.id IN (${idList})`,
-        ids,
+        `SELECT d.*, disc.code AS discountCodeValue, o.name AS outletName, u.name AS createdByName
+           FROM draftorder d
+           JOIN outlet o ON o.id = d.outletId
+           LEFT JOIN discount disc ON disc.id = d.discountId
+           LEFT JOIN user u ON u.id = d.createdByUserId AND u.shopId = d.shopId
+          WHERE d.shopId = ? AND d.id IN (${idList})`,
+        [shopId, ...ids],
       ),
       this.db.query<RowDataPacket[]>(
         `SELECT di.*, p.thumbnail AS productThumbnail,
                 ov1.value AS optionValue1, ov2.value AS optionValue2, ov3.value AS optionValue3
-         FROM draftorderitem di
-         JOIN product p ON p.id = di.productId
-         LEFT JOIN productvariant v ON v.id = di.variantId
-         LEFT JOIN productoptionvalue ov1 ON ov1.id = v.optionValue1Id
-         LEFT JOIN productoptionvalue ov2 ON ov2.id = v.optionValue2Id
-         LEFT JOIN productoptionvalue ov3 ON ov3.id = v.optionValue3Id
-         WHERE di.draftOrderId IN (${idList})`,
-        ids,
+           FROM draftorderitem di
+           JOIN draftorder d ON d.id = di.draftOrderId AND d.shopId = ?
+           JOIN product p ON p.id = di.productId
+           LEFT JOIN productvariant v ON v.id = di.variantId
+           LEFT JOIN productoptionvalue ov1 ON ov1.id = v.optionValue1Id
+           LEFT JOIN productoptionvalue ov2 ON ov2.id = v.optionValue2Id
+           LEFT JOIN productoptionvalue ov3 ON ov3.id = v.optionValue3Id
+          WHERE di.draftOrderId IN (${idList})
+          ORDER BY di.id`,
+        [shopId, ...ids],
       ),
     ]);
     const itemsByDraft = new Map<number, AssembledDraftItem[]>();
-    for (const item of items) {
-      const list = itemsByDraft.get(item.draftOrderId as number) ?? [];
+    for (const i of items) {
+      const list = itemsByDraft.get(i.draftOrderId as number) ?? [];
       list.push({
-        id: item.id as number,
-        draftOrderId: item.draftOrderId as number,
-        productId: item.productId as number,
-        variantId: item.variantId as number | null,
-        productName: item.productName as string,
-        quantity: item.quantity as number,
-        price: item.price as string,
-        thumbnail: item.productThumbnail as string,
-        optionValue1: item.optionValue1 as string | null,
-        optionValue2: item.optionValue2 as string | null,
-        optionValue3: item.optionValue3 as string | null,
+        id: i.id as number,
+        draftOrderId: i.draftOrderId as number,
+        productId: i.productId as number,
+        variantId: (i.variantId as number | null) ?? null,
+        productName: i.productName as string,
+        quantity: i.quantity as number,
+        price: i.price as string,
+        isCustom: Boolean(i.isCustom),
+        taxable: i.taxable === null ? null : Boolean(i.taxable),
+        priceOverrideReason: (i.priceOverrideReason as string | null) ?? null,
+        thumbnail: (i.productThumbnail as string) ?? '',
+        optionValue1: i.optionValue1 as string | null,
+        optionValue2: i.optionValue2 as string | null,
+        optionValue3: i.optionValue3 as string | null,
       });
-      itemsByDraft.set(item.draftOrderId as number, list);
-    }
-    // The attached discount's scope + each item's collections, so the amount
-    // shown here comes from the same eligibility function checkout charges by
-    // (only the ELIGIBLE lines are discounted, not the whole subtotal).
-    const discountIds = [
-      ...new Set(
-        drafts.filter((d) => d.discountId).map((d) => d.discountId as number),
-      ),
-    ];
-    const [discountProducts, discountCollections] = discountIds.length
-      ? await Promise.all([
-          this.db.query<RowDataPacket[]>(
-            `SELECT discountId, productId FROM discountproduct WHERE discountId IN (${discountIds.map(() => '?').join(', ')})`,
-            discountIds,
-          ),
-          this.db.query<RowDataPacket[]>(
-            `SELECT discountId, collectionId FROM discountcollection WHERE discountId IN (${discountIds.map(() => '?').join(', ')})`,
-            discountIds,
-          ),
-        ])
-      : [[], []];
-    const itemProductIds = [
-      ...new Set(items.map((i) => i.productId as number)),
-    ];
-    const collectionsByProduct = new Map<number, number[]>();
-    if (discountIds.length && itemProductIds.length) {
-      const rows = await this.db.query<RowDataPacket[]>(
-        `SELECT pc.productId, pc.collectionId
-           FROM productcollection pc JOIN product p ON p.id = pc.productId
-          WHERE pc.productId IN (${itemProductIds.map(() => '?').join(', ')}) AND p.shopId = ?`,
-        [...itemProductIds, drafts[0].shopId],
-      );
-      for (const r of rows) {
-        const list = collectionsByProduct.get(r.productId as number) ?? [];
-        list.push(r.collectionId as number);
-        collectionsByProduct.set(r.productId as number, list);
-      }
-      // plus the automated collections each product currently matches
-      const automated =
-        await this.collectionRules.automatedCollectionIdsByProduct(
-          drafts[0].shopId,
-          itemProductIds,
-        );
-      for (const [productId, collectionIds] of automated) {
-        collectionsByProduct.set(productId, [
-          ...(collectionsByProduct.get(productId) ?? []),
-          ...collectionIds,
-        ]);
-      }
+      itemsByDraft.set(i.draftOrderId as number, list);
     }
     for (const d of await attachRegion(this.db, drafts)) {
-      const draftItems = itemsByDraft.get(d.id) ?? [];
-      const discountAmount = d.discountId
-        ? computeEligibility(
-            {
-              type: d.discountType as string,
-              value: d.discountValue as string | null,
-              appliesTo: d.discountAppliesTo as string,
-              productIds: discountProducts
-                .filter((r) => r.discountId === d.discountId)
-                .map((r) => r.productId as number),
-              collectionIds: discountCollections
-                .filter((r) => r.discountId === d.discountId)
-                .map((r) => r.collectionId as number),
-            },
-            draftItems.map((i) => ({
-              productId: i.productId,
-              collectionIds: collectionsByProduct.get(i.productId) ?? [],
-              amount: Number(i.price) * i.quantity,
-            })),
-            d.currency,
-          ).discountAmount
-        : null;
       result.set(d.id, {
         ...d,
-        discountAmount,
-        draftorderitem: draftItems,
-        discount: d.discountId
-          ? {
-              id: d.discountId,
-              code: d.discountCode as unknown as string,
-              type: d.discountType as unknown as string,
-              value: d.discountValue as unknown as string | null,
-            }
-          : null,
-        customer: d.customerId
-          ? {
-              id: d.customerRowId as unknown as number,
-              name: d.customerName2 as unknown as string,
-              phone: d.customerPhone2 as unknown as string,
-            }
-          : null,
-        outlet: {
-          id: d.outletRowId as unknown as number,
-          name: d.outletName as unknown as string,
-        },
-        convertedOrder: d.convertedOrderId
-          ? {
-              id: d.convertedOrderRowId as unknown as number,
-              shopOrderNumber: d.convertedOrderNumber as unknown as number,
-              status: d.convertedOrderStatus as unknown as string,
-              paymentStatus: d.convertedOrderPaymentStatus as unknown as string,
-              total: d.convertedOrderTotal as unknown as string,
-              trackingToken: d.convertedOrderTrackingToken as unknown as string | null,
-            }
-          : null,
+        items: itemsByDraft.get(d.id) ?? [],
+        discountCode: (d.discountCodeValue as string | null) ?? null,
+        outletName: d.outletName as string,
+        createdByName: (d.createdByName as string | null) ?? null,
       });
     }
     return result;
   }
 
-  private toResponse(draft: AssembledDraftOrder) {
-    const { draftorderitem, discount, ...rest } = draft;
-    const items = draftorderitem.map((i) => ({
-      id: i.id,
-      productId: i.productId,
-      productName: i.productName,
-      thumbnail: i.thumbnail,
-      variantId: i.variantId,
-      variantLabel: i.variantId
-        ? buildVariantLabel([i.optionValue1, i.optionValue2, i.optionValue3])
-        : null,
-      quantity: i.quantity,
-      price: trimDecimal(i.price),
-    }));
-    const subtotal = this.sumItems(items);
-    const discountAmount = discount ? (draft.discountAmount ?? 0) : 0;
-    const total = Math.max(0, subtotal - discountAmount);
+  private payUrl(shop: RowDataPacket, token: string | null) {
+    return token ? storefrontUrl(shop as never, `/pay/${token}`) : null;
+  }
+
+  // The bill a draft shows: the frozen snapshot once a link exists, else (while
+  // OPEN) the live price; a finished draft without a link shows its order.
+  private async billFor(
+    ctx: TenantContext,
+    d: AssembledDraft,
+  ): Promise<{ bill: Bill | null; billError: string | null }> {
+    const snapshot = d.snapshotJson as DraftSnapshot | null;
+    if (snapshot) return { bill: snapshot.bill, billError: null };
+    if (d.status !== 'OPEN') return { bill: null, billError: null };
+    try {
+      return {
+        bill: await this.pricing.price(
+          ctx.shopId,
+          {
+            ...this.pricingInput(
+              this.mergeFields(d, {}),
+              d.outletId,
+              this.storedLines(d),
+            ),
+            sizeBaseline: await this.storedSize(d.id),
+          },
+          `staff:${ctx.userId}`,
+        ),
+        billError: null,
+      };
+    } catch (err) {
+      return {
+        bill: null,
+        billError:
+          err instanceof Error ? err.message : 'This draft could not be priced',
+      };
+    }
+  }
+
+  // The headline figures (numbers, as before custom orders) from a bill; a
+  // finished draft without a bill reads its order's total.
+  private headline(
+    d: AssembledDraft,
+    bill: Bill | null,
+    orderTotal: string | null,
+  ) {
+    const stored = d.items.reduce(
+      (s, i) => s + Number(i.price) * i.quantity,
+      0,
+    );
     return {
-      ...rest,
-      discount: discount
-        ? { id: discount.id, code: discount.code, type: discount.type }
+      subtotal: bill ? Number(bill.subtotal) : stored,
+      discountAmount: bill ? Number(bill.discount.amount) : 0,
+      total:
+        bill?.total != null
+          ? Number(bill.total)
+          : orderTotal !== null
+            ? Number(orderTotal)
+            : null,
+    };
+  }
+
+  private async toListItem(ctx: TenantContext, d: AssembledDraft) {
+    const { bill } = await this.billFor(ctx, d);
+    const orderRows = d.convertedOrderId
+      ? await this.db.query<RowDataPacket[]>(
+          `SELECT total FROM \`order\` WHERE id = ? AND shopId = ?`,
+          [d.convertedOrderId, ctx.shopId],
+        )
+      : [];
+    return {
+      id: d.id,
+      status: d.status,
+      customerName: d.customerName,
+      customerPhone: d.customerPhone,
+      outlet: { id: d.outletId, name: d.outletName },
+      currency: d.currency,
+      itemCount: d.items.length,
+      ...this.headline(
+        d,
+        bill,
+        (orderRows[0]?.total as string | undefined) ?? null,
+      ),
+      hasPayLink:
+        Boolean(d.payToken) &&
+        (d.status === 'INVOICE_SENT' || d.status === 'AWAITING_PAYMENT'),
+      convertedOrderId: d.convertedOrderId,
+      createdBy: d.createdByUserId
+        ? { id: d.createdByUserId, name: d.createdByName }
         : null,
-      items,
-      subtotal,
-      discountAmount,
-      total,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+    };
+  }
+
+  private async toDetail(ctx: TenantContext, d: AssembledDraft) {
+    const shop = await this.shopRow(ctx.shopId);
+    const snapshot = d.snapshotJson as DraftSnapshot | null;
+    const { bill, billError } = await this.billFor(ctx, d);
+    const history = await this.db.query<RowDataPacket[]>(
+      `SELECT id, shopOrderNumber, status, paymentStatus, total, currency, adminSource, trackingToken, createdAt
+         FROM \`order\` WHERE shopId = ? AND draftOrderId = ? ORDER BY id DESC`,
+      [ctx.shopId, d.id],
+    );
+    const cardAvailable = await this.cardAvailable(ctx.shopId);
+    return {
+      id: d.id,
+      status: d.status,
+      outletId: d.outletId,
+      outlet: { id: d.outletId, name: d.outletName },
+      currency: d.currency,
+      customerId: d.customerId,
+      customerName: d.customerName,
+      customerPhone: d.customerPhone,
+      customerEmail: d.customerEmail,
+      customerAddress: d.customerAddress,
+      regionId: d.regionId,
+      region: d.region,
+      area: d.area,
+      orderType: d.orderType ?? 'delivery',
+      deliveryDate: d.deliveryDate,
+      deliveryTimeSlot: d.deliveryTimeSlot,
+      receiverName: d.receiverName,
+      receiverPhone: d.receiverPhone,
+      receiverMessage: d.receiverMessage,
+      discountCode: d.discountCode,
+      orderDiscountType: d.orderDiscountType,
+      orderDiscountValue: trimDecimal(d.orderDiscountValue),
+      orderDiscountReason: d.orderDiscountReason,
+      deliveryFeeOverride: trimDecimal(d.deliveryFeeOverride),
+      deliveryFeeOverrideReason: d.deliveryFeeOverrideReason,
+      notes: d.notes,
+      customerNote: d.customerNote,
+      items: d.items.map((i) => ({
+        id: i.id,
+        productId: i.isCustom ? null : i.productId,
+        productName: i.productName,
+        thumbnail: i.isCustom ? null : i.thumbnail,
+        variantId: i.variantId,
+        variantLabel: i.variantId
+          ? buildVariantLabel([i.optionValue1, i.optionValue2, i.optionValue3])
+          : null,
+        quantity: i.quantity,
+        price: trimDecimal(i.price),
+        isCustom: i.isCustom,
+        taxable: i.taxable,
+        priceOverrideReason: i.priceOverrideReason,
+      })),
+      bill,
+      billError,
+      billLocked: Boolean(snapshot),
+      ...this.headline(
+        d,
+        bill,
+        (history.find((o) => o.id === d.convertedOrderId)?.total as
+          string | undefined) ?? null,
+      ),
+      payLink:
+        d.payToken &&
+        (d.status === 'INVOICE_SENT' || d.status === 'AWAITING_PAYMENT')
+          ? {
+              url: this.payUrl(shop, d.payToken),
+              sentAt: d.payLinkSentAt,
+              expiresAt: d.payLinkExpiresAt,
+              lockedAt: d.snapshotAt,
+            }
+          : null,
+      cardAvailable,
+      convertedOrderId: d.convertedOrderId,
+      // The order the draft currently points at (its latest conversion).
+      convertedOrder: (() => {
+        const o = history.find((h) => h.id === d.convertedOrderId);
+        return o
+          ? {
+              id: o.id as number,
+              shopOrderNumber: o.shopOrderNumber as number,
+              status: o.status as string,
+              paymentStatus: o.paymentStatus as string,
+              total: trimDecimal(o.total as string),
+              trackingToken: o.trackingToken as string,
+            }
+          : null;
+      })(),
+      orders: history.map((o) => ({
+        id: o.id as number,
+        shopOrderNumber: o.shopOrderNumber as number,
+        status: o.status as string,
+        paymentStatus: o.paymentStatus as string,
+        total: trimDecimal(o.total as string),
+        currency: o.currency as string,
+        adminSource: o.adminSource as string | null,
+        createdAt: o.createdAt as Date,
+      })),
+      createdBy: d.createdByUserId
+        ? { id: d.createdByUserId, name: d.createdByName }
+        : null,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
     };
   }
 }

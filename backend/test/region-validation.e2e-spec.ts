@@ -402,14 +402,23 @@ describe('Region validation (e2e)', () => {
           ...region,
         });
 
-    it('create: required, country-checked, stored with its region', async () => {
+    // Custom orders (2026-11-26): a draft may be SAVED before its region is
+    // known; a DELIVERY draft without one cannot be converted (or get a link).
+    it('create: country-checked, stored with its region; delivery needs one before converting', async () => {
       const ae = await setupShop('dr-ae', 'United Arab Emirates');
       const ok = await draft(ae, { regionId: await regionId('AE-DU') }).expect(
         201,
       );
       expect(body<OrderBody>(ok).region?.code).toBe('AE-DU');
       await draft(ae, { regionId: await regionId('SA-01') }).expect(400);
-      await draft(ae, {}).expect(400);
+      const noRegion = body<OrderBody>(
+        await draft(ae, { orderType: 'delivery' }).expect(201),
+      );
+      expect(noRegion.region).toBeNull();
+      await request(server())
+        .post(`/shop/draft-orders/${noRegion.id}/cod`)
+        .set('Authorization', `Bearer ${ae.token}`)
+        .expect(400);
     });
 
     it('update: optional, re-checked only when changed, and untouched when absent', async () => {
@@ -457,10 +466,9 @@ describe('Region validation (e2e)', () => {
       const created = body<OrderBody>(
         await draft(ae, { regionId: await regionId('AE-DU') }).expect(201),
       );
-      await db.execute(
-        `UPDATE draftorder SET regionId = NULL WHERE id = ?`,
-        [created.id],
-      );
+      await db.execute(`UPDATE draftorder SET regionId = NULL WHERE id = ?`, [
+        created.id,
+      ]);
       const res = await request(server())
         .post(`/shop/draft-orders/${created.id}/complete`)
         .set('Authorization', `Bearer ${ae.token}`)

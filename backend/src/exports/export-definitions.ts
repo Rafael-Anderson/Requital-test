@@ -303,7 +303,7 @@ export const EXPORT_DEFINITIONS: Record<string, ExportDefinition> = {
                 p.compareAtPrice, p.costPrice, p.status, p.trackInventory,
                 p.chargeTax, p.vendor, p.productType, p.thumbnail
            FROM product p
-          WHERE p.shopId = ?
+          WHERE p.shopId = ? AND p.systemRole IS NULL
           ORDER BY p.id
           LIMIT ? OFFSET ?`,
         [ctx.shopId, limit, offset],

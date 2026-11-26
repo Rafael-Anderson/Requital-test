@@ -1173,6 +1173,7 @@ export interface AuthUser {
 export const ALL_PERMISSIONS = [
   "orders.view",
   "orders.manage",
+  "orders.create",
   "dashboard.view",
   "products.view",
   "products.manage_stock",
@@ -1192,6 +1193,7 @@ export type Permission = (typeof ALL_PERMISSIONS)[number];
 export const PERMISSION_LABELS: Record<Permission, string> = {
   "orders.view": "View orders",
   "orders.manage": "Manage orders (create, update status, cancel, notes)",
+  "orders.create": "Create custom orders and send payment links",
   "dashboard.view": "View dashboard",
   "products.view": "View product catalog",
   "products.manage_stock": "Manage stock (adjust, transfer, thresholds)",
