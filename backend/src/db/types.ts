@@ -31,6 +31,9 @@ export interface OrderRow {
   receiverName: string | null;
   receiverPhone: string | null;
   channel: string | null;
+  // Where the order came from (migration 20261208100000, orders/order-sources.ts).
+  // NULL = unknown (orders before the column); read through effectiveOrderSourceSql.
+  source?: string | null;
   orderType: string | null;
   paymentMethod: string | null;
   status: string;

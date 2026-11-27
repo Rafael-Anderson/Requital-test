@@ -10,7 +10,7 @@ import {
   type ConnectionStatus,
 } from "@/lib/channels";
 
-const CHIP = {
+export const CHIP = {
   accent: "bg-accent-tint text-accent-text dark:bg-accent/15 dark:text-accent",
   warning: "bg-warning-bg text-warning-text dark:bg-amber-500/15 dark:text-amber-400",
   danger: "bg-danger-bg text-danger-text dark:bg-red-500/15 dark:text-red-400",

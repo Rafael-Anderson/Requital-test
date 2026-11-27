@@ -1,3 +1,4 @@
+import type { OrderSource } from "./order-sources";
 export const ORDER_STATUSES = [
   "pending",
   "confirmed",
@@ -86,6 +87,9 @@ export interface Order {
   deliveryNotes: string | null;
   receiverMessage: string | null;
   channel: string | null;
+  // Where the order came from (lib/order-sources.ts): stored, or derived by the
+  // backend for an order placed before it was recorded. Always set on a response.
+  source?: OrderSource;
   orderType: string | null;
   status: OrderStatus;
   paymentStatus: "unpaid" | "paid" | "refunded";

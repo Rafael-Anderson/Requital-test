@@ -11,6 +11,10 @@ import {
 } from 'class-validator';
 import { ORDER_STATUSES } from '../constants';
 import type { OrderStatus } from '../constants';
+import { ORDER_SOURCE_KEYS, type OrderSource } from '../order-sources';
+
+export const ORDER_LIST_SORTS = ['newest', 'source'] as const;
+export type OrderListSort = (typeof ORDER_LIST_SORTS)[number];
 
 export class ListOrdersQueryDto {
   @IsOptional()
@@ -66,4 +70,21 @@ export class ListOrdersQueryDto {
   @IsInt()
   @Min(1)
   outletId?: number;
+
+  // Comma-separated order sources (orders/order-sources.ts), an IN filter on the
+  // EFFECTIVE source (stored, or derived for older rows). Absent = every source.
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.split(',').filter(Boolean) : value,
+  )
+  @IsArray()
+  @IsIn(ORDER_SOURCE_KEYS, { each: true })
+  sources?: OrderSource[];
+
+  // 'newest' (default, the long-standing order) or 'source' (registry order,
+  // then newest first, then id).
+  @IsOptional()
+  @IsIn(ORDER_LIST_SORTS)
+  sort?: OrderListSort;
 }
+

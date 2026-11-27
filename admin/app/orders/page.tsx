@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cancelOrder, collectCash, listOrders, updateOrderStatus } from "@/lib/api";
 import { getNextAction, type Order } from "@/lib/types";
 import { relativeTime } from "@/lib/format";
@@ -20,7 +20,9 @@ import OrderDetailModal from "@/components/OrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
 import ScrollFade from "@/components/ui/ScrollFade";
 import { isMarketplaceChannel } from "@/lib/channels";
-import { ChannelSourceBadge } from "@/components/channels/ChannelBadges";
+import OrderSourceTag from "@/components/OrderSourceTag";
+import OrderSourceControls from "@/components/OrderSourceControls";
+import { parseSortParam, parseSourcesParam, withSourceParams } from "@/lib/order-sources";
 import Link from "next/link";
 import AdminOrderSource from "@/components/AdminOrderSource";
 import { useAuth } from "@/lib/auth-context";
@@ -66,6 +68,13 @@ function OrdersPageContent() {
   const toast = useToast();
   const { selectedOutletId } = useOutletFilter();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  // Source filter and sort live in the URL (?sources=a,b&sort=source).
+  const sourcesParam = searchParams.get("sources");
+  const sortParam = searchParams.get("sort");
+  const sources = useMemo(() => parseSourcesParam(sourcesParam), [sourcesParam]);
+  const sort = parseSortParam(sortParam);
 
   // Deep-link from NewOrderBanner's "View order" action
   // (/orders?orderId=123) — opens the detail modal for that order directly
@@ -83,13 +92,16 @@ function OrdersPageContent() {
       const result = await listOrders({
         pageSize: 100,
         outletId: selectedOutletId ?? undefined,
+        sources,
+        // The backend sorts; each column keeps that order when it filters.
+        sort: sort === "source" ? "source" : undefined,
       });
       setOrders(result.data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load orders");
     }
-  }, [selectedOutletId]);
+  }, [selectedOutletId, sources, sort]);
 
   useEffect(() => {
     refresh();
@@ -167,6 +179,17 @@ function OrdersPageContent() {
       </div>
       <OrdersTabs />
 
+      <div className="mb-3">
+        <OrderSourceControls
+          sources={sources}
+          sort={sort}
+          onChange={(next) => {
+            const qs = withSourceParams(new URLSearchParams(searchParams.toString()), next.sources, next.sort).toString();
+            router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+          }}
+        />
+      </div>
+
       {error && <InlineErrorMessage className="mb-3">{error}</InlineErrorMessage>}
 
       {/* Phones: one column at a time, snapping, each 85% of the container so
@@ -214,11 +237,7 @@ function OrdersPageContent() {
                           <span className="text-[13.5px] font-bold text-text-primary dark:text-zinc-50">#{order.shopOrderNumber}</span>
                           <StatusBadge status={order.status} />
                         </div>
-                        {marketplace && (
-                          <div className="mb-1">
-                            <ChannelSourceBadge channel={order.channel!} />
-                          </div>
-                        )}
+                        <OrderSourceTag order={order} className="mb-1" />
                         {order.addressUnverified && (
                           <div className="mb-1">
                             <AddressUnverifiedNotice compact />
