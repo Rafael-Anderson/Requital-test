@@ -30,6 +30,7 @@ import type {
 } from '../db/types';
 import { ChannelConnectionsService } from './channel-connections.service';
 import { ChannelProviderRegistry } from './channel-provider.registry';
+import { sourceForMarketplaceChannel } from '../orders/order-sources';
 import { assertCanonicalOrder } from './canonical-order';
 import {
   ChannelParseError,
@@ -691,9 +692,9 @@ export class ChannelIngestionService {
         `INSERT INTO \`order\` (
            shopId, outletId, ingredientsConsumedAt, consumptionRecordedAt, customerId,
            customerName, customerPhone, customerEmail, customerAddress, deliveryNotes,
-           channel, orderType, paymentMethod, status, paymentStatus, deliveryFee, taxAmount,
+           channel, source, orderType, paymentMethod, status, paymentStatus, deliveryFee, taxAmount,
            discountAmount, total, trackingToken, shopOrderNumber, currency, rateBaseCurrency, exchangeRate
-         ) VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
         [
           conn.shopId,
           conn.outletId,
@@ -708,6 +709,9 @@ export class ChannelIngestionService {
           clip(customer.address, 10000),
           customer.notes ? clip(customer.notes, 10000) : null,
           conn.provider,
+          // The marketplace's own source entry; NULL (unknown) for a provider
+          // with none (the test marketplace). orders/order-sources.ts.
+          sourceForMarketplaceChannel(conn.provider),
           order.handover === 'merchant_delivery' ? 'delivery' : 'pickup',
           conn.provider,
           cash > 0 ? 'unpaid' : 'paid',

@@ -1,6 +1,7 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { bulkUpdateOrderStatus, listOrders,
   downloadExport,
@@ -25,14 +26,33 @@ import BranchBar from "@/components/BranchBar";
 import OrdersTabs from "@/components/OrdersTabs";
 import OrderDetailModal from "@/components/OrderDetailModal";
 import PageShell from "@/components/ui/PageShell";
-import { isMarketplaceChannel } from "@/lib/channels";
-import { ChannelSourceBadge } from "@/components/channels/ChannelBadges";
+import { isMarketplaceChannel, providerLabel } from "@/lib/channels";
+import OrderSourceTag from "@/components/OrderSourceTag";
+import OrderSourceControls from "@/components/OrderSourceControls";
+import { parseSortParam, parseSourcesParam, withSourceParams } from "@/lib/order-sources";
 import Money from "@/components/Money";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 
 export default function OrderHistoryPage() {
+  return (
+    <Suspense fallback={null}>
+      <OrderHistoryContent />
+    </Suspense>
+  );
+}
+
+// useSearchParams() (source filter and sort in the URL) needs a Suspense
+// boundary in Next 16, same split as the orders board.
+function OrderHistoryContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const sourcesParam = searchParams.get("sources");
+  const sortParam = searchParams.get("sort");
+  const sources = useMemo(() => parseSourcesParam(sourcesParam), [sourcesParam]);
+  const sort = parseSortParam(sortParam);
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -57,7 +77,7 @@ export default function OrderHistoryPage() {
   // number from a previous, larger result set could be past the end of this one.
   useEffect(() => {
     setPage(1);
-  }, [search, selectedOutletId]);
+  }, [search, selectedOutletId, sourcesParam, sortParam]);
 
   const refresh = useCallback(async () => {
     try {
@@ -70,6 +90,8 @@ export default function OrderHistoryPage() {
         pageSize: PAGE_SIZE,
         search: search || undefined,
         outletId: selectedOutletId ?? undefined,
+        sources,
+        sort: sort === "source" ? "source" : undefined,
       });
       setOrders(result.data);
       setTotal(result.total);
@@ -77,7 +99,7 @@ export default function OrderHistoryPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load orders");
     }
-  }, [page, search, selectedOutletId]);
+  }, [page, search, selectedOutletId, sources, sort]);
 
   useEffect(() => {
     refresh();
@@ -194,7 +216,15 @@ export default function OrderHistoryPage() {
         </Button>
       </BulkActionBar>
 
-      <div className="flex justify-end mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <OrderSourceControls
+          sources={sources}
+          sort={sort}
+          onChange={(next) => {
+            const qs = withSourceParams(new URLSearchParams(searchParams.toString()), next.sources, next.sort).toString();
+            router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+          }}
+        />
         <Button size="sm" variant="secondary" onClick={handleExportAll}>
           Export all
         </Button>
@@ -226,6 +256,7 @@ export default function OrderHistoryPage() {
               <div className="text-sm font-semibold text-text-primary dark:text-zinc-100">
                 #{order.shopOrderNumber} <span className="font-normal text-text-secondary">{order.customerName}</span>
               </div>
+              <OrderSourceTag order={order} className="mt-1" />
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13.5px]">
                 <span className="font-bold text-text-primary dark:text-zinc-100">
                   <Money amount={order.total} currency={order.currency} />
@@ -284,7 +315,12 @@ export default function OrderHistoryPage() {
                       aria-label={`Select order #${order.shopOrderNumber}`}
                     />
                   </TD>
-                  <TD className="font-medium">#{order.shopOrderNumber}</TD>
+                  <TD className="font-medium">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      #{order.shopOrderNumber}
+                      <OrderSourceTag order={order} />
+                    </div>
+                  </TD>
                   <TD>
                     <StatusBadge status={order.status} />
                   </TD>
@@ -300,7 +336,8 @@ export default function OrderHistoryPage() {
                   </TD>
                   <TD><Money amount={order.total} currency={order.currency} /></TD>
                   <TD className="text-text-muted">
-                    {isMarketplaceChannel(order.channel) ? <ChannelSourceBadge channel={order.channel!} /> : (order.channel ?? "-")}
+                    {/* The source tag beside the Ref No names a marketplace already. */}
+                    {isMarketplaceChannel(order.channel) ? providerLabel(order.channel) : (order.channel ?? "-")}
                   </TD>
                   <TD className="text-xs text-text-muted">
                     {new Date(order.createdAt).toLocaleString()}

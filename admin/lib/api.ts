@@ -1,3 +1,4 @@
+import type { OrderListSort, OrderSource } from "./order-sources";
 import type {
   Campaign,
   CampaignStatusInfo,
@@ -1127,6 +1128,9 @@ export interface ListOrdersParams {
   // Admin-only ("all branches" is just omitting this); a branch account is
   // always forced to its own outlet server-side regardless of this value.
   outletId?: number;
+  // Comma-joined like `statuses`; empty or absent = every source.
+  sources?: OrderSource[];
+  sort?: OrderListSort;
 }
 
 export function listOrders(params: ListOrdersParams = {}) {

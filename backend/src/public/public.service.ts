@@ -148,6 +148,7 @@ import {
 } from '../common/storefront-url';
 import { withShopOrderNumber } from '../orders/order-number';
 import { loadVisibleProductMetafields } from '../metafields/metafields.service';
+import type { OrderSource } from '../orders/order-sources';
 
 // Meta descriptions render best under ~160 characters (Google truncates
 // around there) — cuts at the last whole word rather than mid-word.
@@ -2355,12 +2356,12 @@ export class PublicService {
           shopId, ingredientsConsumedAt, consumptionRecordedAt, outletId, customerId, customerName, customerPhone, customerEmail,
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           receiverName, receiverPhone,
-          channel, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
+          channel, source, orderType, paymentMethod, deliveryFee, taxAmount, discountId, discountCode, discountAmount,
           giftCardId, giftCardCode, giftCardAmount, storeCreditAmount, total, paymentStatus, trackingToken, shopOrderNumber,
           currency, rateBaseCurrency, exchangeRate, attributionJson, addressUnverified,
           dropoffLatitude, dropoffLongitude,
           idempotencyKey, idempotencyFingerprint
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               [
                 shop.id,
                 ingredientsConsumed ? new Date() : null,
@@ -2382,6 +2383,8 @@ export class PublicService {
                 receiver?.name ?? null,
                 receiver?.phone ?? null,
                 'storefront',
+                // orders/order-sources.ts: the shop's own Requital storefront.
+                'website' satisfies OrderSource,
                 dto.orderType,
                 dto.paymentMethod,
                 deliveryFee,

@@ -31,6 +31,7 @@ vi.mock("@/components/OutletSwitcher", () => ({ default: () => null }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
   usePathname: () => "/orders",
+  useRouter: () => ({ replace: () => {} }),
 }));
 
 vi.mock("@/components/OrderDetailModal", () => ({

@@ -67,6 +67,11 @@ import { decimalToMinor, minorToDecimal } from '../drivers/cash';
 import { GiftCardsService } from '../gift-cards/gift-cards.service';
 import { BranchRolesService } from '../branch-roles/branch-roles.service';
 import { NotifySubscriptionsService } from '../notify-subscriptions/notify-subscriptions.service';
+import {
+  effectiveOrderSourceSql,
+  orderSourceSortSql,
+  type OrderSource,
+} from './order-sources';
 
 interface AssembledOrderItem extends OrderitemRow {
   product?: { thumbnail: string };
@@ -194,12 +199,21 @@ export class OrdersService {
       conditions.push(`(${orParts.join(' OR ')})`);
       params.push(...orParams);
     }
+    if (query.sources?.length) {
+      // Registry keys only (validated by the DTO) and bound as parameters.
+      conditions.push(
+        `${effectiveOrderSourceSql('o')} IN (${query.sources.map(() => '?').join(', ')})`,
+      );
+      params.push(...query.sources);
+    }
     const where = conditions.join(' AND ');
+    const orderBy =
+      query.sort === 'source' ? orderSourceSortSql('o') : 'o.createdAt DESC';
 
     const [idRows, totalRows] = await Promise.all([
       this.db.query<RowDataPacket[]>(
         `SELECT o.id FROM \`order\` o WHERE ${where}
-         ORDER BY o.createdAt DESC
+         ORDER BY ${orderBy}
          LIMIT ? OFFSET ?`,
         [...params, pageSize, (page - 1) * pageSize],
       ),
@@ -619,9 +633,9 @@ export class OrdersService {
           shopId, outletId, ingredientsConsumedAt, consumptionRecordedAt, customerId, customerName, customerPhone, customerEmail,
           customerAddress, regionId, area, deliveryDate, deliveryTimeSlot, deliveryNotes, receiverMessage,
           receiverName, receiverPhone,
-          channel, orderType, deliveryFee, discountId, discountCode, discountAmount, taxAmount, total, trackingToken,
+          channel, source, orderType, deliveryFee, discountId, discountCode, discountAmount, taxAmount, total, trackingToken,
           shopOrderNumber, currency, rateBaseCurrency, exchangeRate
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               [
                 ctx.shopId,
                 outletId,
@@ -645,6 +659,9 @@ export class OrdersService {
                 receiver?.name ?? null,
                 receiver?.phone ?? null,
                 dto.channel ?? null,
+                // Only staff reach create() (POST /orders and draft conversion), so
+                // every order it writes is admin-made (orders/order-sources.ts).
+                'custom' satisfies OrderSource,
                 dto.orderType ?? null,
                 deliveryFee,
                 discount?.id ?? null,
@@ -2253,7 +2270,8 @@ export class OrdersService {
       this.db.query<
         (OrderRow & { cashCollectedByName: string | null } & RowDataPacket)[]
       >(
-        `SELECT o.*, COALESCE(u.name, CONCAT('Driver ', d.name)) AS cashCollectedByName,
+        `SELECT o.*, ${effectiveOrderSourceSql('o')} AS effectiveSource,
+                COALESCE(u.name, CONCAT('Driver ', d.name)) AS cashCollectedByName,
                 cu.name AS createdByName
          FROM \`order\` o LEFT JOIN user u ON u.id = o.cashCollectedBy
          LEFT JOIN driver d ON d.id = o.cashCollectedByDriverId AND d.shopId = o.shopId
@@ -2302,7 +2320,8 @@ export class OrdersService {
       this.db.query<
         (OrderRow & { cashCollectedByName: string | null } & RowDataPacket)[]
       >(
-        `SELECT o.*, COALESCE(u.name, CONCAT('Driver ', d.name)) AS cashCollectedByName,
+        `SELECT o.*, ${effectiveOrderSourceSql('o')} AS effectiveSource,
+                COALESCE(u.name, CONCAT('Driver ', d.name)) AS cashCollectedByName,
                   cu.name AS createdByName
            FROM \`order\` o LEFT JOIN user u ON u.id = o.cashCollectedBy
            LEFT JOIN driver d ON d.id = o.cashCollectedByDriverId AND d.shopId = o.shopId
@@ -2387,6 +2406,11 @@ export class OrdersService {
       // rides along in a list or status response. The order DETAIL gets a
       // narrowed view of it (toDetailResponse).
       ...stripAttribution(order),
+      // Where the order came from: the stored value, or for an older row the one
+      // derived by effectiveOrderSourceSql in the loaders. Never NULL here.
+      source: ((order as { effectiveSource?: string | null }).effectiveSource ??
+        'website') as OrderSource,
+      effectiveSource: undefined,
       deliveryFee: trimDecimal(order.deliveryFee),
       taxAmount: trimDecimal(order.taxAmount),
       discountAmount: trimDecimal(order.discountAmount),
